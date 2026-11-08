@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>SCS-SPEC-03 ゆるふわアニマルリーグ レギュレーション</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 18mm 15mm; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #1c1c1c;
+    font-family: "Yu Gothic", "Yu Gothic UI", "Meiryo", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.65;
+  }
+  h1 {
+    font-size: 18pt;
+    line-height: 1.35;
+    margin: 0 0 4mm;
+    letter-spacing: 0.02em;
+  }
+  h2 {
+    font-size: 13.5pt;
+    margin: 8mm 0 3mm;
+    padding-bottom: 1.2mm;
+    border-bottom: 0.6pt solid #1f3a5f;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  h3 {
+    font-size: 11.5pt;
+    margin: 5mm 0 2mm;
+    color: #1f3a5f;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  p { margin: 0 0 2.5mm; }
+  ul { margin: 0 0 3mm; padding-left: 5.5mm; }
+  li { margin: 0.4mm 0; }
+  a { color: #1f3a5f; }
+  .meta {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 4mm;
+  }
+  .meta th, .meta td {
+    border: 0.4pt solid #c5cdd6;
+    padding: 1.4mm 2.4mm;
+    text-align: left;
+    vertical-align: top;
+  }
+  .meta th {
+    width: 28mm;
+    background: #f3f6f9;
+    font-weight: 600;
+  }
+  table.data {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 2mm 0 4mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    font-size: 10pt;
+  }
+  table.data th, table.data td {
+    border: 0.4pt solid #c5cdd6;
+    padding: 1.5mm 2.2mm;
+    text-align: left;
+    vertical-align: top;
+  }
+  table.data th { background: #eef3f8; font-weight: 600; }
+  .lead { margin-bottom: 4mm; }
+</style>
+</head>
+<body>
+
+<h1>ゆるふわアニマルリーグ レギュレーション</h1>
+
+<table class="meta">
+  <tr><th>文書</th><td>SCS-SPEC-03</td></tr>
+  <tr><th>版</th><td>1.1（ホームとアウェイの交互）</td></tr>
+  <tr><th>日付</th><td>2026-10-24</td></tr>
+  <tr><th>関連</th><td><a href="仕様書.html">SCS-SPEC-01</a> 版 1.14 第2章、第8章。<a href="仕様書-クラブ.html">SCS-SPEC-02</a></td></tr>
+  <tr><th>範囲</th><td>リーグの形式、勝点、順位、日程。カップは SCS-SPEC-01 第8章</td></tr>
+</table>
+
+<p class="lead">リーグ名はゆるふわアニマルリーグである。参加クラブは 20 で、名前と並びはクラブ名鑑のとおりである。試合日は土曜に固定する。カップの結果は勝点に入れない。</p>
+
+<h2>1. 形式</h2>
+<p>ホーム・アンド・アウェーの総当たりで 38 節である。各クラブは他の 19 クラブとホームとアウェイで 1 回ずつ戦う。ホームは 19 試合である。1 節は 10 試合を同じ土曜に行う。節の間隔は 7 日である。</p>
+<p>ホームとアウェイは、連続する節で交互になるように組む。20 クラブでは全員を完全な交互にはできない。同じ側が続くのは 2 節までで、3 節以上は続かない。前半のカードを組み、後半はそのカードを逆順にしてホームを入れ替える。</p>
+<p>勝ちは 3、引き分けは 1、負けは 0。順位は勝点、得失点差、総得点の順とする。それでも並ぶときは名鑑の順とする。</p>
+
+<h2>2. 日程</h2>
+<p>シーズンの区切りは 8 月 1 日である。初戦は、その 7 日後以降で最も早い土曜とする。前半は初戦から 7 日おきに 19 節。後半も 19 節で、2 月 1 日以降かつ前半最終節より後の、最も早い土曜に開く。節の間隔はやはり 7 日である。</p>
+<p>前半最終節の翌日から後半初戦の前日までをウィンターブレイクとする。この期間にリーグ戦は組まない。カップ戦も組まない。ブレイク中のメイン画面は、年数の代わりに「ウィンターブレイク」と出す。予定表には期間を 1 行出す。</p>
+<p>新規ゲームの最初の日付は 2026 年 8 月 3 日である。初年度の区切りは 2026 年 8 月 1 日なので、初戦は 8 月 8 日になる。8 月 1 日が土曜でない年も、初戦は土曜へ寄せる。</p>
+<p>最終節の翌日から、次の 8 月 1 日の 15 日前までをオフシーズンとする。この期間にもリーグ戦は組まない。契約の見直し、キャンプ、チケット価格は SCS-SPEC-01 第2章とする。</p>
+<table class="data">
+  <tr><th>区切り</th><th>初年度</th></tr>
+  <tr><td>新規ゲームの開始</td><td>2026-08-03（月）</td></tr>
+  <tr><td>前半初戦</td><td>2026-08-08（土）</td></tr>
+  <tr><td>前半最終節</td><td>2026-12-12（土）</td></tr>
+  <tr><td>ウィンターブレイク</td><td>2026-12-13 から 2027-02-05</td></tr>
+  <tr><td>後半初戦</td><td>2027-02-06（土）</td></tr>
+  <tr><td>最終節</td><td>2027-06-12（土）</td></tr>
+  <tr><td>オフシーズン</td><td>2027-06-13 から 2027-07-17</td></tr>
+</table>
+<p>試合のない土曜は、そのクラブの練習日である。リーグ開催中の土曜は 20 クラブすべてにカードがある。練習になる土曜は、開幕前とウィンターブレイクのうち、画面で過ごす土曜である。曜日ごとの練習と休みは SCS-SPEC-01 第2章とする。</p>
+
+<h2>3. 次のシーズン</h2>
+<p>38 節がすべて終わり、日付が次の 8 月 1 日以降になったとき、新しい 38 節を組む。その時点の順位を前年順位として記録する。カップの組み合わせには使わず、新しいシーズンの開幕時に抽選する。自クラブが優勝したときだけリーグ LV を 1 上げ、対戦相手を強くする。優勝しなかったときはリーグ LV を変えない。</p>
+
+</body>
+</html>

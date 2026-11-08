@@ -1,0 +1,44 @@
+# ===== テキストとして扱う（差分が見える） =====
+* text=auto
+*.cs       text diff=csharp
+*.shader   text
+*.asmdef   text
+*.json     text
+*.md       text
+# Unity の YAML ファイルは改行コードを変えない
+*.unity    -text merge=unityyamlmerge
+*.prefab   -text merge=unityyamlmerge
+*.asset    -text merge=unityyamlmerge
+*.mat      -text merge=unityyamlmerge
+*.anim     -text merge=unityyamlmerge
+*.controller -text merge=unityyamlmerge
+*.meta     -text merge=unityyamlmerge
+
+# ===== 大きいファイルは Git LFS へ =====
+# 画像
+*.png  filter=lfs diff=lfs merge=lfs -text
+*.jpg  filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.psd  filter=lfs diff=lfs merge=lfs -text
+*.tga  filter=lfs diff=lfs merge=lfs -text
+*.tif  filter=lfs diff=lfs merge=lfs -text
+*.exr  filter=lfs diff=lfs merge=lfs -text
+*.hdr  filter=lfs diff=lfs merge=lfs -text
+# 音声
+*.wav  filter=lfs diff=lfs merge=lfs -text
+*.mp3  filter=lfs diff=lfs merge=lfs -text
+*.ogg  filter=lfs diff=lfs merge=lfs -text
+# 動画
+*.mp4  filter=lfs diff=lfs merge=lfs -text
+*.mov  filter=lfs diff=lfs merge=lfs -text
+# 3D モデル
+*.fbx  filter=lfs diff=lfs merge=lfs -text
+*.obj  filter=lfs diff=lfs merge=lfs -text
+*.blend filter=lfs diff=lfs merge=lfs -text
+# フォント
+*.ttf  filter=lfs diff=lfs merge=lfs -text
+*.otf  filter=lfs diff=lfs merge=lfs -text
+# その他
+*.dll  filter=lfs diff=lfs merge=lfs -text
+*.zip  filter=lfs diff=lfs merge=lfs -text
+*.pdf  filter=lfs diff=lfs merge=lfs -text

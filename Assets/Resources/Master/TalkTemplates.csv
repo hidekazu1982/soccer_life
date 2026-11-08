@@ -1,0 +1,15 @@
+﻿# 同じ kind が複数行あるときは、その場で1行を選ぶ。使える記号は {name} {line} {count} {food} {dislike} {hobby} {job} {country} {activity} {goal}
+kind,text
+birthday,きょうは誕生日。自分で祝うことにした。
+goal,さっきのゴールがまだ残ってる。ネットがゆれた。
+marriage,けっこんした。ピッチの外の話。
+divorce,離婚することにした。名前はそのままで、前をむく。
+child,子どもが生まれた。いま{count}人。
+season_goal,上半期の目標は{goal}こと。
+appearance,この期間の出場は{count}試合。
+favorite_food,すきなたべものは{food}。
+disliked_food,嫌いな食べ物は{dislike}。
+hobby,趣味は{hobby}。
+dream_job,サッカー以外なら{job}になりたい。
+travel,{country}で{activity}してみたい。
+chatter,{line}

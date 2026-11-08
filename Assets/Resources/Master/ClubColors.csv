@@ -1,0 +1,24 @@
+﻿# 上からエンブレム1番。色は RRGGBB。color_1st はシャツ、color_2nd はパンツ、color_3rd はソックス。
+# color_2nd と color_3rd は空欄でよい。空欄なら color_2nd は color_1st、color_3rd は color_2nd と同じ色になる。
+# number は背番号の文字色で white か black。スパイク（color_4th）は選手ごとに自動で決まるのでここには書かない。
+name,color_1st,color_2nd,color_3rd,number
+FCカピバラ,8B5A2B,F5DEB3,8B5A2B,white
+アルパカ・ユナイテッド,F0F8FF,1E3A5F,F0F8FF,black
+ナマケモノ・ワンダラーズ,556B2F,C8B88A,556B2F,white
+ペンギン・シティFC,00008B,FFFFFF,00008B,white
+スポルティング・シマエナガ,FFFFFF,222222,FFFFFF,black
+カワウソ・オリンピック,00CED1,5C4033,00CED1,black
+ハリネズミ・ディナモ,A9A9A9,3B3B3B,A9A9A9,white
+レッサーパンダ・ローヴァーズ,FF4500,1A1A1A,FF4500,white
+コアラ・アスレチック,708090,FFFFFF,708090,white
+ハシビロコウ・レアル,FFD700,2F4F4F,FFD700,black
+FCウォンバット,D2691E,FFF8DC,D2691E,white
+アヒル・ヴィレッジ,FFFF00,FF8C00,FFFFFF,black
+クオッカ・スマイルズ,FF69B4,FFFFFF,FF69B4,black
+モルモット・タウン,D2B48C,8B4513,D2B48C,black
+アザラシ・マリン,ADD8E6,1F3A5F,ADD8E6,black
+タヌキ・フォレスト,006400,3E2A1E,006400,white
+マンボウ・マリーナ,B0E0E6,,,black
+ラッコ・シーサイド,4169E1,FFFFFF,4169E1,white
+FCモモンガ,8A2BE2,FFFFFF,8A2BE2,white
+バク・ドリームス,191970,FFFFFF,191970,white

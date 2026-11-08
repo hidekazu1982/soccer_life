@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>SCS-SPEC-02 ゆるふわアニマルクラブ名鑑</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 18mm 15mm; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #1c1c1c;
+    font-family: "Yu Gothic", "Yu Gothic UI", "Meiryo", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.65;
+  }
+  h1 {
+    font-size: 18pt;
+    line-height: 1.35;
+    margin: 0 0 4mm;
+    letter-spacing: 0.02em;
+  }
+  h2 {
+    font-size: 13.5pt;
+    margin: 8mm 0 3mm;
+    padding-bottom: 1.2mm;
+    border-bottom: 0.6pt solid #1f3a5f;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  h3 {
+    font-size: 11.5pt;
+    margin: 5mm 0 2mm;
+    color: #1f3a5f;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  p { margin: 0 0 2.5mm; }
+  a { color: #1f3a5f; }
+  .meta {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 4mm;
+  }
+  .meta th, .meta td {
+    border: 0.4pt solid #c5cdd6;
+    padding: 1.4mm 2.4mm;
+    text-align: left;
+    vertical-align: top;
+  }
+  .meta th {
+    width: 28mm;
+    background: #f3f6f9;
+    font-weight: 600;
+  }
+  table.data {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 2mm 0 4mm;
+    font-size: 9.5pt;
+  }
+  table.data th, table.data td {
+    border: 0.4pt solid #c5cdd6;
+    padding: 1.4mm 2mm;
+    text-align: left;
+    vertical-align: top;
+  }
+  table.data th { background: #eef3f8; font-weight: 600; }
+  table.data tr { break-inside: avoid; page-break-inside: avoid; }
+  table.data td.num { width: 12mm; text-align: right; }
+  table.data td.code { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .swatch {
+    display: inline-block;
+    width: 7mm;
+    height: 3.6mm;
+    margin: 0.6mm 1.6mm 0 0;
+    border: 0.4pt solid #8d97a3;
+    vertical-align: middle;
+  }
+  .lead { margin-bottom: 4mm; }
+</style>
+</head>
+<body>
+
+<h1>ゆるふわアニマルクラブ名鑑</h1>
+
+<table class="meta">
+  <tr><th>文書</th><td>SCS-SPEC-02</td></tr>
+  <tr><th>版</th><td>1.0</td></tr>
+  <tr><th>日付</th><td>2026-10-15</td></tr>
+  <tr><th>関連</th><td><a href="仕様書.html">SCS-SPEC-01</a> 版 1.7 第9章。<a href="仕様書-リーグ.html">SCS-SPEC-03</a></td></tr>
+  <tr><th>範囲</th><td>20 クラブの名前、チームカラー、背番号の文字色</td></tr>
+</table>
+
+<p class="lead">リーグ名はゆるふわアニマルリーグである。クラブは次の 20 で固定し、この表の順に生成する。順 1 が先頭で、初期年のプレイヤーのクラブであり、前年順位の初期値も 1 位である。エンブレム番号は順と同じである。</p>
+
+<h2>1. 色</h2>
+<p>チームカラーはユニフォームの地色である。コードは #RRGGBB とする。背番号の文字色は、そのクラブで白か黒のどちらかに固定する。名鑑の元資料に描かれた「10」は文字色の見本であり、背番号そのものではない。</p>
+
+<h2>2. 一覧</h2>
+
+<h3>紹介</h3>
+<table class="data">
+  <tr><th>順</th><th>クラブ</th><th>チームカラー</th><th>コード</th><th>背番号</th><th>プロフィール</th></tr>
+  <tr>
+    <td class="num">1</td>
+    <td>FCカピバラ</td>
+    <td><span class="swatch" style="background:#8B5A2B"></span>カピバラブラウン</td>
+    <td class="code">#8B5A2B</td>
+    <td>白</td>
+    <td>究極のマイペースポゼッション。</td>
+  </tr>
+</table>
+
+<h3>個性派クラブ</h3>
+<table class="data">
+  <tr><th>順</th><th>クラブ</th><th>チームカラー</th><th>コード</th><th>背番号</th><th>プロフィール</th></tr>
+  <tr>
+    <td class="num">2</td>
+    <td>アルパカ・ユナイテッド</td>
+    <td><span class="swatch" style="background:#F0F8FF"></span>アリスブルー</td>
+    <td class="code">#F0F8FF</td>
+    <td>黒</td>
+    <td>無尽蔵のスタミナ。</td>
+  </tr>
+  <tr>
+    <td class="num">3</td>
+    <td>ナマケモノ・ワンダラーズ</td>
+    <td><span class="swatch" style="background:#556B2F"></span>ダークオリーブグリーン</td>
+    <td class="code">#556B2F</td>
+    <td>白</td>
+    <td>驚異のワンタッチパス。</td>
+  </tr>
+</table>
+
+<h3>寒冷地クラブ</h3>
+<table class="data">
+  <tr><th>順</th><th>クラブ</th><th>チームカラー</th><th>コード</th><th>背番号</th><th>プロフィール</th></tr>
+  <tr>
+    <td class="num">4</td>
+    <td>ペンギン・シティFC</td>
+    <td><span class="swatch" style="background:#00008B"></span>ダークブルー</td>
+    <td class="code">#00008B</td>
+    <td>白</td>
+    <td>氷上を滑る高速スライディング。</td>
+  </tr>
+  <tr>
+    <td class="num">5</td>
+    <td>スポルティング・シマエナガ</td>
+    <td><span class="swatch" style="background:#FFFFFF"></span>ピュアホワイト</td>
+    <td class="code">#FFFFFF</td>
+    <td>黒</td>
+    <td>雪と同化する丸いフォルム。</td>
+  </tr>
+</table>
+
+<h3>その他の参加クラブ</h3>
+<table class="data">
+  <tr><th>順</th><th>クラブ</th><th>チームカラー</th><th>コード</th><th>背番号</th><th>プロフィール</th></tr>
+  <tr>
+    <td class="num">6</td>
+    <td>カワウソ・オリンピック</td>
+    <td><span class="swatch" style="background:#00CED1"></span>ダークターコイズ</td>
+    <td class="code">#00CED1</td>
+    <td>黒</td>
+    <td>遊び心あふれるトリッキー足技。</td>
+  </tr>
+  <tr>
+    <td class="num">7</td>
+    <td>ハリネズミ・ディナモ</td>
+    <td><span class="swatch" style="background:#A9A9A9"></span>ダークグレー</td>
+    <td class="code">#A9A9A9</td>
+    <td>白</td>
+    <td>鉄壁のトゲトゲブロック守備。</td>
+  </tr>
+  <tr>
+    <td class="num">8</td>
+    <td>レッサーパンダ・ローヴァーズ</td>
+    <td><span class="swatch" style="background:#FF4500"></span>オレンジレッド</td>
+    <td class="code">#FF4500</td>
+    <td>白</td>
+    <td>効果の薄い威嚇プレス。</td>
+  </tr>
+  <tr>
+    <td class="num">9</td>
+    <td>コアラ・アスレチック</td>
+    <td><span class="swatch" style="background:#708090"></span>スレートグレー</td>
+    <td class="code">#708090</td>
+    <td>白</td>
+    <td>驚異のボールキープ力。</td>
+  </tr>
+  <tr>
+    <td class="num">10</td>
+    <td>ハシビロコウ・レアル</td>
+    <td><span class="swatch" style="background:#FFD700"></span>ゴールド</td>
+    <td class="code">#FFD700</td>
+    <td>黒</td>
+    <td>動かざること山の如し。</td>
+  </tr>
+  <tr>
+    <td class="num">11</td>
+    <td>FCウォンバット</td>
+    <td><span class="swatch" style="background:#D2691E"></span>チョコレート</td>
+    <td class="code">#D2691E</td>
+    <td>白</td>
+    <td>強靭なヒップアタック。</td>
+  </tr>
+  <tr>
+    <td class="num">12</td>
+    <td>アヒル・ヴィレッジ</td>
+    <td><span class="swatch" style="background:#FFFF00"></span>イエロー</td>
+    <td class="code">#FFFF00</td>
+    <td>黒</td>
+    <td>鳴き声による組織守備。</td>
+  </tr>
+  <tr>
+    <td class="num">13</td>
+    <td>クオッカ・スマイルズ</td>
+    <td><span class="swatch" style="background:#FF69B4"></span>ホットピンク</td>
+    <td class="code">#FF69B4</td>
+    <td>黒</td>
+    <td>満面の笑顔で戦意喪失。</td>
+  </tr>
+  <tr>
+    <td class="num">14</td>
+    <td>モルモット・タウン</td>
+    <td><span class="swatch" style="background:#D2B48C"></span>タン</td>
+    <td class="code">#D2B48C</td>
+    <td>黒</td>
+    <td>隙間を縫う細かいドリブル。</td>
+  </tr>
+  <tr>
+    <td class="num">15</td>
+    <td>アザラシ・マリン</td>
+    <td><span class="swatch" style="background:#ADD8E6"></span>ライトブルー</td>
+    <td class="code">#ADD8E6</td>
+    <td>黒</td>
+    <td>屈指の空中戦ヘディング。</td>
+  </tr>
+  <tr>
+    <td class="num">16</td>
+    <td>タヌキ・フォレスト</td>
+    <td><span class="swatch" style="background:#006400"></span>ダークグリーン</td>
+    <td class="code">#006400</td>
+    <td>白</td>
+    <td>相手の戦術を完コピ。</td>
+  </tr>
+  <tr>
+    <td class="num">17</td>
+    <td>マンボウ・マリーナ</td>
+    <td><span class="swatch" style="background:#B0E0E6"></span>パウダーブルー</td>
+    <td class="code">#B0E0E6</td>
+    <td>黒</td>
+    <td>愛される激弱メンタル。</td>
+  </tr>
+  <tr>
+    <td class="num">18</td>
+    <td>ラッコ・シーサイド</td>
+    <td><span class="swatch" style="background:#4169E1"></span>ロイヤルブルー</td>
+    <td class="code">#4169E1</td>
+    <td>白</td>
+    <td>仰向けリフティングドリブル。</td>
+  </tr>
+  <tr>
+    <td class="num">19</td>
+    <td>FCモモンガ</td>
+    <td><span class="swatch" style="background:#8A2BE2"></span>ブルーバイオレット</td>
+    <td class="code">#8A2BE2</td>
+    <td>白</td>
+    <td>滞空時間が長すぎる滑空弾。</td>
+  </tr>
+  <tr>
+    <td class="num">20</td>
+    <td>バク・ドリームス</td>
+    <td><span class="swatch" style="background:#191970"></span>ミッドナイトブルー</td>
+    <td class="code">#191970</td>
+    <td>白</td>
+    <td>相手のモチベーションを食べる。</td>
+  </tr>
+</table>
+
+</body>
+</html>

@@ -1,0 +1,57 @@
+# ===== Unity が自動生成するフォルダ（送らない） =====
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+/.utmp/
+
+# アセットストアのツール
+/[Aa]ssets/AssetStoreTools*
+
+# IDE（Visual Studio / Rider / VS Code / Cursor）
+.vs/
+.vscode/
+.idea/
+.cursor/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# クラッシュレポート
+sysinfo.txt
+
+# ビルド成果物
+*.apk
+*.aab
+*.unitypackage
+*.app
+
+# Crashlytics
+crashlytics-build.properties
+
+# OS のゴミファイル
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# 自動バックアップのログ
+/backup_log.txt
