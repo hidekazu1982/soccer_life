@@ -10,6 +10,8 @@ namespace SoccerClub.Economy
         public BigInteger Sponsor;
         public BigInteger Goods;
         public BigInteger Gate;
+        public BigInteger Broadcast;
+        public BigInteger Prize;
         public BigInteger Operating;
         public BigInteger Advertising;
         public BigInteger Development;
@@ -19,7 +21,7 @@ namespace SoccerClub.Economy
         public BigInteger Reinforcement;
         public BigInteger Coins;
 
-        public BigInteger Income => Sponsor + Goods + Gate;
+        public BigInteger Income => Sponsor + Goods + Gate + Broadcast + Prize;
 
         public BigInteger Expense =>
             Operating + Advertising + Development + Facilities + FrontWages + SquadWages + Reinforcement;
@@ -33,6 +35,8 @@ namespace SoccerClub.Economy
             Sponsor = BigInteger.Zero;
             Goods = BigInteger.Zero;
             Gate = BigInteger.Zero;
+            Broadcast = BigInteger.Zero;
+            Prize = BigInteger.Zero;
             Operating = BigInteger.Zero;
             Advertising = BigInteger.Zero;
             Development = BigInteger.Zero;
@@ -52,6 +56,8 @@ namespace SoccerClub.Economy
                 Sponsor = Sponsor,
                 Goods = Goods,
                 Gate = Gate,
+                Broadcast = Broadcast,
+                Prize = Prize,
                 Operating = Operating,
                 Advertising = Advertising,
                 Development = Development,

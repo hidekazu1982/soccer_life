@@ -25,6 +25,9 @@ namespace SoccerClubSim.EditorTools
         // 既定のコピー先（メニューから変更可能）
         const string DefaultFolder = @"G:\マイドライブ\game\soccer_life\APK";
 
+        // ドライブに置くファイル名の接頭辞
+        const string FileNamePrefix = "soccer_life";
+
         // 他のポストプロセスより後に動かす
         public int callbackOrder => 1000;
 
@@ -107,8 +110,9 @@ namespace SoccerClubSim.EditorTools
                 return;
             }
 
-            // 例: SoccerClubSim_v0.1_20261107_0913.apk
-            string baseName = Path.GetFileNameWithoutExtension(src);
+            // 例: soccer_life_v1.0_20261109_0211.apk
+            // ローカルの APK 名に関係なく、ドライブ上の名前は固定の接頭辞で揃える
+            string baseName = FileNamePrefix;
             string version = SanitizeFileName(PlayerSettings.bundleVersion);
             string fileName = $"{baseName}_v{version}_{DateTime.Now:yyyyMMdd_HHmm}{ext}";
             string dst = Path.Combine(folder, fileName);

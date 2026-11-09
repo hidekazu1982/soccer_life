@@ -97,6 +97,8 @@ namespace SoccerClub.Core
         public string Sponsor;
         public string Goods;
         public string Gate;
+        public string Broadcast;
+        public string Prize;
         public string Operating;
         public string Advertising;
         public string Development;
@@ -131,6 +133,7 @@ namespace SoccerClub.Core
         public int Draws;
         public int Losses;
         public int LosingStreak;
+        public int UnpaidMonths;
         public SponsorSave[] Sponsors;
         public PlayerSave[] Squad;
         public PlayerSave[] Academy;
@@ -216,6 +219,7 @@ namespace SoccerClub.Core
         public bool Married;
         public int Children;
         public int[] Suitabilities;
+        public string ContractSalary;
     }
 
     [Serializable]

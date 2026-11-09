@@ -262,6 +262,8 @@ namespace SoccerClub.Core
                 Sponsor = Money(ledger.Sponsor),
                 Goods = Money(ledger.Goods),
                 Gate = Money(ledger.Gate),
+                Broadcast = Money(ledger.Broadcast),
+                Prize = Money(ledger.Prize),
                 Operating = Money(ledger.Operating),
                 Advertising = Money(ledger.Advertising),
                 Development = Money(ledger.Development),
@@ -281,6 +283,8 @@ namespace SoccerClub.Core
             ledger.Sponsor = ReadMoney(save.Sponsor);
             ledger.Goods = ReadMoney(save.Goods);
             ledger.Gate = ReadMoney(save.Gate);
+            ledger.Broadcast = ReadMoney(save.Broadcast);
+            ledger.Prize = ReadMoney(save.Prize);
             ledger.Operating = ReadMoney(save.Operating);
             ledger.Advertising = ReadMoney(save.Advertising);
             ledger.Development = ReadMoney(save.Development);
@@ -317,6 +321,7 @@ namespace SoccerClub.Core
                 Draws = club.Draws,
                 Losses = club.Losses,
                 LosingStreak = club.LosingStreak,
+                UnpaidMonths = club.UnpaidMonths,
                 Sponsors = WriteSponsors(club.Sponsors),
                 Squad = WritePlayers(club.Squad),
                 Academy = WritePlayers(club.Academy),
@@ -367,6 +372,7 @@ namespace SoccerClub.Core
                 Draws = save.Draws,
                 Losses = save.Losses,
                 LosingStreak = save.LosingStreak,
+                UnpaidMonths = save.UnpaidMonths,
                 Sponsors = ReadSponsors(save.Sponsors),
                 Squad = ReadPlayers(save.Squad),
                 Academy = ReadPlayers(save.Academy),
@@ -444,7 +450,8 @@ namespace SoccerClub.Core
                     LastGoalTicks = player.LastGoalDate.Ticks,
                     Married = player.Married,
                     Children = player.Children,
-                    Suitabilities = suits
+                    Suitabilities = suits,
+                    ContractSalary = Money(player.ContractSalary)
                 });
             }
 
@@ -486,7 +493,8 @@ namespace SoccerClub.Core
                     LastGoalDate = save.LastGoalTicks == 0 ? default(DateTime) : new DateTime(save.LastGoalTicks),
                     Married = save.Married,
                     Children = save.Children,
-                    Suitabilities = suits
+                    Suitabilities = suits,
+                    ContractSalary = ReadMoney(save.ContractSalary)
                 });
             }
 

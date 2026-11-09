@@ -186,16 +186,37 @@ namespace SoccerClub.Data
             return new BigInteger(overall) * 10_000;
         }
 
+        /// <summary>1回の契約更新で上がる年俸の上限倍率。</summary>
+        public const double ContractRaiseCap = 1.30d;
+
+        /// <summary>払う年俸。契約年俸があればそれ、無ければ実力の年俸。</summary>
+        public static BigInteger ContractAnnual(Player player)
+        {
+            if (player == null) return BigInteger.Zero;
+            return player.ContractSalary > 0 ? player.ContractSalary : PlayerAnnual(player);
+        }
+
+        /// <summary>8月1日の契約更新。実力の年俸へ寄せるが、上がるのは前年の ContractRaiseCap 倍まで。下がるときはそのまま下げる。</summary>
+        public static BigInteger RenewedContract(Player player)
+        {
+            if (player == null) return BigInteger.Zero;
+            var market = PlayerAnnual(player);
+            var current = player.ContractSalary;
+            if (current <= 0) return market;
+            var cap = RoundCoins(ToDouble(current) * ContractRaiseCap);
+            return market > cap ? cap : market;
+        }
+
         public static BigInteger PlayerMonthly(Player player)
         {
-            return PlayerAnnual(player) / 12;
+            return ContractAnnual(player) / 12;
         }
 
         /// <summary>出場給、勝利給。どちらも年俸の 1%。</summary>
         public static BigInteger MatchBonus(Player player)
         {
             if (player == null) return BigInteger.Zero;
-            return PlayerAnnual(player) / 100;
+            return ContractAnnual(player) / 100;
         }
 
         public static BigInteger TransferFee(Player player)
@@ -313,6 +334,35 @@ namespace SoccerClub.Data
             return RoundCoins(400_000d * (10d + level) / 10d);
         }
 
+        /// <summary>放映権料の月額。リーグLV1の額。リーグLVが上がるごとに LeagueLevelStep 倍。</summary>
+        public const int BroadcastMonthlyBase = 30_000_000;
+
+        /// <summary>リーグ順位の賞金（リーグLV1）。添字0が1位。ここに無い順位は0。</summary>
+        static readonly long[] LeaguePrizeBase =
+        {
+            300_000_000, 200_000_000, 150_000_000, 50_000_000, 50_000_000, 50_000_000
+        };
+
+        /// <summary>給料の未払いがこの月数続くと破産。</summary>
+        public const int UnpaidMonthsToBankrupt = 3;
+
+        /// <summary>運営費が足りないとき、1試合で減るサポーターの上限割合。</summary>
+        public const double OperatingShortfallMaxLoss = 0.05d;
+
+        public static BigInteger BroadcastMonthly(double leagueStrength)
+        {
+            if (leagueStrength < 1d) leagueStrength = 1d;
+            return RoundCoins(BroadcastMonthlyBase * leagueStrength);
+        }
+
+        /// <summary>rank は1から。</summary>
+        public static BigInteger LeaguePrize(int rank, double leagueStrength)
+        {
+            if (rank < 1 || rank > LeaguePrizeBase.Length) return BigInteger.Zero;
+            if (leagueStrength < 1d) leagueStrength = 1d;
+            return RoundCoins(LeaguePrizeBase[rank - 1] * leagueStrength);
+        }
+
         public static BigInteger SponsorIncome(Club club)
         {
             int level = club.Front != null ? club.Front.SalesLevel() : 0;
@@ -421,13 +471,66 @@ namespace SoccerClub.Data
             return FloorCoins(sold * (double)GoodsYen(club));
         }
 
-        /// <summary>ホーム1試合の運営費。満員売上の22%で、空席でもかかる。</summary>
-        public static BigInteger OperatingRequired(Club club)
+        /// <summary>運営費のうち、収容人数にかかる固定分の割合（満員売上に対して）。</summary>
+        public const double OperatingFixedRate = 0.08d;
+
+        /// <summary>運営費のうち、入場者1人ごとにかかる割合（その人のチケット代に対して）。満員なら固定分と合わせて22%。</summary>
+        public const double OperatingPerFanRate = 0.14d;
+
+        /// <summary>ホーム試合のたびに、入場者のこの割合がライトに加わる（口コミ）。</summary>
+        public const double WordOfMouthRate = 0.03d;
+
+        /// <summary>毎月、広報部レベル1あたりこの人数がライトに加わる。</summary>
+        public const int PublicRelationsInflowPerLevel = 20;
+
+        /// <summary>
+        /// ホーム1試合の運営費。収容に比例する固定分と、入場者に比例する分の合計。
+        /// 満員なら満員売上の22%（従来と同じ）、空席が多いほど安くなる。
+        /// </summary>
+        public static BigInteger OperatingRequired(Club club, int attendance)
         {
             int cap = Capacity(club);
             int ticket = TicketYen(club);
             if (cap <= 0 || ticket <= 0) return BigInteger.Zero;
-            return FloorCoins(cap * (double)ticket * 0.22d);
+            if (attendance < 0) attendance = 0;
+            if (attendance > cap) attendance = cap;
+            return FloorCoins(((double)cap * OperatingFixedRate + (double)attendance * OperatingPerFanRate) * ticket);
+        }
+
+        /// <summary>ホーム試合の口コミ。入場者の WordOfMouthRate をライトに足す。</summary>
+        public static void ApplyWordOfMouth(Club club, int attendance)
+        {
+            if (club == null || attendance <= 0) return;
+            int gain = RoundInt(attendance * WordOfMouthRate);
+            if (gain <= 0) return;
+            club.LightSupporters = CapLight(club, (long)club.LightSupporters + gain);
+        }
+
+        /// <summary>月初の広報活動。広報部レベル × PublicRelationsInflowPerLevel をライトに足す。</summary>
+        public static void ApplyPublicRelationsInflow(Club club)
+        {
+            int pr = club != null && club.Front != null ? club.Front.PublicRelationsLevel() : 0;
+            if (pr <= 0) return;
+            club.LightSupporters = CapLight(club, (long)club.LightSupporters + (long)pr * PublicRelationsInflowPerLevel);
+        }
+
+        /// <summary>ライトサポーターの上限は収容のこの倍数（スタジアムには来ないファン層を含めた規模）。</summary>
+        public const int LightCapPerSeat = 4;
+
+        public static int LightCap(Club club)
+        {
+            long cap = (long)Capacity(club) * LightCapPerSeat;
+            if (cap < LightFloor) cap = LightFloor;
+            if (cap > 1000000000L) cap = 1000000000L;
+            return (int)cap;
+        }
+
+        /// <summary>増やしたライトを、下限 LightFloor と上限 LightCap に収める。すでに上限を超えていれば上限まで下げる。</summary>
+        static int CapLight(Club club, long value)
+        {
+            int cap = LightCap(club);
+            if (value > cap) value = cap;
+            return ClampCount(value, LightFloor);
         }
 
         public static void ApplyWin(Club club)
@@ -439,7 +542,7 @@ namespace SoccerClub.Data
             if (promotion > room) promotion = room;
             if (promotion > light) promotion = light;
             club.CoreSupporters = ClampCount(club.CoreSupporters + promotion, CoreFloor);
-            club.LightSupporters = ClampCount(light - promotion, LightFloor);
+            club.LightSupporters = CapLight(club, light - promotion);
         }
 
         public static void ApplyLoss(Club club)
@@ -480,6 +583,7 @@ namespace SoccerClub.Data
             double rate = 1d - ToDouble(paid) / ToDouble(required);
             if (rate < 0d) rate = 0d;
             if (rate > 1d) rate = 1d;
+            rate *= OperatingShortfallMaxLoss;
             club.CoreSupporters = Reduce(club.CoreSupporters, RoundInt(club.CoreSupporters * rate), CoreFloor);
             club.LightSupporters = Reduce(club.LightSupporters, RoundInt(club.LightSupporters * rate), LightFloor);
         }

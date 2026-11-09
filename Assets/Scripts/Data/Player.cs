@@ -117,7 +117,11 @@ namespace SoccerClub.Data
             return (int)Math.Round(value, MidpointRounding.AwayFromZero);
         }
 
-        public BigInteger AnnualSalary => ClubMath.PlayerAnnual(this);
+        /// <summary>契約年俸。8月1日の更新時だけ見直す。0 は未契約（無所属など）で、実力の年俸を使う。</summary>
+        public BigInteger ContractSalary;
+
+        /// <summary>実際に払う年俸。契約があれば契約年俸。</summary>
+        public BigInteger AnnualSalary => ClubMath.ContractAnnual(this);
 
         public BigInteger MonthlySalary => AnnualSalary / 12;
 

@@ -19,9 +19,10 @@ namespace SoccerClub.UI
         const float CharacterH = 971f;
         const float LeftRestX = 200f;
         const float RightX = 1028f;
-        const float OffX = -740f;
+        // 画面外の待機位置。16:9 より横長の端末では背景が左右に広がるので、その分さらに外へ出す。
+        const float OffXBase = -740f;
+        static float OffX => OffXBase - GameRunner.HorizontalEdgeInset;
 
-        static readonly Rect Screen = new Rect(0f, 0f, GameRunner.ReferenceWidth, GameRunner.ReferenceHeight);
         static readonly Rect LeftBubble = new Rect(143f, 88f, 800f, 160f);
         // 吹き出しの帯。Figma sponsor の message（吹き出し 112,848）から、部署 233 / 名前 391、高さ 60、上辺の中央に重ねる。
         const float PlateHeight = 60f;
@@ -156,12 +157,14 @@ namespace SoccerClub.UI
             EnsureStyles(font);
             EnsureBackground();
             EnsureCast(story, session);
+            // 背景は 16:9 の枠ではなく実際の画面全体まで広げ、比率を保ったまま覆う。
+            var screen = FullScreenRect();
             if (_background != null)
-                GUI.DrawTexture(Screen, _background, ScaleMode.StretchToFill, false);
+                GUI.DrawTexture(screen, _background, ScaleMode.ScaleAndCrop, false);
             else
             {
                 GUI.color = new Color(0.12f, 0.14f, 0.16f, 1f);
-                GUI.DrawTexture(Screen, Texture2D.whiteTexture);
+                GUI.DrawTexture(screen, Texture2D.whiteTexture);
                 GUI.color = Color.white;
             }
 
@@ -211,10 +214,12 @@ namespace SoccerClub.UI
         static void DrawFigure(Texture2D portrait, float x, bool talking)
         {
             if (portrait == null) return;
-            if (x >= GameRunner.ReferenceWidth || x + CharacterW <= 0f) return;
             // シートは髪型のぶん左右に広い。高さを CharacterH に合わせ、体の中心を CharacterW の中央に置く。
             float width = CharacterH * (portrait.width / (float)Mathf.Max(1, portrait.height));
             float left = x + (CharacterW - width) * 0.5f;
+            // 体の枠（CharacterW）が実際の画面（背景を広げた範囲）の外にあるときは描かない。
+            var visible = FullScreenRect();
+            if (x >= visible.xMax || x + CharacterW <= visible.xMin) return;
             var rect = TalkMotion.Apply(new Rect(left, CharacterY, width, CharacterH), talking);
             GUI.DrawTexture(rect, portrait, ScaleMode.StretchToFill, true);
         }
@@ -335,6 +340,14 @@ namespace SoccerClub.UI
 
             if (!string.IsNullOrEmpty(line))
                 GUI.Label(bubble, line, _lineCenter);
+        }
+
+        /// <summary>UiFitMatrix の基準座標で、実際の画面全体を表す矩形。16:9 ちょうどなら 0,0,1920,1080。</summary>
+        static Rect FullScreenRect()
+        {
+            float ix = GameRunner.HorizontalEdgeInset;
+            float iy = GameRunner.VerticalEdgeInset;
+            return new Rect(-ix, -iy, GameRunner.ReferenceWidth + ix * 2f, GameRunner.ReferenceHeight + iy * 2f);
         }
 
         static void FillPill(Rect rect, Color color)

@@ -56,6 +56,9 @@ namespace SoccerClub.Data
         /// <summary>リーグとカップを通した連敗。勝ちと引き分けで 0 に戻る。</summary>
         public int LosingStreak;
 
+        /// <summary>給料を払いきれなかった月が続いている数。ClubMath.UnpaidMonthsToBankrupt で破産。</summary>
+        public int UnpaidMonths;
+
         public int GoalDifference => GoalsFor - GoalsAgainst;
 
         public BigInteger BudgetOf(BudgetKind kind)

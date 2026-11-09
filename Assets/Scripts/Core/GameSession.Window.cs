@@ -384,13 +384,15 @@ namespace SoccerClub.Core
             return day.Date == SeasonOpening(day).AddDays(-7);
         }
 
+        /// <summary>シーズン前のチケット価格。事業部の見積もりに、リーグLVの倍率をかける。</summary>
         void DecideTicketPrices()
         {
+            double strength = LeagueStrengthFactor;
             for (int i = 0; i < Clubs.Count; i++)
             {
                 var club = Clubs[i];
                 if (club == null) continue;
-                club.TicketPrice = ClubMath.QuoteTicket(club);
+                club.TicketPrice = ClubMath.RoundInt(ClubMath.QuoteTicket(club) * strength);
             }
         }
 
@@ -1369,6 +1371,7 @@ namespace SoccerClub.Core
                 return;
             }
 
+            player.ContractSalary = _story.Salary;
             PlayerClub.Squad.Add(player);
             DetachSignedFreeAgents();
             _story.Pages[page] = (player.Name ?? "選手") + "の加入が決まりました。\n移籍金と年俸、合計 "

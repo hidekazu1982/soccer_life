@@ -147,6 +147,7 @@ namespace SoccerClub.Core
                 scouting, gm, front, academy, clubs, playerClub, random);
             session.RefillFrontMarket();
             session.EnsureFreeAgents();
+            session.EnsureContracts();
             return session;
         }
 
@@ -492,6 +493,7 @@ namespace SoccerClub.Core
             bool monthEnd = closing.Day == DateTime.DaysInMonth(closing.Year, closing.Month);
 
             FinishGrowth();
+            EnsureContracts();
             var fixtures = Calendar.PlayDate(Time.CurrentDate);
             ApplyMatchConsequences(fixtures);
             ApplyCondition(fixtures);
@@ -499,10 +501,13 @@ namespace SoccerClub.Core
 
             if (Time.DayOfMonth == 1)
             {
+                var broadcast = ClubMath.BroadcastMonthly(LeagueStrengthFactor);
                 for (int i = 0; i < Clubs.Count; i++)
                 {
                     var club = Clubs[i];
                     Economy.ApplyMonthlyIncome(club);
+                    if (broadcast > 0) Economy.Apply(club, broadcast, "broadcast");
+                    ClubMath.ApplyPublicRelationsInflow(club);
                     Economy.PayMonthlyWages(club);
                     Economy.TryPayDevelopment(club);
                 }
@@ -734,6 +739,8 @@ namespace SoccerClub.Core
             if (reason == "sponsor") _month.Sponsor += amount;
             else if (reason == "goods") _month.Goods += amount;
             else if (reason == "gate") _month.Gate += amount;
+            else if (reason == "broadcast") _month.Broadcast += amount;
+            else if (reason == "prize") _month.Prize += amount;
             else if (reason == "operating") _month.Operating -= amount;
             else if (reason == "advertising") _month.Advertising -= amount;
             else if (reason == "development") _month.Development -= amount;
@@ -1039,6 +1046,7 @@ namespace SoccerClub.Core
 
                 ClubMath.ApplyOperatingShortfall(fixture.Home, fixture.OperatingPaid, fixture.OperatingRequired);
                 NoteStadiumDemand(fixture);
+                ClubMath.ApplyWordOfMouth(fixture.Home, fixture.Attendance);
                 NoteResult(fixture.Home, result.Winner);
                 NoteResult(fixture.Away, result.Winner);
                 RollInjuries(fixture.Home, result.HomeAppeared);
@@ -1186,6 +1194,14 @@ namespace SoccerClub.Core
                 int sundayRecovery = ClubMath.ConditionAmount(Player.SundayConditionRecovery, Player.SundayRecoveryPerLeague, league);
                 int dayOffRecovery = ClubMath.ConditionAmount(Player.DayOffConditionRecovery, Player.DayOffRecoveryPerLeague, league);
                 int forcedRest = ClubMath.ConditionAmount(Player.ForcedRestRecovery, Player.ForcedRestPerLeague, league);
+                bool unpaid = club.UnpaidMonths > 0;
+                if (unpaid)
+                {
+                    // 給料未払いのあいだは回復が半分。
+                    sundayRecovery /= 2;
+                    dayOffRecovery /= 2;
+                    forcedRest /= 2;
+                }
                 for (int i = 0; i < club.Squad.Count; i++)
                 {
                     var player = club.Squad[i];
@@ -1200,7 +1216,7 @@ namespace SoccerClub.Core
                     else player.AddCondition(-trainingCost);
                 }
 
-                RecoverCondition(club);
+                RecoverCondition(club, unpaid);
             }
         }
 
@@ -1213,9 +1229,10 @@ namespace SoccerClub.Core
             }
         }
 
-        static void RecoverCondition(Club club)
+        static void RecoverCondition(Club club, bool unpaid)
         {
             int budget = ClubMath.TrainerRecoveryBudget(club);
+            if (unpaid) budget /= 2;
             if (budget <= 0 || club.Squad == null || club.Squad.Count == 0) return;
             var tired = new List<Player>(club.Squad.Count);
             for (int i = 0; i < club.Squad.Count; i++)
@@ -1298,6 +1315,7 @@ namespace SoccerClub.Core
             var table = League.Table();
             var champion = table.Count > 0 ? table[0] : null;
             bool playerWon = champion != null && champion == PlayerClub;
+            PayLeaguePrizes(table);
             League.StorePreviousRanks();
             for (int i = 0; i < Clubs.Count; i++)
             {
@@ -1418,6 +1436,7 @@ namespace SoccerClub.Core
                 var club = Clubs[i];
                 if (club == null) continue;
                 AgeSquad(club.Squad);
+                RenewContracts(club.Squad);
                 AcademyService.AgeAndRetire(club);
                 RetireAged(club.Front);
                 RetireAged(club.Team);
@@ -1459,6 +1478,7 @@ namespace SoccerClub.Core
             player.SeasonRatedMatches = 0;
             player.Married = false;
             player.Children = 0;
+            player.ContractSalary = 0;
         }
 
         static void AgeSquad(List<Player> roster)
@@ -1520,6 +1540,44 @@ namespace SoccerClub.Core
             }
 
             return 0;
+        }
+
+        /// <summary>契約の無い所属選手に、いまの実力の年俸で契約を付ける。加入直後とセーブ移行用。</summary>
+        void EnsureContracts()
+        {
+            for (int c = 0; c < Clubs.Count; c++)
+            {
+                var squad = Clubs[c] != null ? Clubs[c].Squad : null;
+                if (squad == null) continue;
+                for (int i = 0; i < squad.Count; i++)
+                {
+                    var player = squad[i];
+                    if (player != null && player.ContractSalary <= 0)
+                        player.ContractSalary = ClubMath.PlayerAnnual(player);
+                }
+            }
+        }
+
+        static void RenewContracts(List<Player> squad)
+        {
+            if (squad == null) return;
+            for (int i = 0; i < squad.Count; i++)
+            {
+                var player = squad[i];
+                if (player != null) player.ContractSalary = ClubMath.RenewedContract(player);
+            }
+        }
+
+        /// <summary>リーグ最終順位の賞金。そのシーズンのリーグLVの倍率をかける。</summary>
+        void PayLeaguePrizes(List<Club> table)
+        {
+            if (table == null) return;
+            double strength = LeagueStrengthFactor;
+            for (int i = 0; i < table.Count; i++)
+            {
+                var prize = ClubMath.LeaguePrize(i + 1, strength);
+                if (prize > 0 && table[i] != null) Economy.Apply(table[i], prize, "prize");
+            }
         }
 
         void RefillFrontMarket()

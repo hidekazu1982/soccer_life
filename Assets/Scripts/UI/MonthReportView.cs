@@ -41,6 +41,8 @@ namespace SoccerClub.UI
             ly = Line(left, ly, "スポンサー料", report.Sponsor, true);
             ly = Line(left, ly, "グッズ売上", report.Goods, true);
             ly = Line(left, ly, "入場料", report.Gate, true);
+            ly = Line(left, ly, "放映権料", report.Broadcast, true);
+            ly = Line(left, ly, "賞金", report.Prize, true);
             Line(left, ly + 8f, "収入合計", report.Income, true);
 
             Section(right, top, "支出");

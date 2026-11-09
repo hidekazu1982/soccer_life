@@ -95,9 +95,11 @@ namespace SoccerClub.UI
             EnsurePortrait(speaker, club);
 
             GUI.color = Color.white;
-            var screen = new Rect(0f, 0f, GameRunner.ReferenceWidth, GameRunner.ReferenceHeight);
+            // UI は 1920x1080 を画面内に収めて中央寄せするので、16:9 と比率が違う端末では左右（または上下）が空く。
+            // 背景だけは画面全体まで広げ、比率を保ったまま覆う（はみ出した分は上下を少し切る）。
+            var screen = FullScreenRect();
             if (_background != null)
-                GUI.DrawTexture(screen, _background, ScaleMode.StretchToFill, false);
+                GUI.DrawTexture(screen, _background, ScaleMode.ScaleAndCrop, false);
             else
                 Fill(screen, new Color(0.12f, 0.14f, 0.16f, 1f), 0f);
             // 立ち絵は元の解像度（999px）で作り、CharacterRect（1188px）へ引き伸ばす。
@@ -278,6 +280,14 @@ namespace SoccerClub.UI
                 _background = Resources.Load<Texture2D>("MainScreen/bg_meeting_room");
             if (_button == null)
                 _button = Resources.Load<Texture2D>("MainScreen/button_01");
+        }
+
+        /// <summary>UiFitMatrix の基準座標で、実際の画面全体を表す矩形。16:9 ちょうどなら 0,0,1920,1080。</summary>
+        static Rect FullScreenRect()
+        {
+            float ix = GameRunner.HorizontalEdgeInset;
+            float iy = GameRunner.VerticalEdgeInset;
+            return new Rect(-ix, -iy, GameRunner.ReferenceWidth + ix * 2f, GameRunner.ReferenceHeight + iy * 2f);
         }
 
         static void Fill(Rect rect, Color color, float radius)

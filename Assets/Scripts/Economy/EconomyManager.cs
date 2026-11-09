@@ -91,14 +91,14 @@ namespace SoccerClub.Economy
 
         /// <summary>
         /// ホームの入場料を総資金へ入れ、広報部のレベルに応じた広告費をその試合で払う。
-        /// 運営費は必要額を総資金から自動で引く。足りないときは残額だけ払い、不足は呼び出し側が扱う。
+        /// 運営費（収容の固定分＋入場者分）は必要額を総資金から自動で引く。足りないときは残額だけ払い、不足は呼び出し側が扱う。
         /// </summary>
         public HomeSettlement SettleHomeMatch(Club club)
         {
             var advertising = ClubMath.MatchAdvertising(club);
             if (advertising > club.Coins) advertising = club.Coins > 0 ? club.Coins : BigInteger.Zero;
-            var required = ClubMath.OperatingRequired(club);
             int attendance = ClubMath.Attendance(club, advertising);
+            var required = ClubMath.OperatingRequired(club, attendance);
             int capacity = ClubMath.Capacity(club);
             var gate = ClubMath.GateIncome(club, advertising);
             club.Operating = BigInteger.Zero;
@@ -152,20 +152,38 @@ namespace SoccerClub.Economy
             if (goods > 0) Apply(club, goods, "goods");
         }
 
-        /// <summary>選手とチームスタッフの月給。フロントの年俸は毎月引かない。</summary>
+        /// <summary>
+        /// 選手とチームスタッフの月給。フロントの年俸は毎月引かない。
+        /// 払いきれない月が続くと UnpaidMonths が増え、ClubMath.UnpaidMonthsToBankrupt で破産にする。
+        /// </summary>
         public void PayMonthlyWages(Club club)
         {
-            if (club == null || club.Coins <= 0) return;
+            if (club == null) return;
+            _shortfall = false;
             PayTeamWages(club);
             var squad = club.Squad;
-            if (squad == null) return;
-            for (int i = 0; i < squad.Count; i++)
+            if (squad != null)
             {
-                var player = squad[i];
-                if (player == null) continue;
-                PayWage(club, ClubMath.PlayerMonthly(player), false);
+                for (int i = 0; i < squad.Count; i++)
+                {
+                    var player = squad[i];
+                    if (player == null) continue;
+                    PayWage(club, ClubMath.PlayerMonthly(player), false);
+                }
             }
+
+            if (!_shortfall)
+            {
+                club.UnpaidMonths = 0;
+                return;
+            }
+
+            club.UnpaidMonths++;
+            if (club.UnpaidMonths >= ClubMath.UnpaidMonthsToBankrupt)
+                OnBankrupt?.Invoke(club);
         }
+
+        bool _shortfall;
 
         void PayTeamWages(Club club)
         {
@@ -194,7 +212,9 @@ namespace SoccerClub.Economy
 
         void PayWage(Club club, BigInteger amount, bool front)
         {
-            if (amount <= 0 || club.Coins <= 0) return;
+            if (amount <= 0) return;
+            if (club.Coins < amount) _shortfall = true;
+            if (club.Coins <= 0) return;
             if (amount > club.Coins) amount = club.Coins;
             Apply(club, -amount, front ? "front-wage" : "squad-wage");
         }
