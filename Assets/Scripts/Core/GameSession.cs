@@ -780,6 +780,7 @@ namespace SoccerClub.Core
         public bool OwnerHiresFrontOffice(StaffMember staff)
         {
             if (!FrontHiring.TryHire(PlayerClub, staff)) return false;
+            staff.JoinedTicks = Time.CurrentDate.Date.Ticks;
             _frontMarket.Remove(staff);
             NotifyChanged();
             return true;
@@ -789,6 +790,8 @@ namespace SoccerClub.Core
         {
             dismissed = null;
             if (!FrontHiring.TryContract(PlayerClub, staff, slot, out dismissed)) return false;
+            // 在籍日数（サポートキャラの交代提案は在籍 1 年以上が対象）を契約日から数える。
+            staff.JoinedTicks = Time.CurrentDate.Date.Ticks;
             if (dismissed != null && !_frontMarket.Contains(dismissed))
                 _frontMarket.Add(dismissed);
             _frontMarket.Remove(staff);
@@ -817,6 +820,7 @@ namespace SoccerClub.Core
 
         void NotifyChanged()
         {
+            _supportDirty = true;
             StateChanged?.Invoke();
         }
 

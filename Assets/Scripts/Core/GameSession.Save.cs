@@ -60,6 +60,7 @@ namespace SoccerClub.Core
                 PendingSponsorCut = WriteCut(_pendingCut)
             };
             WritePersonnel(file);
+            WriteSupport(file);
             return file;
         }
 
@@ -125,6 +126,7 @@ namespace SoccerClub.Core
             session._pendingOffer = ReadOffer(file.PendingSponsor);
             session._pendingCut = ReadCut(file.PendingSponsorCut);
             session.ReadPersonnel(file);
+            session.ReadSupport(file);
             var market = ReadStaffList(file.FrontMarket);
             for (int i = 0; i < market.Count; i++)
             {

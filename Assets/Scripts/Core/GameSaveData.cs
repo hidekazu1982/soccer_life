@@ -49,6 +49,10 @@ namespace SoccerClub.Core
         public int StaffOfferLevel;
         public string StaffOfferName;
         public bool StaffOfferDone;
+        // サポートキャラ。今日対応済みの日付と、キャンセルで出さない内容（期限つき）。
+        public long SupportDoneTicks;
+        public string[] SupportSnoozeKeys;
+        public long[] SupportSnoozeUntil;
     }
 
     [Serializable]

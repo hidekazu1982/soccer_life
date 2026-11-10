@@ -123,6 +123,10 @@ namespace SoccerClub.Core
         TeamSheet _lineupSheet;
         readonly MonthReportView _monthReportView = new MonthReportView();
         readonly SponsorOfferView _sponsorOfferView = new SponsorOfferView();
+        // サポートキャラ。main の左下に出て、タップで support_event を開く。開いている間は日送りを止める。
+        readonly SupportEventView _supportView = new SupportEventView();
+        bool _supportOpen;
+        SupportSuggestion _supportOffer;
         readonly GrowthLogView _growthLog = new GrowthLogView();
         // その日のうちにログへ出す予定。グラウンドの増減ポップと同じ時刻に出す。
         readonly List<GrowthLogItem> _growthLogQueue = new List<GrowthLogItem>();
@@ -272,6 +276,7 @@ namespace SoccerClub.Core
             EnsureWorldUi();
             if (Session != null) Session.StateChanged -= OnSessionChanged;
             Session = session;
+            CloseSupport();
             _growthLog.Clear();
             _growthLogQueue.Clear();
             Session.StateChanged += OnSessionChanged;
@@ -337,6 +342,7 @@ namespace SoccerClub.Core
             _liveFixture = null;
             _playerFixtureCached = false;
             _dayDeltas.Clear();
+            CloseSupport();
             _dialogs.Close();
             _status = "右下の「1日進める」で日が進みます。シーズン中の休日は5秒、ウィンターブレイクとオフシーズンは1秒です。";
         }
@@ -394,6 +400,13 @@ namespace SoccerClub.Core
             UpdateBgm();
             UpdateDayOff();
             UpdateViewCamera(UnityEngine.Time.deltaTime);
+            // support_event を開いている間は、日送り（オートも含む）と成長を止めて待つ。
+            if (_supportOpen)
+            {
+                if (Session != null && _supportOffer != null) return;
+                CloseSupport();
+            }
+
             if (_crowd != null && Session != null)
             {
                 TickCrowd(UnityEngine.Time.deltaTime);
@@ -529,7 +542,8 @@ namespace SoccerClub.Core
 
         bool CoveringScreen =>
             _phase == DayPhase.Lineup || _phase == DayPhase.Stats || _phase == DayPhase.Settlement || _phase == DayPhase.MonthReport
-            || _phase == DayPhase.SponsorCut || _phase == DayPhase.SponsorOffer || _phase == DayPhase.Story || _matchScreen;
+            || _phase == DayPhase.SponsorCut || _phase == DayPhase.SponsorOffer || _phase == DayPhase.Story || _matchScreen
+            || _supportOpen;
 
         float PaceSeconds()
         {
@@ -612,6 +626,17 @@ namespace SoccerClub.Core
             }
 
             var club = Session.PlayerClub;
+            if (_supportOpen && _supportOffer != null)
+            {
+                UseUiScreen();
+                var supportChoice = _supportView.Draw(_supportOffer, Session, _font);
+                DrawAutoButton(SponsorAutoRect);
+                if (supportChoice != SupportChoice.None) ResolveSupport(supportChoice);
+                GUI.matrix = previousMatrix;
+                GUI.color = previousColor;
+                return;
+            }
+
             if (_phase == DayPhase.Lineup)
             {
                 UseUiScreen();
@@ -760,6 +785,7 @@ namespace SoccerClub.Core
                 || HitsMainFullAutoButton(chromeMouse)
                 || HitsDebugMenu(chromeMouse)
                 || HitsMainDayGauge(chromeMouse)
+                || HitsSupportCallout(chromeMouse)
                 || overPlayer
                 || overDetail
                 || overDialog;
@@ -784,6 +810,7 @@ namespace SoccerClub.Core
             DrawDayOff();
             if (!hideCast)
                 DrawCharacterMessage(club);
+            DrawSupportCallout();
             if (!clubhouseDialog)
                 DrawInfoPlates(club);
             DrawMenuButton();
@@ -1823,6 +1850,72 @@ namespace SoccerClub.Core
             TryAutoSave();
         }
 
+        // main の support（184:39）は左下。画面の左端と下端に寄せる。
+        static Vector2 SupportCalloutOrigin => ShiftLeft(PinBottom(new Rect(0f, 0f, 1f, 1f))).position;
+
+        /// <summary>
+        /// サポートキャラを出すか。メイン画面で、日送り前か日送り中（試合画面を除く）。
+        /// ダイアログ・キャラ詳細・イベント中とフルオートでは出さない。今日すでに対応済みなら Session 側で null になる。
+        /// </summary>
+        bool SupportCalloutVisible =>
+            Session != null
+            && !_supportOpen
+            && !_fullAuto
+            && !_dialogs.IsOpen
+            && (_phase == DayPhase.Idle || (_phase == DayPhase.Advancing && !_matchScreen))
+            && (_crowd == null || _crowd.SelectedId == null)
+            && Session.CurrentStory == null
+            && Session.CurrentSupport != null;
+
+        bool HitsSupportCallout(Vector2 mouse)
+        {
+            return SupportCalloutVisible && SupportEventView.CalloutBounds(SupportCalloutOrigin).Contains(mouse);
+        }
+
+        void DrawSupportCallout()
+        {
+            if (!SupportCalloutVisible) return;
+            var suggestion = Session.CurrentSupport;
+            if (_supportView.DrawCallout(suggestion, Session, _font, SupportCalloutOrigin))
+                OpenSupport(suggestion);
+        }
+
+        void OpenSupport(SupportSuggestion suggestion)
+        {
+            if (suggestion == null) return;
+            _supportOffer = suggestion;
+            _supportOpen = true;
+        }
+
+        void ResolveSupport(SupportChoice choice)
+        {
+            var suggestion = _supportOffer;
+            CloseSupport();
+            if (Session == null || suggestion == null) return;
+            if (choice == SupportChoice.Accept)
+            {
+                bool done = Session.AcceptSupport(suggestion);
+                if (suggestion.Kind == SupportKind.Facility)
+                    _status = done ? "施設をレベルアップしました。" : "施設のレベルアップができませんでした。";
+                else
+                    _status = done ? "フロントと契約しました。" : "フロントと契約できませんでした。";
+            }
+            else
+            {
+                Session.SnoozeSupport(suggestion);
+                _status = "提案を見送りました。";
+            }
+
+            TryAutoSave();
+        }
+
+        void CloseSupport()
+        {
+            _supportOpen = false;
+            _supportOffer = null;
+            _supportView.Clear();
+        }
+
         void DismissMonthReport()
         {
             if (Session != null) Session.DismissMonthReport();
@@ -1959,6 +2052,7 @@ namespace SoccerClub.Core
             if (EmblemRect.Contains(chrome) || HitsInfoPlate(chrome) || MenuButtonRect.Contains(chrome) || HitsMainDayButton(chrome) || HitsMainAutoButton(chrome) || HitsMainFullAutoButton(chrome))
                 return true;
             if (HitsMainDayGauge(chrome)) return true;
+            if (HitsSupportCallout(chrome)) return true;
             if (_crowd != null && _crowd.SelectedId != null && DetailRect.Contains(chrome)) return true;
             if (_crowd != null && _crowd.IsPointerBusy(world)) return false;
             return false;
@@ -1972,6 +2066,7 @@ namespace SoccerClub.Core
         {
             if (_dialogs.IsOpen) return true;
             if (EmblemRect.Contains(chrome) || MenuButtonRect.Contains(chrome) || HitsInfoPlate(chrome) || HitsMainAutoButton(chrome) || HitsMainFullAutoButton(chrome) || HitsMainDayButton(chrome)) return true;
+            if (HitsSupportCallout(chrome)) return true;
             if (_crowd == null) return false;
             if (_crowd.IsPointerBusy(world)) return true;
             return _crowd.SelectedId != null;
