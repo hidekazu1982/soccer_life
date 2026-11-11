@@ -17,20 +17,30 @@ namespace SoccerClub.Data
     {
         public const int MaxLevel = 999;
 
+        /// <summary>スタジアムの上限レベル。収容 5,000 + Lv×475 で、Lv200 が 10 万人。</summary>
+        public const int StadiumMaxLevel = 200;
+
         public FacilityKind Kind;
         public int Level = 1;
         public BigInteger BaseCost;
 
-        /// <summary>Lv の建設/次レベル費用: BaseCost × 1.5^(Level-1)</summary>
+        /// <summary>
+        /// Lv の建設/次レベル費用。スタジアムは BaseCost × 1.025^(Level-1)（Lv200 まで届くよう緩やか）、
+        /// ほかは BaseCost × 1.5^(Level-1)。
+        /// </summary>
         public BigInteger CostForLevel(int level)
         {
             int n = Math.Max(0, level - 1);
+            if (Kind == FacilityKind.Stadium)
+                return BaseCost * BigInteger.Pow(41, n) / BigInteger.Pow(40, n);
             return BaseCost * BigInteger.Pow(3, n) / BigInteger.Pow(2, n);
         }
 
         public BigInteger NextUpgradeCost() => CostForLevel(Level + 1);
 
-        public bool CanUpgrade() => Level < MaxLevel;
+        public int LevelCap => Kind == FacilityKind.Stadium ? StadiumMaxLevel : MaxLevel;
+
+        public bool CanUpgrade() => Level < LevelCap;
 
         public void Upgrade()
         {
@@ -60,9 +70,17 @@ namespace SoccerClub.Data
             }
         }
 
+        /// <summary>1 レベルあたりの収容の増え方。</summary>
+        public const int StadiumSeatsPerLevel = 475;
+
+        /// <summary>収容の上限。</summary>
+        public const int StadiumMaxCapacity = 100000;
+
         public BigInteger StadiumCapacity()
         {
-            return 5000 + Stadium.Level * 2000;
+            long seats = 5000L + (long)Stadium.Level * StadiumSeatsPerLevel;
+            if (seats > StadiumMaxCapacity) seats = StadiumMaxCapacity;
+            return seats;
         }
 
         public double TrainingGroundMultiplier() => ClubMath.TrainingMultiplier(TrainingGround.Level);

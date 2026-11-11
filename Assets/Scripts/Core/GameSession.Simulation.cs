@@ -73,12 +73,6 @@ namespace SoccerClub.Core
             return spend;
         }
 
-        /// <summary>スタジアム拡張の提案イベントを、シミュレーターのルールで受けるか。</summary>
-        public bool SimulationAcceptsStadium()
-        {
-            return SimulationCanUpgrade(FacilityKind.Stadium);
-        }
-
         bool TrySimulationUpgrade(FacilityKind kind)
         {
             if (!SimulationCanUpgrade(kind)) return false;
@@ -138,6 +132,9 @@ namespace SoccerClub.Core
             StaffMember dismissed;
             return OwnerContractsFront(best, bestSlot, out dismissed);
         }
+
+        /// <summary>無所属選手の一覧。シミュレーターの集計用（読み取りのみ）。</summary>
+        public System.Collections.Generic.IReadOnlyList<Player> SimulationFreeAgents => _freeAgents;
 
         /// <summary>リーグの全日程が消化済み。シーズン記録の取得に使う。</summary>
         public bool SimulationLeagueComplete()

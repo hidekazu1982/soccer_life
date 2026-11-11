@@ -37,8 +37,6 @@ namespace SoccerClub.Core
         public string TicketKey;
         public string CampKey;
         public string RenewalKey;
-        public bool StadiumProposal;
-        public int StadiumAskedLevel;
         public WindowDealSave[] Deals;
         public ClubStorySave Story;
         public PlayerSave[] FreeAgents;

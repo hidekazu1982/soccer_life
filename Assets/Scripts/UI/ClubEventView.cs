@@ -53,24 +53,6 @@ namespace SoccerClub.UI
                     story.BudgetPercent = Math.Min(100, percent + 10);
             }
 
-            if (story.Kind == ClubStoryKind.Stadium)
-            {
-                float buttonY = Panel.yMax - 110f;
-                float half = (width - 16f) * 0.5f;
-                if (GUI.Button(new Rect(x, buttonY, half, 64f), "レベルアップする", _button))
-                {
-                    if (session != null && session.OwnerApprovesFacilityUpgrade(FacilityKind.Stadium))
-                        return true;
-                    story.Pages[0] = "資金が足りないため、スタジアムを拡張できません。";
-                    story.Body = story.Pages[0];
-                    return false;
-                }
-
-                if (GUI.Button(new Rect(x + half + 16f, buttonY, half, 64f), "見送る", _button))
-                    return true;
-                return false;
-            }
-
             string label = story.Budget ? "この予算で進める" : (story.FinalStep ? "確認" : "次へ");
             return GUI.Button(new Rect(x, Panel.yMax - 110f, width, 64f), label, _button);
         }

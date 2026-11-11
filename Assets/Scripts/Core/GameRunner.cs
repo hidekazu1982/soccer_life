@@ -29,6 +29,7 @@ namespace SoccerClub.Core
             Lineup,
             Advancing,
             Stats,
+            Ranking,
             Settlement,
             MonthReport,
             SponsorCut,
@@ -123,6 +124,7 @@ namespace SoccerClub.Core
         TeamSheet _lineupSheet;
         readonly MonthReportView _monthReportView = new MonthReportView();
         readonly SponsorOfferView _sponsorOfferView = new SponsorOfferView();
+        readonly RankingView _rankingView = new RankingView();
         // サポートキャラ。main の左下に出て、タップで support_event を開く。開いている間は日送りを止める。
         readonly SupportEventView _supportView = new SupportEventView();
         bool _supportOpen;
@@ -383,6 +385,7 @@ namespace SoccerClub.Core
                     || (_liveFixture != null
                         && ((_matchScreen && _phase == DayPhase.Advancing)
                             || _phase == DayPhase.Stats
+                            || _phase == DayPhase.Ranking
                             || _phase == DayPhase.Settlement)));
             _bgm.Tick(match, UnityEngine.Time.deltaTime);
         }
@@ -479,7 +482,7 @@ namespace SoccerClub.Core
                         AdvanceAutoStory();
                 }
             }
-            else if (_phase == DayPhase.Stats || _phase == DayPhase.Settlement)
+            else if (_phase == DayPhase.Stats || _phase == DayPhase.Ranking || _phase == DayPhase.Settlement)
             {
                 if (_autoPlay)
                 {
@@ -541,7 +544,7 @@ namespace SoccerClub.Core
         }
 
         bool CoveringScreen =>
-            _phase == DayPhase.Lineup || _phase == DayPhase.Stats || _phase == DayPhase.Settlement || _phase == DayPhase.MonthReport
+            _phase == DayPhase.Lineup || _phase == DayPhase.Stats || _phase == DayPhase.Ranking || _phase == DayPhase.Settlement || _phase == DayPhase.MonthReport
             || _phase == DayPhase.SponsorCut || _phase == DayPhase.SponsorOffer || _phase == DayPhase.Story || _matchScreen
             || _supportOpen;
 
@@ -592,9 +595,6 @@ namespace SoccerClub.Core
 
         void AdvanceAutoStory()
         {
-            var story = Session != null ? Session.CurrentStory : null;
-            if (_fullAuto && story != null && story.Kind == ClubStoryKind.Stadium && Session.FullAutoAcceptsStadiumUpgrade())
-                Session.OwnerApprovesFacilityUpgrade(FacilityKind.Stadium);
             AdvanceOpenStory();
         }
 
@@ -653,6 +653,16 @@ namespace SoccerClub.Core
                 UseUiScreen();
                 _matchScreenView.DrawStats(_liveFixture, club, _font);
                 DrawReviewChrome();
+                GUI.matrix = previousMatrix;
+                GUI.color = previousColor;
+                return;
+            }
+
+            if (_phase == DayPhase.Ranking && _liveFixture != null)
+            {
+                UseUiScreen();
+                _rankingView.Draw(Session, _liveFixture, _clubSelect.EmblemTexture, _font);
+                DrawRankingChrome();
                 GUI.matrix = previousMatrix;
                 GUI.color = previousColor;
                 return;
@@ -1551,6 +1561,16 @@ namespace SoccerClub.Core
             _postMatchStepFrame = UnityEngine.Time.frameCount;
             if (_phase == DayPhase.Stats)
             {
+                // 選手の評価のあとに、日程と順位表を挟む。
+                _phase = DayPhase.Ranking;
+                _rankingView.Reset();
+                _dayElapsed = _autoPlay ? 0f : -1f;
+                _status = "順位表";
+                return;
+            }
+
+            if (_phase == DayPhase.Ranking)
+            {
                 CaptureSupporters();
                 _phase = DayPhase.Settlement;
                 _dayElapsed = _autoPlay ? 0f : -1f;
@@ -1954,6 +1974,19 @@ namespace SoccerClub.Core
                 DrawDayGauge(MainGaugeRect, Mathf.Clamp01(_dayElapsed / StorySeconds()));
             DrawAutoButton(MainAutoRect);
             DrawFullAutoButton(MainFullAutoAnchor);
+        }
+
+        // ranking の auto。ゲージ 1557,1017 / 212×30.7、AUTO 1769,988（sponsor と同じ）。「次へ」は Figma にないので、ゲージの左 1386,988 に置く。
+        static Rect RankingNextRect => ShiftRight(PinBottom(new Rect(1386f, 988f, 155f, 60f)));
+
+        void DrawRankingChrome()
+        {
+            float wait = NextSeconds(ReviewSeconds);
+            DrawDayGauge(SponsorGaugeRect, _autoPlay && _dayElapsed >= 0f ? Mathf.Clamp01(_dayElapsed / wait) : 0f);
+            DrawAutoButton(SponsorAutoRect);
+            DrawFullAutoButton(SponsorFullAutoAnchor);
+            if (!_autoPlay && _rankingView.DrawNextButton(RankingNextRect, _font))
+                ContinuePostMatch();
         }
 
         void DrawReviewChrome()

@@ -52,6 +52,14 @@ namespace SoccerClub.Core
         public int TicketPrice;
         public BigInteger Gate;
         public BigInteger Operating;
+        public BigInteger SponsorIncome;
+        public int SponsorCount;
+        public BigInteger SponsorAverageMonthly;
+        public int PlayerTop11;
+        public int RivalTop11Average;
+        public int RivalTop11Max;
+        public int ChampionTop11;
+        public int FreeAgentTop11;
     }
 
     public sealed class SimulationSettings
@@ -87,6 +95,7 @@ namespace SoccerClub.Core
         BigInteger _expense;
         BigInteger _gate;
         BigInteger _operating;
+        BigInteger _sponsor;
         DateTime _lastRecorded = DateTime.MinValue;
 
         public HeadlessSimulator(SimulationSettings settings)
@@ -140,10 +149,6 @@ namespace SoccerClub.Core
             {
                 var story = Session.CurrentStory;
                 if (story == null) break;
-                if (story.Kind == ClubStoryKind.Stadium && Session.SimulationAcceptsStadium()
-                    && Session.OwnerApprovesFacilityUpgrade(FacilityKind.Stadium))
-                    _stadiumUps++;
-
                 Session.ApplyOpenStory();
                 for (int step = 0; step < StoryStepGuard && Session.ContinueStory(); step++)
                 {
@@ -169,6 +174,7 @@ namespace SoccerClub.Core
             else _expense -= entry.Amount;
             if (entry.Reason == "gate") _gate += entry.Amount;
             else if (entry.Reason == "operating") _operating -= entry.Amount;
+            else if (entry.Reason == "sponsor") _sponsor += entry.Amount;
         }
 
         SimulationSeasonRecord Capture(bool bankrupt)
@@ -218,8 +224,11 @@ namespace SoccerClub.Core
                 Capacity = ClubMath.Capacity(club),
                 TicketPrice = ClubMath.TicketYen(club),
                 Gate = _gate,
-                Operating = _operating
+                Operating = _operating,
+                SponsorIncome = _sponsor
             };
+            SponsorStats(club, out record.SponsorCount, out record.SponsorAverageMonthly);
+            StrengthStats(record, club, champion);
             FrontStats(club.Front, out record.FrontFilled, out record.FrontAverageLevel, out record.FrontMinLevel);
 
             _stadiumUps = _groundUps = _roomUps = _houseUps = _frontHires = 0;
@@ -227,7 +236,65 @@ namespace SoccerClub.Core
             _expense = BigInteger.Zero;
             _gate = BigInteger.Zero;
             _operating = BigInteger.Zero;
+            _sponsor = BigInteger.Zero;
             return record;
+        }
+
+        /// <summary>上位11人の平均総合力（表示値）。対戦相手との力関係を見るため。</summary>
+        static int Top11(List<Player> roster)
+        {
+            if (roster == null || roster.Count == 0) return 0;
+            var list = new List<double>(roster.Count);
+            for (int i = 0; i < roster.Count; i++)
+            {
+                if (roster[i] != null) list.Add(roster[i].Overall);
+            }
+
+            if (list.Count == 0) return 0;
+            list.Sort((a, b) => b.CompareTo(a));
+            int n = Math.Min(11, list.Count);
+            double sum = 0d;
+            for (int i = 0; i < n; i++) sum += list[i];
+            return Player.ToDisplay(sum / n);
+        }
+
+        void StrengthStats(SimulationSeasonRecord record, Club club, Club champion)
+        {
+            record.PlayerTop11 = Top11(club.Squad);
+            record.ChampionTop11 = champion != null ? Top11(champion.Squad) : 0;
+            long sum = 0;
+            int count = 0;
+            int max = 0;
+            for (int i = 0; i < Session.Clubs.Count; i++)
+            {
+                var rival = Session.Clubs[i];
+                if (rival == null || rival == club) continue;
+                int top = Top11(rival.Squad);
+                sum += top;
+                count++;
+                if (top > max) max = top;
+            }
+
+            record.RivalTop11Average = count == 0 ? 0 : (int)(sum / count);
+            record.RivalTop11Max = max;
+            record.FreeAgentTop11 = Top11(new List<Player>(Session.SimulationFreeAgents));
+        }
+
+        static void SponsorStats(Club club, out int count, out BigInteger average)
+        {
+            count = 0;
+            average = BigInteger.Zero;
+            if (club == null || club.Sponsors == null) return;
+            var sum = BigInteger.Zero;
+            for (int i = 0; i < club.Sponsors.Count; i++)
+            {
+                var contract = club.Sponsors[i];
+                if (contract == null || contract.MonthsLeft <= 0) continue;
+                sum += contract.Monthly;
+                count++;
+            }
+
+            if (count > 0) average = sum / count;
         }
 
         int AverageHomeAttendance(Club club)
@@ -329,7 +396,8 @@ namespace SoccerClub.Core
                 + "coins,payroll,income,expense,stadium_lv,ground_lv,room_lv,clubhouse_lv,"
                 + "stadium_up,ground_up,room_up,clubhouse_up,front_hires,front_filled,front_avg_lv,front_min_lv,"
                 + "squad,squad_avg_overall,core_supporters,light_supporters,bankrupt,"
-                + "home_avg_attendance,capacity,ticket,gate,operating");
+                + "home_avg_attendance,capacity,ticket,gate,operating,sponsor_income,sponsor_count,sponsor_avg_monthly,"
+                + "player_top11,rival_top11_avg,rival_top11_max,champion_top11,free_agent_top11");
             var inv = CultureInfo.InvariantCulture;
             for (int i = 0; i < Records.Count; i++)
             {
@@ -373,7 +441,15 @@ namespace SoccerClub.Core
                     .Append(r.Capacity.ToString(inv)).Append(',')
                     .Append(r.TicketPrice.ToString(inv)).Append(',')
                     .Append(r.Gate.ToString(inv)).Append(',')
-                    .Append(r.Operating.ToString(inv))
+                    .Append(r.Operating.ToString(inv)).Append(',')
+                    .Append(r.SponsorIncome.ToString(inv)).Append(',')
+                    .Append(r.SponsorCount.ToString(inv)).Append(',')
+                    .Append(r.SponsorAverageMonthly.ToString(inv)).Append(',')
+                    .Append(r.PlayerTop11.ToString(inv)).Append(',')
+                    .Append(r.RivalTop11Average.ToString(inv)).Append(',')
+                    .Append(r.RivalTop11Max.ToString(inv)).Append(',')
+                    .Append(r.ChampionTop11.ToString(inv)).Append(',')
+                    .Append(r.FreeAgentTop11.ToString(inv))
                     .AppendLine();
             }
 

@@ -70,12 +70,6 @@ namespace SoccerClub.Core
             return string.Join("、", parts);
         }
 
-        /// <summary>スタジアム提案を受けるか。直近ホームが現在の収容の80%を超え、支払い後も総年俸を上回る。</summary>
-        public bool FullAutoAcceptsStadiumUpgrade()
-        {
-            return HomeAttendanceExceedsCapacity() && CanUpgradeWithSurplus(FacilityKind.Stadium);
-        }
-
         bool TryFullAutoStadium()
         {
             if (!HomeAttendanceExceedsCapacity()) return false;
@@ -96,15 +90,13 @@ namespace SoccerClub.Core
             return SurplusCovers(facility.NextUpgradeCost());
         }
 
-        /// <summary>直近のホーム試合の入場者が、いまの収容人数の80%を超えている。</summary>
+        /// <summary>
+        /// ファンの来場意欲（適正価格のときの来場数）が、いまの収容人数の80%を超えている。
+        /// チケット価格で入場者は 80% 前後に調整されるので、入場者ではなく来場意欲で見る。
+        /// </summary>
         bool HomeAttendanceExceedsCapacity()
         {
-            var fixture = LatestPlayedHomeFixture();
-            var facilities = PlayerClub != null ? PlayerClub.Facilities : null;
-            if (fixture == null || facilities == null) return false;
-            long capacity = (long)facilities.StadiumCapacity();
-            if (capacity <= 0) return false;
-            return (long)fixture.Attendance * 100L > capacity * 80L;
+            return ClubMath.StadiumDemandExceeds(PlayerClub);
         }
 
         Fixture LatestPlayedHomeFixture()

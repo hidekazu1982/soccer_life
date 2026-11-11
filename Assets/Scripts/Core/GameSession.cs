@@ -567,10 +567,10 @@ namespace SoccerClub.Core
             if (active >= ClubMath.SponsorContractCap) return false;
             if (_random.NextDouble() >= ClubMath.SponsorOfferChance) return false;
 
-            var monthly = ClubMath.SponsorContractMonthly(PlayerClub);
-            if (monthly <= 0) return false;
-            var name = PickSponsor(PlayerClub, out int cutRank, out int cutLosses);
+            var name = PickSponsor(PlayerClub, out int cutRank, out int cutLosses, out double rate);
             if (name == null) return false;
+            var monthly = ClubMath.SponsorContractMonthly(PlayerClub, rate, LeagueStrengthFactor, _random.NextDouble());
+            if (monthly <= 0) return false;
             _pendingOffer = MakeSponsorOffer(name, monthly, active, cutRank, cutLosses);
             return true;
         }
@@ -583,15 +583,17 @@ namespace SoccerClub.Core
         {
             if (GameOver || PlayerClub == null) return false;
             if (_pendingOffer != null) return true;
-            var monthly = ClubMath.SponsorContractMonthly(PlayerClub);
-            if (monthly <= 0) monthly = new System.Numerics.BigInteger(ClubMath.SponsorContractMonthlyFloor);
-            var name = PickSponsor(PlayerClub, out int cutRank, out int cutLosses);
+            var name = PickSponsor(PlayerClub, out int cutRank, out int cutLosses, out double rate);
             if (name == null)
             {
                 name = "デバッグ商事";
                 cutRank = 0;
                 cutLosses = 0;
+                rate = 1d;
             }
+
+            var monthly = ClubMath.SponsorContractMonthly(PlayerClub, rate, LeagueStrengthFactor, _random.NextDouble());
+            if (monthly <= 0) monthly = new System.Numerics.BigInteger(ClubMath.SponsorContractMonthlyFloor);
 
             _pendingOffer = MakeSponsorOffer(name, monthly, ActiveSponsorCount(PlayerClub), cutRank, cutLosses);
             return true;
@@ -651,10 +653,11 @@ namespace SoccerClub.Core
             return count;
         }
 
-        string PickSponsor(Club club, out int cutRank, out int cutLosses)
+        string PickSponsor(Club club, out int cutRank, out int cutLosses, out double rate)
         {
             cutRank = 0;
             cutLosses = 0;
+            rate = 1d;
             int rank = LeagueRank(club);
             int streak = club.LosingStreak;
             int free = 0;
@@ -674,6 +677,7 @@ namespace SoccerClub.Core
                 {
                     cutRank = profile.CutRank;
                     cutLosses = profile.CutLosses;
+                    rate = profile.Rate;
                     return profile.Name;
                 }
 
@@ -1049,7 +1053,6 @@ namespace SoccerClub.Core
                 }
 
                 ClubMath.ApplyOperatingShortfall(fixture.Home, fixture.OperatingPaid, fixture.OperatingRequired);
-                NoteStadiumDemand(fixture);
                 ClubMath.ApplyWordOfMouth(fixture.Home, fixture.Attendance);
                 NoteResult(fixture.Home, result.Winner);
                 NoteResult(fixture.Away, result.Winner);
@@ -1440,6 +1443,7 @@ namespace SoccerClub.Core
                 var club = Clubs[i];
                 if (club == null) continue;
                 AgeSquad(club.Squad);
+                RetireVeterans(club.Squad);
                 RenewContracts(club.Squad);
                 AcademyService.AgeAndRetire(club);
                 RetireAged(club.Front);
@@ -1483,6 +1487,26 @@ namespace SoccerClub.Core
             player.Married = false;
             player.Children = 0;
             player.ContractSalary = 0;
+        }
+
+        /// <summary>
+        /// ClubMath.PlayerRetirementAge 以上の選手を引退させる。年長の選手から順に外すが、
+        /// 所属が ClubMath.RetirementSquadFloor を下回るところまでは外さない（翌年に持ち越す）。
+        /// </summary>
+        static void RetireVeterans(List<Player> roster)
+        {
+            if (roster == null) return;
+            var veterans = new List<Player>();
+            for (int i = 0; i < roster.Count; i++)
+            {
+                var player = roster[i];
+                if (player != null && player.Age >= ClubMath.PlayerRetirementAge) veterans.Add(player);
+            }
+
+            if (veterans.Count == 0) return;
+            veterans.Sort((a, b) => b.Age.CompareTo(a.Age));
+            for (int i = 0; i < veterans.Count && roster.Count > ClubMath.RetirementSquadFloor; i++)
+                roster.Remove(veterans[i]);
         }
 
         static void AgeSquad(List<Player> roster)

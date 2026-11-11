@@ -18,6 +18,7 @@ namespace SoccerClub.Core
         Budget,
         Transfer,
         Signing,
+        /// <summary>廃止（秘書の提案に移行）。旧セーブの数値を保つため残す。</summary>
         Stadium,
         Camp,
         Ticket,
@@ -86,8 +87,6 @@ namespace SoccerClub.Core
         int _staffOfferLevel;
         string _staffOfferName;
         bool _staffOfferDone;
-        bool _stadiumProposal;
-        int _stadiumAskedLevel = -1;
         readonly List<ScheduledDeal> _deals = new List<ScheduledDeal>();
         ClubStory _story;
 
@@ -191,13 +190,6 @@ namespace SoccerClub.Core
             if (TrySpan(today, out start, out end, out key) && _budgetWindowKey != key)
             {
                 _story = MakeBudget(key);
-                return true;
-            }
-
-            if (_stadiumProposal)
-            {
-                _stadiumProposal = false;
-                _story = MakeStadium();
                 return true;
             }
 
@@ -384,15 +376,16 @@ namespace SoccerClub.Core
             return day.Date == SeasonOpening(day).AddDays(-7);
         }
 
-        /// <summary>シーズン前のチケット価格。事業部の見積もりに、リーグLVの倍率をかける。</summary>
+        /// <summary>
+        /// シーズン前のチケット価格。収容の 80% が埋まる額に決め、シーズン中は変えない。
+        /// </summary>
         void DecideTicketPrices()
         {
-            double strength = LeagueStrengthFactor;
             for (int i = 0; i < Clubs.Count; i++)
             {
                 var club = Clubs[i];
                 if (club == null) continue;
-                club.TicketPrice = ClubMath.RoundInt(ClubMath.QuoteTicket(club) * strength);
+                club.TicketPrice = ClubMath.SeasonTicketPrice(club);
             }
         }
 
@@ -412,18 +405,6 @@ namespace SoccerClub.Core
             }
 
             NotifyChanged();
-        }
-
-        void NoteStadiumDemand(Fixture fixture)
-        {
-            if (fixture == null || PlayerClub == null || fixture.Home != PlayerClub) return;
-            if (fixture.StadiumCapacity <= 0) return;
-            if ((long)fixture.Attendance * 100L <= (long)fixture.StadiumCapacity * 80L) return;
-            var stadium = PlayerClub.Facilities != null ? PlayerClub.Facilities.Stadium : null;
-            if (stadium == null || !stadium.CanUpgrade()) return;
-            if (_stadiumAskedLevel == stadium.Level) return;
-            _stadiumAskedLevel = stadium.Level;
-            _stadiumProposal = true;
         }
 
         bool IsWinterStart(DateTime today, out string key)
@@ -1123,23 +1104,6 @@ namespace SoccerClub.Core
             return story;
         }
 
-        ClubStory MakeStadium()
-        {
-            var stadium = PlayerClub != null && PlayerClub.Facilities != null ? PlayerClub.Facilities.Stadium : null;
-            var cost = stadium != null ? stadium.NextUpgradeCost() : BigInteger.Zero;
-            string secretary = "秘書";
-            var front = PlayerClub != null ? PlayerClub.Front : null;
-            if (front != null && front.Secretary != null && !string.IsNullOrEmpty(front.Secretary.Name))
-                secretary = front.Secretary.Name;
-            var story = new ClubStory { Kind = ClubStoryKind.Stadium };
-            story.Titles[0] = "スタジアムの拡張";
-            story.Pages[0] = "ホームの入場者が収容の80%を超えました。\n"
-                + secretary + "が、スタジアムのレベルアップを提案しています。\n費用 "
-                + StoryMoney(cost) + "。";
-            ShowStoryStep(story);
-            return story;
-        }
-
         ClubStory MakeTransfer(Player player)
         {
             var club = PlayerClub;
@@ -1589,8 +1553,6 @@ namespace SoccerClub.Core
             file.StaffOfferLevel = _staffOfferLevel;
             file.StaffOfferName = _staffOfferName;
             file.StaffOfferDone = _staffOfferDone;
-            file.StadiumProposal = _stadiumProposal;
-            file.StadiumAskedLevel = _stadiumAskedLevel;
             file.Deals = WriteDeals();
             file.Story = WriteStory(_story);
             file.FreeAgents = WritePlayers(_freeAgents);
@@ -1617,8 +1579,6 @@ namespace SoccerClub.Core
             _staffOfferLevel = file.StaffOfferLevel;
             _staffOfferName = file.StaffOfferName;
             _staffOfferDone = file.StaffOfferDone;
-            _stadiumProposal = file.StadiumProposal;
-            _stadiumAskedLevel = file.StadiumAskedLevel;
             int count = file.Deals == null ? 0 : file.Deals.Length;
             for (int i = 0; i < count; i++)
             {
@@ -1713,6 +1673,8 @@ namespace SoccerClub.Core
         ClubStory ReadStory(ClubStorySave save)
         {
             if (save == null || save.StepCount <= 0) return null;
+            // 廃止したスタジアム拡張イベントが旧セーブに残っていたら捨てる。
+            if (save.Kind == (int)ClubStoryKind.Stadium) return null;
             var story = new ClubStory
             {
                 Kind = (ClubStoryKind)save.Kind,

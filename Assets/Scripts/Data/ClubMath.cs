@@ -236,20 +236,42 @@ namespace SoccerClub.Data
         public const double TrainingBaseAdd = 10d;
 
         public const double TrainingPercentAtLevel10 = 1d;
-        public const double TrainingPercentStep = 1d;
+
+        /// <summary>自クラブの練習場・トレーニング室・コーチの、1 レベルあたりの加算（%）。</summary>
+        public const double TrainingPercentStep = 3d;
+
+        /// <summary>他クラブと無所属（リーグLVで代用するレベル）の、1 レベルあたりの加算（%）。</summary>
+        public const double RivalTrainingPercentStep = 1d;
+
+        /// <summary>この年齢以上の所属選手は、8月1日に引退する。</summary>
+        public const int PlayerRetirementAge = 36;
+
+        /// <summary>引退で所属人数がこれを下回る場合は、年長の選手から順に、この人数までは残す。</summary>
+        public const int RetirementSquadFloor = 18;
 
         /// <summary>得意ポジションの選手にかけるコーチ効果の倍率。</summary>
         public const double CoachSpecialtyMultiplier = 1.5d;
 
         /// <summary>
-        /// 練習場・トレーニング室・コーチの表示加算。Lv10 は +1.0%、1 レベルごとに +1.0%。
-        /// 小数第2位以下は四捨五入し、小数第1位までにする。Lv999 は +990.0%。
+        /// 自クラブの練習場・トレーニング室・コーチの表示加算。Lv10 は +1.0%、1 レベルごとに +3.0%。
+        /// 小数第2位以下は四捨五入し、小数第1位までにする。
         /// </summary>
         public static double TrainingBonusPercent(int level)
         {
+            return TrainingBonusPercent(level, TrainingPercentStep);
+        }
+
+        /// <summary>他クラブと無所属の加算。リーグLVをレベルとして使い、1 レベルごとに +1.0%。</summary>
+        public static double RivalTrainingBonusPercent(int level)
+        {
+            return TrainingBonusPercent(level, RivalTrainingPercentStep);
+        }
+
+        static double TrainingBonusPercent(int level, double step)
+        {
             if (level < 1) level = 1;
             if (level > Facility.MaxLevel) level = Facility.MaxLevel;
-            double percent = TrainingPercentAtLevel10 + (level - 10) * TrainingPercentStep;
+            double percent = TrainingPercentAtLevel10 + (level - 10) * step;
             if (percent < 0d) percent = 0d;
             return Math.Round(percent, 1, MidpointRounding.AwayFromZero);
         }
@@ -263,6 +285,13 @@ namespace SoccerClub.Data
         public static double CoachBonusPercent(int level, bool specialty)
         {
             double percent = TrainingBonusPercent(level);
+            if (specialty) percent *= CoachSpecialtyMultiplier;
+            return percent;
+        }
+
+        static double RivalCoachBonusPercent(int level, bool specialty)
+        {
+            double percent = RivalTrainingBonusPercent(level);
             if (specialty) percent *= CoachSpecialtyMultiplier;
             return percent;
         }
@@ -299,7 +328,10 @@ namespace SoccerClub.Data
                 {
                     var member = team.Coaches[i];
                     if (member == null) continue;
-                    coach += CoachBonusPercent(forcedLevel ?? member.Level, member.ScoutedGroup == group);
+                    bool specialty = member.ScoutedGroup == group;
+                    coach += forcedLevel.HasValue
+                        ? RivalCoachBonusPercent(forcedLevel.Value, specialty)
+                        : CoachBonusPercent(member.Level, specialty);
                 }
             }
 
@@ -319,7 +351,7 @@ namespace SoccerClub.Data
         static double FacilityTrainingBonus(Club club, bool ground, int? forcedLevel)
         {
             if (forcedLevel.HasValue)
-                return TrainingMultiplier(forcedLevel.Value) - 1d;
+                return RivalTrainingBonusPercent(forcedLevel.Value) / 100d;
             if (club == null || club.Facilities == null) return 0d;
             double multiplier = ground
                 ? club.Facilities.TrainingGroundMultiplier()
@@ -373,20 +405,49 @@ namespace SoccerClub.Data
         public const int SponsorContractCap = 8;
         public const double SponsorOfferChance = 0.15d;
 
-        /// <summary>営業が連れてくる契約の月額の下限。円。</summary>
+        /// <summary>デバッグで営業がいないときに使う月額。円。</summary>
         public const int SponsorContractMonthlyFloor = 10_000_000;
+
+        /// <summary>営業が連れてくる契約の基本月額（倍率 1.0・リーグLV1・営業レベル0）。円。</summary>
+        public const int SponsorContractMonthlyBase = 7_000_000;
+
+        /// <summary>営業レベル 1 あたりの月額の上乗せ割合。</summary>
+        public const double SponsorSalesBonusPerLevel = 0.01d;
+
+        /// <summary>月額のばらつき（±）。</summary>
+        public const double SponsorMonthlyVariance = 0.10d;
+
+        /// <summary>月額の丸め単位。円。</summary>
+        public const int SponsorMonthlyUnit = 100_000;
 
         /// <summary>契約した日に入る契約金は、月額のこの倍数。</summary>
         public const int SponsorUpfrontMultiple = 2;
 
-        /// <summary>営業が連れてくる 1 社の月額。順位では増減しない。営業がいないときは 0。下限は 1000 万円。</summary>
+        /// <summary>
+        /// 営業が連れてくる 1 社の月額。
+        /// 基本月額 × 社ごとの倍率 × リーグLV倍率 × (1 + 営業レベル×1%) × ばらつき(±10%)。10 万円単位。
+        /// 営業がいないときは 0。roll は 0 以上 1 未満の乱数。
+        /// </summary>
+        public static BigInteger SponsorContractMonthly(Club club, double rate, double leagueStrength, double roll)
+        {
+            int level = club != null && club.Front != null ? club.Front.SalesLevel() : 0;
+            if (level <= 0) return BigInteger.Zero;
+            if (rate <= 0d) rate = 1d;
+            if (leagueStrength < 1d) leagueStrength = 1d;
+            if (roll < 0d) roll = 0d;
+            if (roll > 1d) roll = 1d;
+            double variance = 1d + (roll * 2d - 1d) * SponsorMonthlyVariance;
+            double amount = SponsorContractMonthlyBase * rate * leagueStrength
+                * (1d + level * SponsorSalesBonusPerLevel) * variance;
+            double units = Math.Round(amount / SponsorMonthlyUnit, MidpointRounding.AwayFromZero);
+            if (units < 1d) units = 1d;
+            return RoundCoins(units * SponsorMonthlyUnit);
+        }
+
+        /// <summary>倍率 1.0・リーグLV1・ばらつきなしの月額。目安の表示用。</summary>
         public static BigInteger SponsorContractMonthly(Club club)
         {
-            int level = club.Front != null ? club.Front.SalesLevel() : 0;
-            if (level <= 0) return BigInteger.Zero;
-            var amount = FloorCoins(400_000d + level * 30_000d);
-            var floor = new BigInteger(SponsorContractMonthlyFloor);
-            return amount < floor ? floor : amount;
+            return SponsorContractMonthly(club, 1d, 1d, 0.5d);
         }
 
         public static BigInteger SponsorUpfront(BigInteger monthly)
@@ -416,12 +477,73 @@ namespace SoccerClub.Data
             return QuoteTicket(club);
         }
 
-        /// <summary>事業部がいまの実力から出すチケット価格。円。</summary>
+        /// <summary>チケットの基本価格。円。</summary>
+        public const int TicketBaseYen = 3000;
+
+        /// <summary>シーズン初めに価格を決めるときの、目標の収容率。</summary>
+        public const double TicketTargetOccupancy = 0.80d;
+
+        /// <summary>チケットの下限。円。</summary>
+        public const int TicketMinYen = 500;
+
+        /// <summary>チケットの上限は、適正価格のこの倍数。</summary>
+        public const double TicketMaxMultiple = 5d;
+
+        /// <summary>チケット価格の丸め単位。円。</summary>
+        public const int TicketUnitYen = 100;
+
+        /// <summary>
+        /// 事業部が出す適正価格。円。この価格なら、ファンの来場意欲（FanDemand）どおりに人が来る。
+        /// リーグLVの倍率はかけない。
+        /// </summary>
         public static int QuoteTicket(Club club)
         {
             int level = club != null && club.Front != null ? club.Front.BusinessLevel() : 0;
-            int supporters = club != null ? club.CoreSupporters : 0;
-            return 4000 + (int)Math.Floor(12000d * LevelFactor(level)) + supporters / 15;
+            return TicketBaseYen + (int)Math.Floor(12000d * LevelFactor(level));
+        }
+
+        /// <summary>適正価格のときに来場する人数（広告分は含まない）。</summary>
+        public static double FanDemand(Club club)
+        {
+            if (club == null) return 0d;
+            return club.CoreSupporters * 0.90d + club.LightSupporters * 0.35d;
+        }
+
+        /// <summary>
+        /// シーズン初めのチケット価格。適正価格のときの来場数が収容の TicketTargetOccupancy になるよう、
+        /// 価格を上下させる（来場数は 適正価格÷価格 に比例）。100 円単位、下限 TicketMinYen、上限 適正価格×TicketMaxMultiple。
+        /// </summary>
+        public static int SeasonTicketPrice(Club club)
+        {
+            int fair = QuoteTicket(club);
+            int cap = club != null ? Capacity(club) : 0;
+            double demand = FanDemand(club);
+            double target = cap * TicketTargetOccupancy;
+            double price = target > 0d && demand > 0d ? fair * demand / target : TicketMinYen;
+            double max = fair * TicketMaxMultiple;
+            if (price > max) price = max;
+            if (price < TicketMinYen) price = TicketMinYen;
+            int rounded = (int)Math.Round(price / TicketUnitYen, MidpointRounding.AwayFromZero) * TicketUnitYen;
+            return Math.Max(TicketMinYen, rounded);
+        }
+
+        /// <summary>価格による来場の倍率。適正価格÷いまの価格（0.2〜5 倍）。</summary>
+        public static double TicketDemandFactor(Club club)
+        {
+            int price = TicketYen(club);
+            if (price <= 0) return 1d;
+            double factor = (double)QuoteTicket(club) / price;
+            if (factor < 0.2d) factor = 0.2d;
+            if (factor > 5d) factor = 5d;
+            return factor;
+        }
+
+        /// <summary>適正価格での来場意欲が、収容の 80% を超えている（スタジアム拡張の目安）。</summary>
+        public static bool StadiumDemandExceeds(Club club, double ratio = 0.80d)
+        {
+            int cap = club != null ? Capacity(club) : 0;
+            if (cap <= 0) return false;
+            return FanDemand(club) > cap * ratio;
         }
 
         /// <summary>ホーム1試合の広告費。広報部のレベルに比例し、総資金から払う。</summary>
@@ -440,7 +562,8 @@ namespace SoccerClub.Data
 
         public static int Attendance(Club club, BigInteger advertising)
         {
-            int basic = RoundInt(club.CoreSupporters * 0.90d + club.LightSupporters * 0.35d);
+            // 来場はチケット価格で増減する（適正価格÷価格）。価格はシーズン初めに収容の 80% を狙って決まる。
+            int basic = RoundInt(FanDemand(club) * TicketDemandFactor(club));
             int cap = Capacity(club);
             if (basic < 0) basic = 0;
             int room = Math.Max(0, cap - basic);
