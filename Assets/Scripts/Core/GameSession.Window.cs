@@ -438,6 +438,7 @@ namespace SoccerClub.Core
                 for (int i = 0; i < outgoing.Count; i++)
                     noise[outgoing[i].Id] = _random.Next();
                 outgoing.Sort((a, b) => CompareOutgoing(club, onSheet, noise, a, b));
+                KeepPositionFloors(club, outgoing);
                 int cap = count - ClubMath.MinimumSquad;
                 if (outgoing.Count > cap)
                     outgoing.RemoveRange(cap, outgoing.Count - cap);
@@ -460,7 +461,10 @@ namespace SoccerClub.Core
             if (SquadCount(club) >= ClubMath.SquadLimit)
                 candidates.Clear();
             else
+            {
                 candidates.RemoveAll(player => !SigningCanOpen(player));
+                KeepWithinPositionCaps(club, candidates);
+            }
             Shuffle(signDays);
             int signs = Math.Min(candidates.Count, signDays.Count);
             for (int i = 0; i < signs; i++)
@@ -932,7 +936,8 @@ namespace SoccerClub.Core
             ConsiderStaff(club, team.Doctor, TeamStaffRole.Doctor, role, 0, ref current, ref slot, ref retire, ref bestLevel, ref bestDays);
             ConsiderStaffSlots(club, team.Coaches, TeamStaffRole.Coach, role, ref current, ref slot, ref retire, ref bestLevel, ref bestDays);
             ConsiderStaffSlots(club, team.Trainers, TeamStaffRole.Trainer, role, ref current, ref slot, ref retire, ref bestLevel, ref bestDays);
-            if (current == null) return null;
+            if (current == null)
+                return MakeStaffVacancy(club, team, role, today);
 
             var hire = CreateOfferStaff(club, role, today);
             var annual = ClubMath.StaffAnnual(hire);
@@ -969,6 +974,67 @@ namespace SoccerClub.Core
             story.Pages[0] = string.Join("\n", lines.ToArray());
             ShowStoryStep(story);
             return story;
+        }
+
+        /// <summary>
+        /// 申し出の役職に空き枠（引退などで空いた席）があれば、その枠に採用する。
+        /// 契約金と年俸（各 年俸1年分）を強化費から払う。空きが無ければ null。
+        /// </summary>
+        ClubStory MakeStaffVacancy(Club club, TeamStaff team, TeamStaffRole role, DateTime today)
+        {
+            int index;
+            if (!FindStaffVacancy(team, role, out index)) return null;
+            var hire = CreateOfferStaff(club, role, today);
+            var annual = ClubMath.StaffAnnual(hire);
+            var cost = annual * 2;
+            bool paid = cost > 0 && Economy.TrySpendReinforcement(club, cost, "staff-hire-" + hire.Id);
+            if (paid)
+                PlaceStaff(team, role, index, hire);
+
+            string newName = string.IsNullOrEmpty(hire.Name) ? "スタッフ" : hire.Name;
+            var lines = new List<string>();
+            lines.Add(StaffRoleName(role) + "の席が空いています。");
+            lines.Add("候補は" + newName + "（Lv" + hire.Level.ToString(CultureInfo.InvariantCulture) + "）です。");
+            lines.Add("契約金と年俸は各" + StoryMoney(annual) + "、合計" + StoryMoney(cost) + "を強化費から払います。");
+            lines.Add(paid
+                ? newName + "と契約しました。"
+                : "強化費が足りないため、契約できませんでした。席は空いたままです。");
+
+            var story = new ClubStory { Kind = ClubStoryKind.StaffChange };
+            story.Titles[0] = "スタッフ採用";
+            story.Pages[0] = string.Join("\n", lines.ToArray());
+            ShowStoryStep(story);
+            return story;
+        }
+
+        static bool FindStaffVacancy(TeamStaff team, TeamStaffRole role, out int index)
+        {
+            index = 0;
+            if (team == null) return false;
+            switch (role)
+            {
+                case TeamStaffRole.Manager: return team.Manager == null;
+                case TeamStaffRole.HeadCoach: return team.HeadCoach == null;
+                case TeamStaffRole.PhysicalCoach: return team.PhysicalCoach == null;
+                case TeamStaffRole.Doctor: return team.Doctor == null;
+                case TeamStaffRole.Coach: return FirstEmpty(team.Coaches, out index);
+                case TeamStaffRole.Trainer: return FirstEmpty(team.Trainers, out index);
+                default: return false;
+            }
+        }
+
+        static bool FirstEmpty(StaffMember[] slots, out int index)
+        {
+            index = 0;
+            if (slots == null) return false;
+            for (int i = 0; i < slots.Length; i++)
+            {
+                if (slots[i] != null) continue;
+                index = i;
+                return true;
+            }
+
+            return false;
         }
 
         void ConsiderStaffSlots(
@@ -1220,10 +1286,58 @@ namespace SoccerClub.Core
             return _story != null;
         }
 
+        /// <summary>
+        /// 獲得候補を上から見て、ポジショングループの上限（ClubMath.SquadGroupCap）を超える分を外す。
+        /// 候補は GeneralManagerAi.CompareWanted で、足りないグループが先に並んでいる。
+        /// </summary>
+        static void KeepWithinPositionCaps(Club club, List<Player> candidates)
+        {
+            if (club == null || candidates == null) return;
+            var counts = new Dictionary<PositionGroup, int>();
+            foreach (PositionGroup group in Enum.GetValues(typeof(PositionGroup)))
+                counts[group] = ClubMath.SquadGroupCount(club, group);
+            var kept = new List<Player>(candidates.Count);
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                var player = candidates[i];
+                if (player == null) continue;
+                var group = PositionUtility.GroupOf(player.PreferredPosition);
+                if (counts[group] >= ClubMath.SquadGroupCap(group)) continue;
+                counts[group]++;
+                kept.Add(player);
+            }
+
+            candidates.Clear();
+            candidates.AddRange(kept);
+        }
+
+        /// <summary>放出候補を上から見て、ポジショングループが最低人数（ClubMath.SquadGroupFloor）を下回る分を外す。</summary>
+        static void KeepPositionFloors(Club club, List<Player> outgoing)
+        {
+            if (club == null || outgoing == null) return;
+            var counts = new Dictionary<PositionGroup, int>();
+            foreach (PositionGroup group in Enum.GetValues(typeof(PositionGroup)))
+                counts[group] = ClubMath.SquadGroupCount(club, group);
+            var kept = new List<Player>(outgoing.Count);
+            for (int i = 0; i < outgoing.Count; i++)
+            {
+                var player = outgoing[i];
+                if (player == null) continue;
+                var group = PositionUtility.GroupOf(player.PreferredPosition);
+                if (counts[group] - 1 < ClubMath.SquadGroupFloor(group)) continue;
+                counts[group]--;
+                kept.Add(player);
+            }
+
+            outgoing.Clear();
+            outgoing.AddRange(kept);
+        }
+
         bool SigningCanOpen(Player player)
         {
             if (player == null || PlayerClub == null) return false;
             if (SquadCount(PlayerClub) >= ClubMath.SquadLimit) return false;
+            if (!ClubMath.SquadHasRoomFor(PlayerClub, player)) return false;
             var cost = ClubMath.TransferFee(player) + ClubMath.PlayerAnnual(player);
             return PlayerClub.Reinforcement >= cost;
         }

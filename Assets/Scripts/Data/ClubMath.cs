@@ -477,6 +477,60 @@ namespace SoccerClub.Data
             return QuoteTicket(club);
         }
 
+        /// <summary>ポジショングループごとの所属人数の上限。補強でこれを超えては取らない。</summary>
+        public static int SquadGroupCap(PositionGroup group)
+        {
+            switch (group)
+            {
+                case PositionGroup.GK: return 3;
+                case PositionGroup.DF: return 9;
+                case PositionGroup.MF: return 9;
+                default: return 7;
+            }
+        }
+
+        /// <summary>ポジショングループごとの最低人数。これを下回るグループの選手を補強で優先する。</summary>
+        public static int SquadGroupFloor(PositionGroup group)
+        {
+            switch (group)
+            {
+                case PositionGroup.GK: return 2;
+                case PositionGroup.DF: return 7;
+                case PositionGroup.MF: return 7;
+                default: return 4;
+            }
+        }
+
+        /// <summary>所属選手のうち、得意ポジションがそのグループの人数。</summary>
+        public static int SquadGroupCount(Club club, PositionGroup group)
+        {
+            if (club == null || club.Squad == null) return 0;
+            int count = 0;
+            for (int i = 0; i < club.Squad.Count; i++)
+            {
+                var p = club.Squad[i];
+                if (p != null && PositionUtility.GroupOf(p.PreferredPosition) == group) count++;
+            }
+
+            return count;
+        }
+
+        /// <summary>この選手のグループに、まだ空きがある。</summary>
+        public static bool SquadHasRoomFor(Club club, Player player)
+        {
+            if (player == null) return false;
+            var group = PositionUtility.GroupOf(player.PreferredPosition);
+            return SquadGroupCount(club, group) < SquadGroupCap(group);
+        }
+
+        /// <summary>この選手のグループが最低人数を下回っている（優先して取りたい）。</summary>
+        public static bool SquadNeeds(Club club, Player player)
+        {
+            if (player == null) return false;
+            var group = PositionUtility.GroupOf(player.PreferredPosition);
+            return SquadGroupCount(club, group) < SquadGroupFloor(group);
+        }
+
         /// <summary>チケットの基本価格。円。</summary>
         public const int TicketBaseYen = 3000;
 
@@ -510,17 +564,21 @@ namespace SoccerClub.Data
         }
 
         /// <summary>
-        /// シーズン初めのチケット価格。適正価格のときの来場数が収容の TicketTargetOccupancy になるよう、
-        /// 価格を上下させる（来場数は 適正価格÷価格 に比例）。100 円単位、下限 TicketMinYen、上限 適正価格×TicketMaxMultiple。
+        /// シーズン初めのチケット価格。広告で来る客も含めた入場者が収容の TicketTargetOccupancy になるよう、
+        /// 価格を上下させる（ファンの来場数は 適正価格÷価格 に比例、広告の客は価格によらない）。
+        /// 100 円単位、下限 TicketMinYen、上限 適正価格×TicketMaxMultiple。
         /// </summary>
         public static int SeasonTicketPrice(Club club)
         {
             int fair = QuoteTicket(club);
             int cap = club != null ? Capacity(club) : 0;
             double demand = FanDemand(club);
-            double target = cap * TicketTargetOccupancy;
-            double price = target > 0d && demand > 0d ? fair * demand / target : TicketMinYen;
+            double target = cap * TicketTargetOccupancy - AdvertisingFans(club, MatchAdvertising(club));
             double max = fair * TicketMaxMultiple;
+            double price;
+            if (demand <= 0d) price = TicketMinYen;
+            else if (target <= 0d) price = max; // 広告の客だけで 80% を超える
+            else price = fair * demand / target;
             if (price > max) price = max;
             if (price < TicketMinYen) price = TicketMinYen;
             int rounded = (int)Math.Round(price / TicketUnitYen, MidpointRounding.AwayFromZero) * TicketUnitYen;
@@ -567,19 +625,23 @@ namespace SoccerClub.Data
             int cap = Capacity(club);
             if (basic < 0) basic = 0;
             int room = Math.Max(0, cap - basic);
-            int pr = club.Front != null ? club.Front.PublicRelationsLevel() : 0;
-            int yenPer = Math.Max(200, RoundInt(856d * 80d / (80d + pr)));
-            int extra = 0;
-            if (advertising > 0 && yenPer > 0)
-            {
-                extra = (int)Math.Floor(ToDouble(advertising) / yenPer);
-                if (extra > room) extra = room;
-                if (extra < 0) extra = 0;
-            }
+            int extra = AdvertisingFans(club, advertising);
+            if (extra > room) extra = room;
 
             int total = basic + extra;
             if (total > cap) total = cap;
             return Math.Max(0, total);
+        }
+
+        /// <summary>広告で来る客の数（収容による頭打ちの前）。広報部レベルが高いほど 1 人あたりの広告費が安い。</summary>
+        public static int AdvertisingFans(Club club, BigInteger advertising)
+        {
+            if (club == null || advertising <= 0) return 0;
+            int pr = club.Front != null ? club.Front.PublicRelationsLevel() : 0;
+            int yenPer = Math.Max(200, RoundInt(856d * 80d / (80d + pr)));
+            double fans = Math.Floor(ToDouble(advertising) / yenPer);
+            if (fans > int.MaxValue) return int.MaxValue;
+            return fans < 0 ? 0 : (int)fans;
         }
 
         public static BigInteger GateIncome(Club club, BigInteger advertising)

@@ -35,8 +35,13 @@ namespace SoccerClub.Core
         /// <summary>1から始まる。自クラブがリーグを優勝するたびに1上がる。</summary>
         public int LeagueLevel { get; set; } = 1;
 
-        /// <summary>優勝で相手が強くなる倍率。LV2で1回、LV3でその上にさらに1回、と掛ける。</summary>
-        public const double LeagueLevelStep = 1.15d;
+        /// <summary>
+        /// 優勝で相手が強くなる倍率。LV2で1回、LV3でその上にさらに1回、と掛ける。
+        /// 既定は 1.02（300 年前後で LV99 に届く値。シミュレーターで確認）。調整用に書き換えられる（ゲーム中は変えない）。
+        /// </summary>
+        public static double LeagueLevelStep = DefaultLeagueLevelStep;
+
+        public const double DefaultLeagueLevelStep = 1.02d;
 
         public string SeasonNotice { get; private set; }
 

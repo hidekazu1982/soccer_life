@@ -6,6 +6,7 @@ using System.Text;
 using SoccerClub.Competition;
 using SoccerClub.Data;
 using SoccerClub.Economy;
+using SoccerClub.Match;
 
 namespace SoccerClub.Core
 {
@@ -60,6 +61,20 @@ namespace SoccerClub.Core
         public int RivalTop11Max;
         public int ChampionTop11;
         public int FreeAgentTop11;
+
+        // 診断用（自クラブ）
+        public int XiCount;
+        public int XiOffense;
+        public int XiDefense;
+        public int RivalXiOffense;
+        public int RivalXiDefense;
+        public int TeamStaffFilled;
+        public bool HasManager;
+        public int AverageCondition;
+        public int Injured;
+        public int Goalkeepers;
+        public int SquadOffense;
+        public int SquadDefense;
     }
 
     public sealed class SimulationSettings
@@ -69,6 +84,9 @@ namespace SoccerClub.Core
         public int Seasons = 100;
         /// <summary>フロントの空き枠を、レベル0のスタッフがいるとみなして採用するか。</summary>
         public bool FillEmptyFront = true;
+
+        /// <summary>優勝で相手が強くなる倍率（調整用）。</summary>
+        public double LeagueStep = GameSession.DefaultLeagueLevelStep;
     }
 
     /// <summary>
@@ -101,6 +119,7 @@ namespace SoccerClub.Core
         public HeadlessSimulator(SimulationSettings settings)
         {
             Settings = settings ?? new SimulationSettings();
+            GameSession.LeagueLevelStep = Settings.LeagueStep > 1d ? Settings.LeagueStep : GameSession.DefaultLeagueLevelStep;
             Session = GameSession.CreateNew(Settings.PlayerClubIndex, Settings.Seed);
             Session.Economy.OnLedger += NoteLedger;
         }
@@ -229,6 +248,7 @@ namespace SoccerClub.Core
             };
             SponsorStats(club, out record.SponsorCount, out record.SponsorAverageMonthly);
             StrengthStats(record, club, champion);
+            Diagnose(record, club);
             FrontStats(club.Front, out record.FrontFilled, out record.FrontAverageLevel, out record.FrontMinLevel);
 
             _stadiumUps = _groundUps = _roomUps = _houseUps = _frontHires = 0;
@@ -278,6 +298,85 @@ namespace SoccerClub.Core
             record.RivalTop11Average = count == 0 ? 0 : (int)(sum / count);
             record.RivalTop11Max = max;
             record.FreeAgentTop11 = Top11(new List<Player>(Session.SimulationFreeAgents));
+        }
+
+        static readonly ManagerLineupAi DiagnosticLineup = new ManagerLineupAi();
+
+        /// <summary>シーズン終了時点のスタメン（監督AI）の攻撃・守備合計（表示値）。</summary>
+        static void XiPower(Club club, out int count, out double offense, out double defense)
+        {
+            count = 0;
+            offense = 0d;
+            defense = 0d;
+            if (club == null) return;
+            var sheet = DiagnosticLineup.BuildSheet(club);
+            if (sheet == null || sheet.StartingXi == null) return;
+            for (int i = 0; i < sheet.StartingXi.Length; i++)
+            {
+                var slot = sheet.StartingXi[i];
+                if (slot == null || slot.Player == null) continue;
+                count++;
+                offense += slot.Player.Offense * PositionUtility.Multiplier(slot.Player.SuitabilityAt(slot.Slot));
+                defense += slot.Player.Defense * PositionUtility.Multiplier(slot.Player.SuitabilityAt(slot.Slot));
+            }
+        }
+
+        void Diagnose(SimulationSeasonRecord record, Club club)
+        {
+            XiPower(club, out record.XiCount, out var off, out var def);
+            record.XiOffense = Player.ToDisplay(off);
+            record.XiDefense = Player.ToDisplay(def);
+
+            double rOff = 0d, rDef = 0d;
+            int rivals = 0;
+            for (int i = 0; i < Session.Clubs.Count; i++)
+            {
+                var rival = Session.Clubs[i];
+                if (rival == null || rival == club) continue;
+                XiPower(rival, out _, out var o, out var d);
+                rOff += o;
+                rDef += d;
+                rivals++;
+            }
+
+            record.RivalXiOffense = rivals == 0 ? 0 : Player.ToDisplay(rOff / rivals);
+            record.RivalXiDefense = rivals == 0 ? 0 : Player.ToDisplay(rDef / rivals);
+
+            var team = club.Team;
+            int filled = 0;
+            if (team != null)
+            {
+                if (team.Manager != null) filled++;
+                if (team.HeadCoach != null) filled++;
+                if (team.PhysicalCoach != null) filled++;
+                if (team.Doctor != null) filled++;
+                if (team.Coaches != null) foreach (var s in team.Coaches) if (s != null) filled++;
+                if (team.Trainers != null) foreach (var s in team.Trainers) if (s != null) filled++;
+            }
+
+            record.TeamStaffFilled = filled;
+            record.HasManager = team != null && team.Manager != null;
+
+            long cond = 0;
+            int n = 0;
+            double sOff = 0d, sDef = 0d;
+            if (club.Squad != null)
+            {
+                foreach (var p in club.Squad)
+                {
+                    if (p == null) continue;
+                    cond += p.Condition;
+                    n++;
+                    if (p.InjuryDays > 0) record.Injured++;
+                    if (p.PreferredPosition == Position.GK) record.Goalkeepers++;
+                    sOff += p.Offense;
+                    sDef += p.Defense;
+                }
+            }
+
+            record.AverageCondition = n == 0 ? 0 : (int)(cond / n);
+            record.SquadOffense = n == 0 ? 0 : Player.ToDisplay(sOff / n);
+            record.SquadDefense = n == 0 ? 0 : Player.ToDisplay(sDef / n);
         }
 
         static void SponsorStats(Club club, out int count, out BigInteger average)
@@ -397,7 +496,8 @@ namespace SoccerClub.Core
                 + "stadium_up,ground_up,room_up,clubhouse_up,front_hires,front_filled,front_avg_lv,front_min_lv,"
                 + "squad,squad_avg_overall,core_supporters,light_supporters,bankrupt,"
                 + "home_avg_attendance,capacity,ticket,gate,operating,sponsor_income,sponsor_count,sponsor_avg_monthly,"
-                + "player_top11,rival_top11_avg,rival_top11_max,champion_top11,free_agent_top11");
+                + "player_top11,rival_top11_avg,rival_top11_max,champion_top11,free_agent_top11,"
+                + "xi_count,xi_offense,xi_defense,rival_xi_offense,rival_xi_defense,team_staff,has_manager,avg_condition,injured,goalkeepers,squad_offense,squad_defense");
             var inv = CultureInfo.InvariantCulture;
             for (int i = 0; i < Records.Count; i++)
             {
@@ -449,7 +549,19 @@ namespace SoccerClub.Core
                     .Append(r.RivalTop11Average.ToString(inv)).Append(',')
                     .Append(r.RivalTop11Max.ToString(inv)).Append(',')
                     .Append(r.ChampionTop11.ToString(inv)).Append(',')
-                    .Append(r.FreeAgentTop11.ToString(inv))
+                    .Append(r.FreeAgentTop11.ToString(inv)).Append(',')
+                    .Append(r.XiCount.ToString(inv)).Append(',')
+                    .Append(r.XiOffense.ToString(inv)).Append(',')
+                    .Append(r.XiDefense.ToString(inv)).Append(',')
+                    .Append(r.RivalXiOffense.ToString(inv)).Append(',')
+                    .Append(r.RivalXiDefense.ToString(inv)).Append(',')
+                    .Append(r.TeamStaffFilled.ToString(inv)).Append(',')
+                    .Append(r.HasManager ? "1" : "0").Append(',')
+                    .Append(r.AverageCondition.ToString(inv)).Append(',')
+                    .Append(r.Injured.ToString(inv)).Append(',')
+                    .Append(r.Goalkeepers.ToString(inv)).Append(',')
+                    .Append(r.SquadOffense.ToString(inv)).Append(',')
+                    .Append(r.SquadDefense.ToString(inv))
                     .AppendLine();
             }
 

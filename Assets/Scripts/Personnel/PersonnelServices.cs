@@ -57,6 +57,18 @@ namespace SoccerClub.Personnel
                 }
             }
 
+            // 最低人数を下回るポジショングループは、担当の強化部員がいなくても候補を足す（GK 不在を防ぐ）。
+            foreach (PositionGroup group in Enum.GetValues(typeof(PositionGroup)))
+            {
+                int lacking = ClubMath.SquadGroupFloor(group) - ClubMath.SquadGroupCount(club, group);
+                for (int n = 0; n < lacking + 1 && lacking > 0; n++)
+                {
+                    var player = TakeClosestPlayer(players, group, target, takenPlayers);
+                    if (player == null) break;
+                    list.Players.Add(player);
+                }
+            }
+
             for (int n = 0; n < 4; n++)
             {
                 var member = TakeClosestStaff(staff, level, floor, cap, takenStaff);
@@ -136,8 +148,17 @@ namespace SoccerClub.Personnel
             for (int i = 0; i < club.Squad.Count; i++)
             {
                 var player = club.Squad[i];
-                if (player != null && ShouldRelease(club, player, policy))
-                    leaving.Add(player);
+                if (player == null || !ShouldRelease(club, player, policy)) continue;
+                // 放出後にポジショングループが最低人数を下回るなら残す。
+                var group = PositionUtility.GroupOf(player.PreferredPosition);
+                int remain = ClubMath.SquadGroupCount(club, group);
+                for (int j = 0; j < leaving.Count; j++)
+                {
+                    if (PositionUtility.GroupOf(leaving[j].PreferredPosition) == group) remain--;
+                }
+
+                if (remain - 1 < ClubMath.SquadGroupFloor(group)) continue;
+                leaving.Add(player);
             }
 
             for (int i = 0; i < leaving.Count; i++)
@@ -153,6 +174,7 @@ namespace SoccerClub.Personnel
             {
                 if (club.Squad.Count >= ClubMath.SquadLimit) break;
                 var player = players[i];
+                if (!ClubMath.SquadHasRoomFor(club, player)) continue;
                 var cost = ClubMath.TransferFee(player) + ClubMath.PlayerAnnual(player);
                 if (!_economy.TrySpendReinforcement(club, cost, "sign-" + player.Id)) continue;
                 club.Squad.Add(player);
@@ -169,6 +191,10 @@ namespace SoccerClub.Personnel
             if (ReferenceEquals(a, b)) return 0;
             if (a == null) return 1;
             if (b == null) return -1;
+            // 最低人数を下回るポジショングループの選手を先に、上限に達しているグループの選手は後に。
+            int needA = PositionRank(club, a);
+            int needB = PositionRank(club, b);
+            if (needA != needB) return needA.CompareTo(needB);
             switch (PolicyOf(club))
             {
                 case ReinforcementPolicy.Youth:
@@ -181,6 +207,13 @@ namespace SoccerClub.Personnel
                 default:
                     return b.Overall.CompareTo(a.Overall);
             }
+        }
+
+        /// <summary>0: 足りないグループ、1: 空きがあるグループ、2: 上限に達したグループ。</summary>
+        static int PositionRank(Club club, Player player)
+        {
+            if (ClubMath.SquadNeeds(club, player)) return 0;
+            return ClubMath.SquadHasRoomFor(club, player) ? 1 : 2;
         }
 
         static bool ShouldRelease(Club club, Player player, ReinforcementPolicy policy)

@@ -1,20 +1,19 @@
-done seed=1 222.9s
+done step=1.02 seed=1 212.4s
 シーズン 300 / 300  日数 109570
-リーグ優勝 22回（初優勝 1年目）  カップ優勝 9回
-最終 リーグLV 23  資金 485億2051万円  総年俸 30億4350万円
-施設 スタジアム200 練習場30 トレーニング室30 クラブハウス30  フロント平均Lv 47.6
-csv: C:\project\soccer_life\SimulationResults\sim_20261111_201619_club0_seed1.csv
-done seed=2 47.8s
-シーズン 60 / 300  日数 21549
-リーグ優勝 9回（初優勝 3年目）  カップ優勝 7回
-最終 リーグLV 10  資金 0円  総年俸 79億2436万円
-施設 スタジアム200 練習場28 トレーニング室28 クラブハウス28  フロント平均Lv 45.9
-※ 破産でゲームオーバー
-csv: C:\project\soccer_life\SimulationResults\sim_20261111_201707_club0_seed2.csv
-done seed=3 211.5s
+リーグ優勝 145回（初優勝 1年目）  カップ優勝 137回
+最終 リーグLV 146  資金 290億1079万円  総年俸 118億4093万円
+施設 スタジアム181 練習場292 トレーニング室291 クラブハウス28  フロント平均Lv 40.7
+csv: C:\project\soccer_life\SimulationResults\sim_20261112_225203_club0_seed1.csv
+done step=1.02 seed=2 197.1s
 シーズン 300 / 300  日数 109570
-リーグ優勝 20回（初優勝 2年目）  カップ優勝 19回
-最終 リーグLV 21  資金 384億329万円  総年俸 18億6661万円
-施設 スタジアム200 練習場30 トレーニング室30 クラブハウス29  フロント平均Lv 45.4
-csv: C:\project\soccer_life\SimulationResults\sim_20261111_202039_club0_seed3.csv
+リーグ優勝 141回（初優勝 1年目）  カップ優勝 138回
+最終 リーグLV 142  資金 293億6676万円  総年俸 121億7435万円
+施設 スタジアム175 練習場287 トレーニング室287 クラブハウス28  フロント平均Lv 40.8
+csv: C:\project\soccer_life\SimulationResults\sim_20261112_225520_club0_seed2.csv
+done step=1.02 seed=3 189.1s
+シーズン 300 / 300  日数 109570
+リーグ優勝 139回（初優勝 1年目）  カップ優勝 134回
+最終 リーグLV 140  資金 224億233万円  総年俸 134億5245万円
+施設 スタジアム177 練習場289 トレーニング室288 クラブハウス28  フロント平均Lv 41.8
+csv: C:\project\soccer_life\SimulationResults\sim_20261112_225829_club0_seed3.csv
 all done

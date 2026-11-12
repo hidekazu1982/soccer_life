@@ -180,6 +180,8 @@ namespace SoccerClub.EditorTools
             var name = "sim_" + DateTime.Now.ToString("yyyyMMdd_HHmmss")
                 + "_club" + s.PlayerClubIndex
                 + (s.Seed.HasValue ? "_seed" + s.Seed.Value : "")
+                + (Math.Abs(s.LeagueStep - GameSession.DefaultLeagueLevelStep) > 1e-9
+                    ? "_step" + s.LeagueStep.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "")
                 + ".csv";
             var path = Path.Combine(dir, name);
             // Excel で文字化けしないよう BOM 付き UTF-8。

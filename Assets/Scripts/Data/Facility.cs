@@ -25,14 +25,14 @@ namespace SoccerClub.Data
         public BigInteger BaseCost;
 
         /// <summary>
-        /// Lv の建設/次レベル費用。スタジアムは BaseCost × 1.025^(Level-1)（Lv200 まで届くよう緩やか）、
-        /// ほかは BaseCost × 1.5^(Level-1)。
+        /// Lv の建設/次レベル費用。スタジアム・練習場・トレーニング室は BaseCost × 1.04^(Level-1)
+        /// （長く投資し続けられる伸び）、クラブハウスと交通は BaseCost × 1.5^(Level-1)。
         /// </summary>
         public BigInteger CostForLevel(int level)
         {
             int n = Math.Max(0, level - 1);
-            if (Kind == FacilityKind.Stadium)
-                return BaseCost * BigInteger.Pow(41, n) / BigInteger.Pow(40, n);
+            if (Kind == FacilityKind.Stadium || Kind == FacilityKind.TrainingGround || Kind == FacilityKind.TrainingFacility)
+                return BaseCost * BigInteger.Pow(26, n) / BigInteger.Pow(25, n);
             return BaseCost * BigInteger.Pow(3, n) / BigInteger.Pow(2, n);
         }
 
