@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 using SoccerClub.Core;
 
@@ -241,7 +241,7 @@ namespace SoccerClub.Data
         public const double TrainingPercentStep = 3d;
 
         /// <summary>他クラブと無所属（リーグLVで代用するレベル）の、1 レベルあたりの加算（%）。</summary>
-        public const double RivalTrainingPercentStep = 1d;
+        public const double RivalTrainingPercentStep = TrainingPercentStep;
 
         /// <summary>この年齢以上の所属選手は、8月1日に引退する。</summary>
         public const int PlayerRetirementAge = 36;
@@ -261,7 +261,7 @@ namespace SoccerClub.Data
             return TrainingBonusPercent(level, TrainingPercentStep);
         }
 
-        /// <summary>他クラブと無所属の加算。リーグLVをレベルとして使い、1 レベルごとに +1.0%。</summary>
+        /// <summary>他クラブと無所属の加算。リーグLVをレベルとして使い、自クラブと同じ伸び。</summary>
         public static double RivalTrainingBonusPercent(int level)
         {
             return TrainingBonusPercent(level, RivalTrainingPercentStep);
@@ -287,6 +287,16 @@ namespace SoccerClub.Data
             double percent = TrainingBonusPercent(level);
             if (specialty) percent *= CoachSpecialtyMultiplier;
             return percent;
+        }
+
+        /// <summary>
+        /// レベル level の施設とスタッフで練習したときの、攻撃・守備の練習倍率の目安（監督・コーチ1人・練習場）。
+        /// 強化部が狙う選手の強さを決めるのに使う。
+        /// </summary>
+        public static double ReferencePracticeMultiplier(int level)
+        {
+            if (level < 1) level = 1;
+            return 1d + LevelFactor(level) * 0.45d + RivalTrainingBonusPercent(level) / 100d * 2d;
         }
 
         static double RivalCoachBonusPercent(int level, bool specialty)
@@ -395,14 +405,27 @@ namespace SoccerClub.Data
             return RoundCoins(LeaguePrizeBase[rank - 1] * leagueStrength);
         }
 
-        public static BigInteger SponsorIncome(Club club)
+        /// <summary>営業部の基本スポンサー収入（月額）。リーグLVの倍率をかける。</summary>
+        public static BigInteger SponsorIncome(Club club, double leagueStrength = 1d)
         {
             int level = club.Front != null ? club.Front.SalesLevel() : 0;
-            return FloorCoins(800_000d + level * 200_000d);
+            if (leagueStrength < 1d) leagueStrength = 1d;
+            return FloorCoins((800_000d + level * 200_000d) * leagueStrength);
         }
 
         public const int SponsorContractMonths = 6;
+
+        /// <summary>同時に結べるスポンサー契約の数（リーグLV1）。</summary>
         public const int SponsorContractCap = 8;
+
+        /// <summary>スポンサー契約の上限。リーグLV10ごとに1社増え、最大 SponsorContractCapMax。</summary>
+        public const int SponsorContractCapMax = 20;
+
+        public static int SponsorContractCapFor(int leagueLevel)
+        {
+            int cap = SponsorContractCap + Math.Max(0, leagueLevel - 1) / 10;
+            return cap > SponsorContractCapMax ? SponsorContractCapMax : cap;
+        }
         public const double SponsorOfferChance = 0.15d;
 
         /// <summary>デバッグで営業がいないときに使う月額。円。</summary>
@@ -649,11 +672,13 @@ namespace SoccerClub.Data
             return FloorCoins(Attendance(club, advertising) * (double)TicketYen(club));
         }
 
-        public static BigInteger GoodsIncome(Club club)
+        /// <summary>グッズの月の売上。クラブの格（リーグLVの倍率）で単価が上がる。</summary>
+        public static BigInteger GoodsIncome(Club club, double leagueStrength = 1d)
         {
             long sold = club.CoreSupporters + club.LightSupporters / 4L;
             if (sold < 0) sold = 0;
-            return FloorCoins(sold * (double)GoodsYen(club));
+            if (leagueStrength < 1d) leagueStrength = 1d;
+            return FloorCoins(sold * (double)GoodsYen(club) * leagueStrength);
         }
 
         /// <summary>運営費のうち、収容人数にかかる固定分の割合（満員売上に対して）。</summary>

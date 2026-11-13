@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
@@ -28,6 +28,10 @@ namespace SoccerClub.Core
         public string CupWinner;
         public bool WonCup;
         public BigInteger Coins;
+        /// <summary>強化費（補強用に分けた資金）の残高。</summary>
+        public BigInteger Reinforcement;
+        public BigInteger Goods;
+        public BigInteger SigningSpend;
         public BigInteger Payroll;
         public BigInteger Income;
         public BigInteger Expense;
@@ -87,6 +91,27 @@ namespace SoccerClub.Core
 
         /// <summary>優勝で相手が強くなる倍率（調整用）。</summary>
         public double LeagueStep = GameSession.DefaultLeagueLevelStep;
+
+        /// <summary>練習場・トレーニング室の費用の伸び（千分率、調整用）。</summary>
+        public int TrainingCostGrowthPermil = Facility.DefaultTrainingCostGrowthPermil;
+
+        /// <summary>クラブハウスの費用の伸び（千分率、調整用）。</summary>
+        public int ClubhouseCostGrowthPermil = Facility.DefaultClubhouseCostGrowthPermil;
+
+        /// <summary>他クラブの強さの基準倍率（調整用）。</summary>
+        public double RivalScale = GameSession.DefaultRivalStrengthScale;
+
+        /// <summary>成長施設の基本価格の倍率（調整用）。</summary>
+        public double BaseScale = Facility.DefaultGrowthFacilityBaseScale;
+
+        /// <summary>無冠が続いたときの他クラブの弱まり（調整用）。</summary>
+        public double Relief = GameSession.DefaultRivalDroughtRelief;
+
+        /// <summary>連覇が続いたときの他クラブの強まり（調整用）。</summary>
+        public double Streak = GameSession.DefaultRivalStreakBoost;
+
+        /// <summary>成長施設の上限「リーグLV＋この値」（調整用、0 で無制限）。</summary>
+        public int Allowance = Facility.DefaultLeagueLevelAllowance;
     }
 
     /// <summary>
@@ -114,12 +139,23 @@ namespace SoccerClub.Core
         BigInteger _gate;
         BigInteger _operating;
         BigInteger _sponsor;
+        BigInteger _goods;
+        BigInteger _signing;
         DateTime _lastRecorded = DateTime.MinValue;
 
         public HeadlessSimulator(SimulationSettings settings)
         {
             Settings = settings ?? new SimulationSettings();
             GameSession.LeagueLevelStep = Settings.LeagueStep > 1d ? Settings.LeagueStep : GameSession.DefaultLeagueLevelStep;
+            Facility.TrainingCostGrowthPermil = Settings.TrainingCostGrowthPermil > 1000
+                ? Settings.TrainingCostGrowthPermil : Facility.DefaultTrainingCostGrowthPermil;
+            Facility.GrowthFacilityBaseScale = Settings.BaseScale > 0d ? Settings.BaseScale : Facility.DefaultGrowthFacilityBaseScale;
+            Facility.LeagueLevelAllowance = Settings.Allowance >= 0 ? Settings.Allowance : Facility.DefaultLeagueLevelAllowance;
+            GameSession.RivalStreakBoost = Settings.Streak >= 0d && Settings.Streak < 1d ? Settings.Streak : GameSession.DefaultRivalStreakBoost;
+            GameSession.RivalDroughtRelief = Settings.Relief >= 0d && Settings.Relief < 1d ? Settings.Relief : GameSession.DefaultRivalDroughtRelief;
+            GameSession.RivalStrengthScale = Settings.RivalScale > 0d ? Settings.RivalScale : GameSession.DefaultRivalStrengthScale;
+            Facility.ClubhouseCostGrowthPermil = Settings.ClubhouseCostGrowthPermil > 1000
+                ? Settings.ClubhouseCostGrowthPermil : Facility.DefaultClubhouseCostGrowthPermil;
             Session = GameSession.CreateNew(Settings.PlayerClubIndex, Settings.Seed);
             Session.Economy.OnLedger += NoteLedger;
         }
@@ -194,6 +230,8 @@ namespace SoccerClub.Core
             if (entry.Reason == "gate") _gate += entry.Amount;
             else if (entry.Reason == "operating") _operating -= entry.Amount;
             else if (entry.Reason == "sponsor") _sponsor += entry.Amount;
+            else if (entry.Reason == "goods") _goods += entry.Amount;
+            else if (entry.Amount < 0 && entry.Reason != null && entry.Reason.StartsWith("sign-")) _signing -= entry.Amount;
         }
 
         SimulationSeasonRecord Capture(bool bankrupt)
@@ -222,6 +260,9 @@ namespace SoccerClub.Core
                 CupWinner = cupWinner != null ? cupWinner.Name : "",
                 WonCup = cupWinner == club,
                 Coins = club.Coins,
+                Reinforcement = club.Reinforcement,
+                Goods = _goods,
+                SigningSpend = _signing,
                 Payroll = ClubMath.RenewalAnnual(club),
                 Income = _income,
                 Expense = _expense,
@@ -257,6 +298,8 @@ namespace SoccerClub.Core
             _gate = BigInteger.Zero;
             _operating = BigInteger.Zero;
             _sponsor = BigInteger.Zero;
+            _goods = BigInteger.Zero;
+            _signing = BigInteger.Zero;
             return record;
         }
 
@@ -497,7 +540,7 @@ namespace SoccerClub.Core
                 + "squad,squad_avg_overall,core_supporters,light_supporters,bankrupt,"
                 + "home_avg_attendance,capacity,ticket,gate,operating,sponsor_income,sponsor_count,sponsor_avg_monthly,"
                 + "player_top11,rival_top11_avg,rival_top11_max,champion_top11,free_agent_top11,"
-                + "xi_count,xi_offense,xi_defense,rival_xi_offense,rival_xi_defense,team_staff,has_manager,avg_condition,injured,goalkeepers,squad_offense,squad_defense");
+                + "xi_count,xi_offense,xi_defense,rival_xi_offense,rival_xi_defense,team_staff,has_manager,avg_condition,injured,goalkeepers,squad_offense,squad_defense,reinforcement,goods,signing_spend");
             var inv = CultureInfo.InvariantCulture;
             for (int i = 0; i < Records.Count; i++)
             {
@@ -561,7 +604,10 @@ namespace SoccerClub.Core
                     .Append(r.Injured.ToString(inv)).Append(',')
                     .Append(r.Goalkeepers.ToString(inv)).Append(',')
                     .Append(r.SquadOffense.ToString(inv)).Append(',')
-                    .Append(r.SquadDefense.ToString(inv))
+                    .Append(r.SquadDefense.ToString(inv)).Append(',')
+                    .Append(r.Reinforcement.ToString(inv)).Append(',')
+                    .Append(r.Goods.ToString(inv)).Append(',')
+                    .Append(r.SigningSpend.ToString(inv))
                     .AppendLine();
             }
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
@@ -42,6 +42,8 @@ namespace SoccerClub.Core
                 DateTicks = Time.CurrentDate.Ticks,
                 GameOver = GameOver,
                 LeagueLevel = LeagueLevel,
+                DroughtSeasons = DroughtSeasons,
+                TitleStreak = TitleStreak,
                 PlayerClubId = PlayerClub.Id,
                 Clubs = clubs,
                 FrontMarket = WriteStaffList(FrontMarket),
@@ -122,8 +124,12 @@ namespace SoccerClub.Core
                 random);
             session.GameOver = file.GameOver;
             session.LeagueLevel = file.LeagueLevel < 1 ? 1 : file.LeagueLevel;
+            session.DroughtSeasons = file.DroughtSeasons < 0 ? 0 : file.DroughtSeasons;
+            session.TitleStreak = file.TitleStreak < 0 ? 0 : file.TitleStreak;
             session.ReadMonthBooks(file.MonthLedger, file.PendingMonthReport);
             session._pendingOffer = ReadOffer(file.PendingSponsor);
+            if (session._pendingOffer != null)
+                session._pendingOffer.ContractCap = ClubMath.SponsorContractCapFor(session.LeagueLevel);
             session._pendingCut = ReadCut(file.PendingSponsorCut);
             session.ReadPersonnel(file);
             session.ReadSupport(file);

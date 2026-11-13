@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using SoccerClub.Competition;
@@ -33,7 +33,18 @@ namespace SoccerClub.Core
         public bool GameOver { get; private set; }
 
         /// <summary>1から始まる。自クラブがリーグを優勝するたびに1上がる。</summary>
-        public int LeagueLevel { get; set; } = 1;
+        int _leagueLevel = 1;
+
+        /// <summary>リーグLV。施設の上限（リーグLV＋α）にも使う。</summary>
+        public int LeagueLevel
+        {
+            get => _leagueLevel;
+            set
+            {
+                _leagueLevel = value < 1 ? 1 : value;
+                Facility.CurrentLeagueLevel = _leagueLevel;
+            }
+        }
 
         /// <summary>
         /// 優勝で相手が強くなる倍率。LV2で1回、LV3でその上にさらに1回、と掛ける。
@@ -104,6 +115,7 @@ namespace SoccerClub.Core
             Club playerClub,
             GameRandom random)
         {
+            LeagueLevel = 1;
             Time = time;
             Economy = economy;
             Facilities = facilities;
@@ -510,7 +522,7 @@ namespace SoccerClub.Core
                 for (int i = 0; i < Clubs.Count; i++)
                 {
                     var club = Clubs[i];
-                    Economy.ApplyMonthlyIncome(club);
+                    Economy.ApplyMonthlyIncome(club, LeagueStrengthFactor);
                     if (broadcast > 0) Economy.Apply(club, broadcast, "broadcast");
                     ClubMath.ApplyPublicRelationsInflow(club);
                     Economy.PayMonthlyWages(club);
@@ -530,8 +542,7 @@ namespace SoccerClub.Core
                 for (int i = 0; i < Clubs.Count; i++)
                 {
                     var club = Clubs[i];
-                    double youthScale = club.IsPlayerOwned ? 1d : LeagueStrengthFactor;
-                    Academy.TryPromote(club, _random, youthScale);
+                    Academy.TryPromote(club, _random, 1d);
                 }
             }
 
@@ -569,7 +580,7 @@ namespace SoccerClub.Core
             int level = PlayerClub.Front != null ? PlayerClub.Front.SalesLevel() : 0;
             if (level <= 0) return false;
             int active = ActiveSponsorCount(PlayerClub);
-            if (active >= ClubMath.SponsorContractCap) return false;
+            if (active >= ClubMath.SponsorContractCapFor(LeagueLevel)) return false;
             if (_random.NextDouble() >= ClubMath.SponsorOfferChance) return false;
 
             var name = PickSponsor(PlayerClub, out int cutRank, out int cutLosses, out double rate);
@@ -615,6 +626,7 @@ namespace SoccerClub.Core
                 Upfront = ClubMath.SponsorUpfront(monthly),
                 Months = ClubMath.SponsorContractMonths,
                 ActiveContracts = active,
+                ContractCap = ClubMath.SponsorContractCapFor(LeagueLevel),
                 CutRank = cutRank,
                 CutLosses = cutLosses
             };
@@ -1343,15 +1355,20 @@ namespace SoccerClub.Core
             if (playerWon)
             {
                 LeagueLevel++;
+                DroughtSeasons = 0;
+                TitleStreak++;
                 StrengthenRivals();
                 SeasonNotice = "リーグ優勝。リーグLVが " + LeagueLevel + " になりました。対戦相手が強くなります。";
             }
             else
             {
+                DroughtSeasons++;
+                TitleStreak = 0;
                 string name = champion != null ? champion.Name : "他クラブ";
                 SeasonNotice = name + " がリーグを優勝しました。リーグLVは " + LeagueLevel + " のままです。";
             }
 
+            AlignRivalsToLeague();
             Calendar.ForgetCupLegs();
             League.GenerateSeason(nextStart);
             Cup.Generate(Clubs, nextStart, _random);
@@ -1423,11 +1440,109 @@ namespace SoccerClub.Core
             {
                 var club = Clubs[i];
                 if (club == null || club.IsPlayerOwned) continue;
-                ScaleRoster(club.Squad, LeagueLevelStep);
-                ScaleRoster(club.Academy, LeagueLevelStep);
+                // 選手の能力は一律に上げない。強さはリーグLVを施設LVとした練習と、補強・昇格で決まる。
                 if (club.Reinforcement > 0)
                     club.Reinforcement = ClubMath.RoundCoins(ClubMath.ToDouble(club.Reinforcement) * LeagueLevelStep);
             }
+        }
+
+        /// <summary>他クラブの強さの幅。リーグLVの標準に対して、最も弱いクラブがこの倍率、最も強いクラブが 2 - この倍率。</summary>
+        public const double RivalStrengthSpreadLow = 0.85d;
+
+        /// <summary>他クラブの強さの、シーズンごとのぶれ（±この割合）。</summary>
+        public const double RivalStrengthJitter = 0.05d;
+
+        /// <summary>他クラブの強さの基準倍率（リーグLVの標準 × これ）。シミュレーターから変えられる。</summary>
+        public const double DefaultRivalStrengthScale = 1.8d;
+        public static double RivalStrengthScale = DefaultRivalStrengthScale;
+
+        /// <summary>
+        /// 優勝を逃したシーズンが続くと、1シーズンごとに他クラブの強さをこの割合だけ下げる（世代交代の谷）。
+        /// 優勝すると元に戻る。0 で無効（既定 10%）。シミュレーターから変えられる。
+        /// </summary>
+        public const double DefaultRivalDroughtRelief = 0.1d;
+        public static double RivalDroughtRelief = DefaultRivalDroughtRelief;
+
+        /// <summary>自クラブが続けて優勝を逃しているシーズン数。</summary>
+        public int DroughtSeasons;
+
+        /// <summary>
+        /// 連覇が続くと、1シーズンごとに他クラブの強さをこの割合だけ上げる（打倒王者の機運）。
+        /// 優勝を逃すと元に戻る。0 で無効（既定 3%）。シミュレーターから変えられる。
+        /// </summary>
+        public const double DefaultRivalStreakBoost = 0.03d;
+        public static double RivalStreakBoost = DefaultRivalStreakBoost;
+
+        /// <summary>自クラブの連覇数（直前のシーズンまで）。</summary>
+        public int TitleStreak;
+
+        /// <summary>
+        /// シーズンの始めに、他クラブの選手の能力を「リーグLVの標準」に合わせる。
+        /// 標準は、リーグLVの施設で練習している無所属の全盛期（24〜30歳）の平均。
+        /// クラブごとに 0.85〜1.15 倍の格（クラブの並び順で固定）と、毎シーズン ±5% のぶれを持たせる。
+        /// </summary>
+        void AlignRivalsToLeague()
+        {
+            double sum = 0d;
+            int count = 0;
+            for (int i = 0; i < _freeAgents.Count; i++)
+            {
+                var player = _freeAgents[i];
+                if (player == null || player.Age < 24 || player.Age > 30) continue;
+                sum += player.Overall;
+                count++;
+            }
+
+            if (count == 0) return;
+            double standard = sum / count;
+
+            var rivals = new List<Club>();
+            for (int i = 0; i < Clubs.Count; i++)
+            {
+                var club = Clubs[i];
+                if (club != null && !club.IsPlayerOwned) rivals.Add(club);
+            }
+
+            for (int i = 0; i < rivals.Count; i++)
+            {
+                var club = rivals[i];
+                double rank = rivals.Count > 1 ? (double)i / (rivals.Count - 1) : 0.5d;
+                double grade = RivalStrengthSpreadLow + rank * (1d - RivalStrengthSpreadLow) * 2d;
+                double jitter = 1d + (_random.NextDouble() * 2d - 1d) * RivalStrengthJitter;
+                double scale = RivalStrengthScale > 0d ? RivalStrengthScale : DefaultRivalStrengthScale;
+                double relief = RivalDroughtRelief > 0d && RivalDroughtRelief < 1d
+                    ? Math.Pow(1d - RivalDroughtRelief, DroughtSeasons) : 1d;
+                // 1回目の優勝は対象外。2連覇目から1シーズンごとに強くする。
+                double boost = RivalStreakBoost > 0d && TitleStreak > 1
+                    ? Math.Pow(1d + RivalStreakBoost, TitleStreak - 1) : 1d;
+                double target = standard * scale * grade * jitter * relief * boost;
+                double current = TopElevenAverage(club.Squad);
+                if (current <= 0d) continue;
+                double factor = target / current;
+                for (int n = 0; n < club.Squad.Count; n++)
+                {
+                    var player = club.Squad[n];
+                    if (player == null) continue;
+                    WorldFactory.ScaleOverall(player, player.Overall * factor);
+                }
+            }
+        }
+
+        static double TopElevenAverage(List<Player> squad)
+        {
+            if (squad == null || squad.Count == 0) return 0d;
+            var values = new List<double>();
+            for (int i = 0; i < squad.Count; i++)
+            {
+                if (squad[i] != null) values.Add(squad[i].Overall);
+            }
+
+            if (values.Count == 0) return 0d;
+            values.Sort((a, b) => b.CompareTo(a));
+            int take = Math.Min(11, values.Count);
+            double total = 0d;
+            for (int i = 0; i < take; i++) total += values[i];
+            return total / take;
         }
 
         static void ScaleRoster(List<Player> roster, double factor)

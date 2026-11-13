@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace SoccerClub.Core
 {
@@ -12,6 +12,8 @@ namespace SoccerClub.Core
         public long DateTicks;
         public bool GameOver;
         public int LeagueLevel;
+        public int DroughtSeasons;
+        public int TitleStreak;
         public string PlayerClubId;
         public ClubSave[] Clubs;
         public StaffSave[] FrontMarket;

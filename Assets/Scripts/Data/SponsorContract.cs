@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Numerics;
 
 namespace SoccerClub.Data
@@ -29,6 +29,9 @@ namespace SoccerClub.Data
         public BigInteger Upfront;
         public int Months;
         public int ActiveContracts;
+
+        /// <summary>いま結べるスポンサー契約の上限（リーグLVで増える）。0 のときは基本の上限を表示する。</summary>
+        public int ContractCap;
         public int CutRank;
         public int CutLosses;
     }

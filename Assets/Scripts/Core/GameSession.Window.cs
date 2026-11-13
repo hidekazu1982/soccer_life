@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
@@ -395,13 +395,17 @@ namespace SoccerClub.Core
             if (percent < 0) percent = 0;
             if (percent > 100) percent = 100;
             percent = percent / 10 * 10;
-            var amount = PlayerClub.Coins * percent / 100;
-            if (amount < 0) amount = BigInteger.Zero;
-            if (amount > PlayerClub.Coins) amount = PlayerClub.Coins;
-            if (amount > 0)
+            // 資金と強化費の合計のうち percent% が強化費になるよう配り直す。
+            // 使い残しが多ければ資金へ戻り、強化費だけが際限なく溜まることはない。
+            var total = PlayerClub.Coins + PlayerClub.Reinforcement;
+            if (total < 0) total = BigInteger.Zero;
+            var target = total * percent / 100;
+            var delta = target - PlayerClub.Reinforcement;
+            if (delta > PlayerClub.Coins) delta = PlayerClub.Coins > 0 ? PlayerClub.Coins : BigInteger.Zero;
+            if (delta != 0)
             {
-                PlayerClub.Coins -= amount;
-                PlayerClub.Reinforcement += amount;
+                PlayerClub.Coins -= delta;
+                PlayerClub.Reinforcement += delta;
             }
 
             NotifyChanged();
@@ -486,7 +490,8 @@ namespace SoccerClub.Core
                 _freeAgents,
                 new List<StaffMember>(),
                 new HashSet<string>(),
-                new HashSet<string>());
+                new HashSet<string>(),
+                ScoutTargetOverall(PlayerClub));
             var players = list != null ? new List<Player>(list.Players) : new List<Player>();
             players.RemoveAll(player => player == null);
             players.Sort((a, b) => GeneralManagerAi.CompareWanted(PlayerClub, a, b));
@@ -511,13 +516,14 @@ namespace SoccerClub.Core
             }
 
             order.Sort((a, b) => ScoutLevel(b).CompareTo(ScoutLevel(a)));
+            TopUpRivalBudgets(order);
             var takenPlayers = ScheduledPlayerIds();
             var takenStaff = new HashSet<string>();
             var lists = new Dictionary<Club, TransferShortlist>();
             for (int i = 0; i < order.Count; i++)
             {
                 var club = order[i];
-                lists[club] = Scouting.BuildShortlist(club, _freeAgents, staff, takenPlayers, takenStaff);
+                lists[club] = Scouting.BuildShortlist(club, _freeAgents, staff, takenPlayers, takenStaff, ScoutTargetOverall(club));
             }
 
             for (int i = 0; i < order.Count; i++)
@@ -1610,6 +1616,61 @@ namespace SoccerClub.Core
                 case GrowthPhase.Youth: return "若手";
                 case GrowthPhase.Prime: return "中堅";
                 default: return "ベテラン";
+            }
+        }
+
+        /// <summary>
+        /// 強化部が狙う選手の強さ。無所属は「リーグLVの施設」で練習しているので、
+        /// その全盛期（24〜30歳）の平均に、強化部Lv と リーグLV の練習倍率の比をかける。
+        /// 強化部Lv がリーグLV を上回れば、市場の平均より強い選手を狙う。
+        /// </summary>
+        double ScoutTargetOverall(Club club)
+        {
+            if (club == null || club.Front == null) return -1d;
+            if (club.Front.StrengtheningLevel() <= 0) return -1d;
+            // 他クラブは「施設とスタッフがリーグLV」のクラブとして扱うので、強化部もリーグLV。
+            int level = club.IsPlayerOwned ? club.Front.StrengtheningLevel() : (LeagueLevel < 1 ? 1 : LeagueLevel);
+            double sum = 0d;
+            int count = 0;
+            for (int i = 0; i < _freeAgents.Count; i++)
+            {
+                var player = _freeAgents[i];
+                if (player == null || player.Age < 24 || player.Age > 30) continue;
+                sum += player.Overall;
+                count++;
+            }
+
+            if (count == 0) return -1d;
+            int league = LeagueLevel < 1 ? 1 : LeagueLevel;
+            return sum / count * ClubMath.ReferencePracticeMultiplier(level) / ClubMath.ReferencePracticeMultiplier(league);
+        }
+
+        /// <summary>他クラブが1回の移籍期間に補強できる人数の目安。</summary>
+        const int RivalWindowSignings = 4;
+
+        /// <summary>
+        /// 他クラブは「リーグLVのクラブ」として、移籍期間ごとに無所属の全盛期の選手を
+        /// RivalWindowSignings 人取れるだけの強化費を持つ（足りない分を補う）。
+        /// </summary>
+        void TopUpRivalBudgets(List<Club> rivals)
+        {
+            var sum = BigInteger.Zero;
+            int count = 0;
+            for (int i = 0; i < _freeAgents.Count; i++)
+            {
+                var player = _freeAgents[i];
+                if (player == null || player.Age < 24 || player.Age > 30) continue;
+                sum += ClubMath.TransferFee(player) + ClubMath.PlayerAnnual(player);
+                count++;
+            }
+
+            if (count == 0) return;
+            var budget = sum / count * RivalWindowSignings;
+            for (int i = 0; i < rivals.Count; i++)
+            {
+                var club = rivals[i];
+                if (club == null || club.IsPlayerOwned) continue;
+                if (club.Reinforcement < budget) club.Reinforcement = budget;
             }
         }
 

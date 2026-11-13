@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
 using SoccerClub.Data;
@@ -61,7 +61,7 @@ namespace SoccerClub.Economy
     {
         bool Apply(Club club, BigInteger delta, string reason);
         HomeSettlement SettleHomeMatch(Club club);
-        void ApplyMonthlyIncome(Club club);
+        void ApplyMonthlyIncome(Club club, double leagueStrength);
         void PayMonthlyWages(Club club);
         bool TryPayDevelopment(Club club);
         bool TrySpend(Club club, BigInteger cost, string reason);
@@ -143,10 +143,10 @@ namespace SoccerClub.Economy
             return amount;
         }
 
-        public void ApplyMonthlyIncome(Club club)
+        public void ApplyMonthlyIncome(Club club, double leagueStrength)
         {
-            var sponsor = ClubMath.SponsorIncome(club);
-            var goods = ClubMath.GoodsIncome(club);
+            var sponsor = ClubMath.SponsorIncome(club, leagueStrength);
+            var goods = ClubMath.GoodsIncome(club, leagueStrength);
             if (sponsor > 0) Apply(club, sponsor, "sponsor");
             PaySponsorContracts(club);
             if (goods > 0) Apply(club, goods, "goods");

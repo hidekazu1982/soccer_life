@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 
 namespace SoccerClub.Data
@@ -24,21 +24,73 @@ namespace SoccerClub.Data
         public int Level = 1;
         public BigInteger BaseCost;
 
+        /// <summary>練習場・トレーニング室の費用の伸び（千分率）。1080 = 1.08 倍。シミュレーターから変えられる。</summary>
+        public const int DefaultTrainingCostGrowthPermil = 1080;
+        public static int TrainingCostGrowthPermil = DefaultTrainingCostGrowthPermil;
+
+        /// <summary>クラブハウスの費用の伸び（千分率）。1500 = 1.5 倍。シミュレーターから変えられる。</summary>
+        public const int DefaultClubhouseCostGrowthPermil = 1080;
+        public static int ClubhouseCostGrowthPermil = DefaultClubhouseCostGrowthPermil;
+
+        /// <summary>練習場・トレーニング室・クラブハウスの基本価格にかける倍率（序盤の上がり方の調整）。シミュレーターから変えられる。</summary>
+        public const double DefaultGrowthFacilityBaseScale = 1d;
+        public static double GrowthFacilityBaseScale = DefaultGrowthFacilityBaseScale;
+
+        BigInteger ScaledBase()
+        {
+            double scale = GrowthFacilityBaseScale > 0d ? GrowthFacilityBaseScale : DefaultGrowthFacilityBaseScale;
+            if (Math.Abs(scale - 1d) < 1e-9) return BaseCost;
+            return BaseCost * new BigInteger(Math.Round(scale * 1000d)) / 1000;
+        }
+
         /// <summary>
-        /// Lv の建設/次レベル費用。スタジアム・練習場・トレーニング室は BaseCost × 1.04^(Level-1)
-        /// （長く投資し続けられる伸び）、クラブハウスと交通は BaseCost × 1.5^(Level-1)。
+        /// Lv の建設/次レベル費用。スタジアムは BaseCost × 1.04^(Level-1)、
+        /// 練習場・トレーニング室は BaseCost × (TrainingCostGrowthPermil/1000)^(Level-1)、
+        /// クラブハウスは BaseCost × (ClubhouseCostGrowthPermil/1000)^(Level-1)、交通は BaseCost × 1.5^(Level-1)。
         /// </summary>
         public BigInteger CostForLevel(int level)
         {
             int n = Math.Max(0, level - 1);
-            if (Kind == FacilityKind.Stadium || Kind == FacilityKind.TrainingGround || Kind == FacilityKind.TrainingFacility)
+            if (Kind == FacilityKind.Stadium)
                 return BaseCost * BigInteger.Pow(26, n) / BigInteger.Pow(25, n);
+            if (Kind == FacilityKind.TrainingGround || Kind == FacilityKind.TrainingFacility)
+            {
+                int g = TrainingCostGrowthPermil > 1000 ? TrainingCostGrowthPermil : DefaultTrainingCostGrowthPermil;
+                return ScaledBase() * BigInteger.Pow(g, n) / BigInteger.Pow(1000, n);
+            }
+            if (Kind == FacilityKind.Clubhouse)
+            {
+                int h = ClubhouseCostGrowthPermil > 1000 ? ClubhouseCostGrowthPermil : DefaultClubhouseCostGrowthPermil;
+                return ScaledBase() * BigInteger.Pow(h, n) / BigInteger.Pow(1000, n);
+            }
             return BaseCost * BigInteger.Pow(3, n) / BigInteger.Pow(2, n);
         }
 
         public BigInteger NextUpgradeCost() => CostForLevel(Level + 1);
 
-        public int LevelCap => Kind == FacilityKind.Stadium ? StadiumMaxLevel : MaxLevel;
+        public int LevelCap
+        {
+            get
+            {
+                if (Kind == FacilityKind.Stadium) return StadiumMaxLevel;
+                bool growth = Kind == FacilityKind.TrainingGround
+                              || Kind == FacilityKind.TrainingFacility
+                              || Kind == FacilityKind.Clubhouse;
+                if (!growth || LeagueLevelAllowance <= 0) return MaxLevel;
+                int cap = Math.Max(1, CurrentLeagueLevel) + LeagueLevelAllowance;
+                return cap < MaxLevel ? cap : MaxLevel;
+            }
+        }
+
+        /// <summary>
+        /// 練習場・トレーニング室・クラブハウスは「リーグLV＋この値」までしか上げられない。0 で無制限。
+        /// シミュレーターから変えられる。
+        /// </summary>
+        public const int DefaultLeagueLevelAllowance = 30;
+        public static int LeagueLevelAllowance = DefaultLeagueLevelAllowance;
+
+        /// <summary>いまのリーグLV。GameSession が設定する。</summary>
+        public static int CurrentLeagueLevel = 1;
 
         public bool CanUpgrade() => Level < LevelCap;
 

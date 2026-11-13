@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using BigInteger = System.Numerics.BigInteger;
 using SoccerClub.Core;
 using SoccerClub.Data;
@@ -152,7 +152,8 @@ namespace SoccerClub.UI
             GUI.Label(TermsPlate, "解約条件", _rowLabel);
             GUI.Label(TermsBox, TermsText(offer.CutRank, offer.CutLosses), _terms);
 
-            GUI.Label(ActiveCount, offer.ActiveContracts + "/" + ClubMath.SponsorContractCap, _count);
+            int cap = offer.ContractCap > 0 ? offer.ContractCap : ClubMath.SponsorContractCap;
+            GUI.Label(ActiveCount, offer.ActiveContracts + "/" + cap, _count);
 
             var choice = SponsorChoice.None;
             if (ImageButton(CancelButton, "キャンセル")) choice = SponsorChoice.Decline;

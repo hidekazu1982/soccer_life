@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using SoccerClub.Core;
@@ -182,6 +182,20 @@ namespace SoccerClub.EditorTools
                 + (s.Seed.HasValue ? "_seed" + s.Seed.Value : "")
                 + (Math.Abs(s.LeagueStep - GameSession.DefaultLeagueLevelStep) > 1e-9
                     ? "_step" + s.LeagueStep.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "")
+                + (s.TrainingCostGrowthPermil != SoccerClub.Data.Facility.DefaultTrainingCostGrowthPermil
+                    ? "_train" + (s.TrainingCostGrowthPermil / 1000d).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "")
+                + (s.ClubhouseCostGrowthPermil != SoccerClub.Data.Facility.DefaultClubhouseCostGrowthPermil
+                    ? "_house" + (s.ClubhouseCostGrowthPermil / 1000d).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "")
+                + (Math.Abs(s.RivalScale - SoccerClub.Core.GameSession.DefaultRivalStrengthScale) > 1e-9
+                    ? "_rival" + s.RivalScale.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "")
+                + (Math.Abs(s.BaseScale - SoccerClub.Data.Facility.DefaultGrowthFacilityBaseScale) > 1e-9
+                    ? "_base" + s.BaseScale.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "")
+                + (Math.Abs(s.Relief - SoccerClub.Core.GameSession.DefaultRivalDroughtRelief) > 1e-9
+                    ? "_relief" + s.Relief.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "")
+                + (Math.Abs(s.Streak - SoccerClub.Core.GameSession.DefaultRivalStreakBoost) > 1e-9
+                    ? "_streak" + s.Streak.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "")
+                + (s.Allowance != SoccerClub.Data.Facility.DefaultLeagueLevelAllowance
+                    ? "_allow" + s.Allowance.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")
                 + ".csv";
             var path = Path.Combine(dir, name);
             // Excel で文字化けしないよう BOM 付き UTF-8。

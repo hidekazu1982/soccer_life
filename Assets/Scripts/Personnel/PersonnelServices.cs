@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
 using SoccerClub.Core;
@@ -27,14 +27,16 @@ namespace SoccerClub.Personnel
             IReadOnlyList<Player> players,
             IReadOnlyList<StaffMember> staff,
             HashSet<string> takenPlayers,
-            HashSet<string> takenStaff)
+            HashSet<string> takenStaff,
+            double targetOverall = -1d)
         {
             var list = new TransferShortlist();
             var scouts = club.Front != null ? club.Front.Strengthening : null;
             int level = club.Front != null ? club.Front.StrengtheningLevel() : 0;
             if (scouts == null || level <= 0) return list;
 
-            double target = 80d + level * 12d;
+            // 狙う強さ。呼び出し側が「強化部Lvの施設で育った選手」の目安を渡す。無ければ旧式。
+            double target = targetOverall > 0d ? targetOverall : 80d + level * 12d;
             int floor = club.Facilities.MarketLevelFloor();
             int cap = club.Facilities.MarketLevelCap();
             int active = 0;
