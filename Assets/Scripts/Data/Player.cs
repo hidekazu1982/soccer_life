@@ -10,6 +10,10 @@ namespace SoccerClub.Data
     {
         public string Id;
         public string Name;
+
+        /// <summary>性別。id から 5:5 で決まる（PlayerTraits.GenderForId）。</summary>
+        public Gender Gender;
+
         public int Age;
         public GrowthPhase Phase;
         public Rarity Rarity;
@@ -89,7 +93,7 @@ namespace SoccerClub.Data
         /// <summary>今シーズンに評価を付けた試合数。</summary>
         public int SeasonRatedMatches;
 
-        /// <summary>ミニイベント用。試合やお金には影響しない。</summary>
+        /// <summary>夫婦の関係があるとき true。RelationshipService が毎月揃える。試合やお金には影響しない。</summary>
         public bool Married;
 
         public int Children;

@@ -430,8 +430,8 @@ namespace SoccerClub.UI
             _gm = front != null ? front.GeneralManager : null;
             var position = player != null ? player.BestPosition() : Position.CF;
             _scout = FindScout(front, position);
-            _gmPortrait = Portrait(_gm != null ? _gm.Id : null, uniform, AvatarLibrary.NaturalHair(_gm != null ? _gm.Id : null));
-            _scoutPortrait = Portrait(_scout != null ? _scout.Id : null, uniform, AvatarLibrary.NaturalHair(_scout != null ? _scout.Id : null));
+            _gmPortrait = Portrait(_gm, uniform);
+            _scoutPortrait = Portrait(_scout, uniform);
             if (!string.IsNullOrEmpty(id))
             {
                 var hair = player != null
@@ -457,10 +457,12 @@ namespace SoccerClub.UI
             return null;
         }
 
-        Texture2D Portrait(string id, UniformKit uniform, Color32 hair)
+        /// <summary>GM とスカウト（強化部）。フロントなのでスーツ。</summary>
+        Texture2D Portrait(StaffMember staff, UniformKit uniform)
         {
-            if (string.IsNullOrEmpty(id)) return null;
-            return _avatars.CreateStand(id, uniform, hair, AvatarLibrary.SheetHeight);
+            if (staff == null || string.IsNullOrEmpty(staff.Id)) return null;
+            return _avatars.CreateStand(
+                staff.Id, uniform, AvatarLibrary.NaturalHair(staff.Id), AvatarLibrary.SheetHeight, AvatarLibrary.OutfitOf(staff));
         }
 
         static StaffMember FindScout(FrontOffice front, Position position)

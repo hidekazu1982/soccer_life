@@ -1200,6 +1200,8 @@ namespace SoccerClub.Core
                 ? BigInteger.Zero
                 : ClubMath.RoundCoins(ClubMath.ToDouble(salary) * percent / 100d);
             double leave = 1d - ClubMath.NegotiationChance(GmLevel(club));
+            var spouse = _relations.SpouseIn(club, player);
+            if (spouse != null) leave *= RelationshipService.SpouseLeaveFactor;
             bool leaves = _random.NextDouble() < leave;
             var story = new ClubStory
             {
@@ -1220,8 +1222,10 @@ namespace SoccerClub.Core
             string purse = IsClosedPeriod(Time.CurrentDate) ? "資産" : "強化費";
             story.Pages[0] = Line(player) + "に、他クラブから移籍オファーが届きました。\n移籍金  "
                 + StoryMoney(fee) + "\n移籍金は" + purse + "に入ります。";
-            int stay = ClubMath.RoundInt(ClubMath.NegotiationChance(GmLevel(club)) * 100d);
-            int move = 100 - stay;
+            int move = ClubMath.RoundInt(leave * 100d);
+            int stay = 100 - move;
+            if (spouse != null)
+                reason += "\n配偶者の" + (spouse.Name ?? "選手") + "と同じクラブにいたいため、移籍に消極的です。";
             story.Pages[1] = GmName(club) + "の方針です。\n" + reason
                 + (approve
                     ? "\n移籍の見込みは " + move.ToString(CultureInfo.InvariantCulture) + "% です。"
@@ -1353,6 +1357,9 @@ namespace SoccerClub.Core
             if (!SigningCanOpen(player)) return null;
             var fee = ClubMath.TransferFee(player);
             var salary = ClubMath.PlayerAnnual(player);
+            var spouse = _relations.SpouseIn(PlayerClub, player);
+            if (spouse != null)
+                salary = ClubMath.RoundCoins(ClubMath.ToDouble(salary) * (1d - RelationshipService.SpouseSalaryDiscount));
             var story = new ClubStory
             {
                 Kind = ClubStoryKind.Signing,
@@ -1369,7 +1376,11 @@ namespace SoccerClub.Core
             story.Titles[2] = "交渉";
             story.Titles[3] = "交渉の結果";
             story.Pages[0] = "強化部が補強候補を紹介しました。\n" + Line(player)
-                + "\n移籍金  " + StoryMoney(fee) + "    年俸  " + StoryMoney(salary);
+                + "\n移籍金  " + StoryMoney(fee) + "    年俸  " + StoryMoney(salary)
+                + (spouse != null
+                    ? "\n配偶者の" + (spouse.Name ?? "選手") + "がいるため、年俸が"
+                      + ClubMath.RoundInt(RelationshipService.SpouseSalaryDiscount * 100d).ToString(CultureInfo.InvariantCulture) + "%安くなっています。"
+                    : "");
             int signRate = ClubMath.RoundInt(ClubMath.NegotiationChance(GmLevel(PlayerClub)) * 100d);
             story.Pages[1] = GmName(PlayerClub) + "は獲得交渉を行います。\n獲得の見込みは "
                 + signRate.ToString(CultureInfo.InvariantCulture) + "% です。";

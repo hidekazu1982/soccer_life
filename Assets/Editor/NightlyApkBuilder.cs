@@ -101,6 +101,9 @@ namespace SoccerClubSim.EditorTools
                 Directory.CreateDirectory(BuildsDir);
                 EditorUserBuildSettings.buildAppBundle = false;
 
+                // バージョン確認ダイアログを出さずに +0.0.1 させる
+                ApkVersionBumper.ForceAutomated = true;
+
                 BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
                 {
                     scenes = scenes,
@@ -121,6 +124,7 @@ namespace SoccerClubSim.EditorTools
             }
             finally
             {
+                ApkVersionBumper.ForceAutomated = false;
                 running = false;
             }
         }

@@ -511,7 +511,7 @@ namespace SoccerClub.UI
                     if (walker.Frames == null || !SameColor(walker.Hair, hair))
                     {
                         AvatarLibrary.Destroy(walker.Frames);
-                        walker.Frames = _library.Create(_ids[i], uniform, hair);
+                        walker.Frames = _library.Create(_ids[i], uniform, hair, 0, OutfitOf(_zones[i]));
                         walker.Hair = hair;
                     }
 
@@ -533,7 +533,7 @@ namespace SoccerClub.UI
                 {
                     Id = _ids[i],
                     Zone = _zones[i],
-                    Frames = _library.Create(_ids[i], uniform, hair),
+                    Frames = _library.Create(_ids[i], uniform, hair, 0, OutfitOf(_zones[i])),
                     Squad = _squadFlags[i],
                     Hair = hair,
                     Feet = RandomPoint(_zones[i]),
@@ -580,6 +580,12 @@ namespace SoccerClub.UI
             AddSlots(front.PublicRelations, Zone.Staff);
             AddSlots(front.Business, Zone.Staff);
             AddSlots(front.Academy, Zone.Staff);
+        }
+
+        /// <summary>フロント（Staff の区画）はスーツ、選手と監督・コーチはユニフォーム。</summary>
+        static AvatarOutfit OutfitOf(Zone zone)
+        {
+            return zone == Zone.Staff ? AvatarOutfit.Suit : AvatarOutfit.Uniform;
         }
 
         static bool SameColor(Color32 a, Color32 b)

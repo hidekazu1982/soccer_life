@@ -335,6 +335,7 @@ namespace SoccerClub.World
             {
                 Id = id,
                 Name = NameCatalog.ForId(id),
+                Gender = PlayerTraits.GenderForId(id),
                 Age = age,
                 Phase = phase,
                 Rarity = RollRarity(random),

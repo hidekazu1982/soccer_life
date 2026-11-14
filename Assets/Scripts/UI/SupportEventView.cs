@@ -380,7 +380,7 @@ namespace SoccerClub.UI
             }
 
             if (!_avatars.Ready) return null;
-            return _avatars.CreateStand(id, AvatarLibrary.Kit(club.EmblemIndex), AvatarLibrary.NaturalHair(id), height);
+            return _avatars.CreateStand(id, AvatarLibrary.Kit(club.EmblemIndex), AvatarLibrary.NaturalHair(id), height, AvatarLibrary.OutfitOf(speaker));
         }
 
         void EnsureTextures()

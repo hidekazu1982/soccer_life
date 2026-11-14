@@ -63,6 +63,7 @@ namespace SoccerClub.Core
             };
             WritePersonnel(file);
             WriteSupport(file);
+            file.Relationships = _relations.Write();
             return file;
         }
 
@@ -131,6 +132,8 @@ namespace SoccerClub.Core
             if (session._pendingOffer != null)
                 session._pendingOffer.ContractCap = ClubMath.SponsorContractCapFor(session.LeagueLevel);
             session._pendingCut = ReadCut(file.PendingSponsorCut);
+            // 無所属のキャリアやり直し（ReadPersonnel 内）で関係を消せるよう、先に読む。
+            session._relations.Read(file.Relationships);
             session.ReadPersonnel(file);
             session.ReadSupport(file);
             var market = ReadStaffList(file.FrontMarket);
@@ -139,6 +142,8 @@ namespace SoccerClub.Core
                 if (market[i] != null) session._frontMarket.Add(market[i]);
             }
 
+            // 古いセーブのミニイベントの結婚は、夫婦の関係に合わせて外す。
+            session._relations.SyncMarried(session.AllPlayers());
             return session;
         }
 
@@ -459,7 +464,8 @@ namespace SoccerClub.Core
                     Married = player.Married,
                     Children = player.Children,
                     Suitabilities = suits,
-                    ContractSalary = Money(player.ContractSalary)
+                    ContractSalary = Money(player.ContractSalary),
+                    Gender = (int)player.Gender + 1
                 });
             }
 
@@ -482,6 +488,7 @@ namespace SoccerClub.Core
                 {
                     Id = save.Id,
                     Name = NameCatalog.Contains(save.Name) ? save.Name : NameCatalog.ForId(save.Id),
+                    Gender = save.Gender == 1 || save.Gender == 2 ? (Gender)(save.Gender - 1) : PlayerTraits.GenderForId(save.Id),
                     Age = save.Age,
                     Phase = (GrowthPhase)save.Phase,
                     Rarity = (Rarity)save.Rarity,

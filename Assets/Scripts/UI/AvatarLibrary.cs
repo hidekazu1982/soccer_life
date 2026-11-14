@@ -21,11 +21,20 @@ namespace SoccerClub.UI
         }
     }
 
+    /// <summary>服装。選手とスタッフ（監督、コーチなど）はユニフォーム、フロントはスーツ。</summary>
+    public enum AvatarOutfit
+    {
+        Uniform,
+        Suit
+    }
+
     /// <summary>
     /// Figma の character3 の部品を重ねて、1人分の待機・歩きテクスチャを作る。
     /// 部品は Resources/Character3。配置は layout.csv（Figma の 2048 キャンバスを 0.5 倍して切り抜いた座標）。
     /// 重ね順は Figma と同じ: 頭（肌、髪色、線）→ 体（肌、4th、3rd、2nd、1st、線）→ 口 → 目。
     /// 頭は front_head_01〜 の髪型ごとに head_NN_skin / head_NN_hair / head_NN_line を持ち、ID から 1 つ選ぶ。
+    /// スーツは Figma の character_suit（suit_front_NN_*）。1st スーツ、2nd シャツ、3rd ネクタイ、4th 靴。
+    /// スーツには待機と横歩きがまだ無いので、待機は suit_stand（無ければ前歩きの 1 コマ目）、横歩きは前歩きで代用する。
     /// </summary>
     public sealed class AvatarLibrary
     {
@@ -81,6 +90,18 @@ namespace SoccerClub.UI
             new Color32(0x7A, 0x4E, 0x2D, 255)
         };
 
+        /// <summary>スーツと靴の色。黒、グレー、茶、紺。スーツと靴はそれぞれ ID から別に選ぶ。</summary>
+        static readonly Color32[] SuitColors =
+        {
+            new Color32(0x1A, 0x1A, 0x1E, 255),
+            new Color32(0x6B, 0x6E, 0x75, 255),
+            new Color32(0x5A, 0x3E, 0x2B, 255),
+            new Color32(0x1F, 0x2A, 0x44, 255)
+        };
+
+        /// <summary>シャツは白。</summary>
+        static readonly Color32 ShirtColor = new Color32(0xFF, 0xFF, 0xFF, 255);
+
         static readonly string[] BodyFills = { "_skin", "_c4", "_c3", "_c2", "_c1" };
 
         Head[] _heads = new Head[0];
@@ -89,6 +110,8 @@ namespace SoccerClub.UI
         Pose _stand;
         Pose[] _front = new Pose[0];
         Pose[] _side = new Pose[0];
+        Pose _suitStand;
+        Pose[] _suitFront = new Pose[0];
 
         readonly Dictionary<int, Scaled> _scaled = new Dictionary<int, Scaled>();
         int _displayWidth;
@@ -106,6 +129,10 @@ namespace SoccerClub.UI
             _stand = LoadPose(layout, "stand");
             _front = LoadSeries(layout, "front_");
             _side = LoadSeries(layout, "side_");
+            _suitFront = LoadSeries(layout, "suit_front_");
+            _suitStand = LoadPose(layout, "suit_stand")
+                         ?? (_suitFront.Length > 0 ? _suitFront[0] : null);
+            if (_suitFront.Length == 0) Debug.LogWarning("character_suit の部品が無いので、フロントもユニフォームで表示する: Resources/" + Folder);
             _scaled.Clear();
             _displayWidth = WidthFor(DisplayHeight);
             Ready = _heads.Length > 0 && _stand != null && _front.Length > 0 && _side.Length > 0;
@@ -181,31 +208,54 @@ namespace SoccerClub.UI
         }
 
         /// <summary>立ち、前歩き、横歩きのコマ。pixelHeight を省くとグラウンド用の高さ（DisplayHeight）。</summary>
-        public AvatarFrames Create(string id, UniformKit kit, Color32 hairColor, int pixelHeight = 0)
+        /// <summary>outfit が Suit なら、kit はネクタイの色（クラブの 1st）にだけ使う。</summary>
+        public AvatarFrames Create(string id, UniformKit kit, Color32 hairColor, int pixelHeight = 0, AvatarOutfit outfit = AvatarOutfit.Uniform)
         {
             if (!Ready || string.IsNullOrEmpty(id)) return null;
             var set = ScaledFor(pixelHeight > 0 ? pixelHeight : DisplayHeight);
-            var colors = Colors(id, kit, hairColor);
+            bool suit = UsesSuit(outfit);
+            var colors = suit ? SuitColorsFor(id, kit, hairColor) : Colors(id, kit, hairColor);
             var head = set.Heads[HeadIndex(id)];
+            var front = suit ? set.SuitFront : set.Front;
+            // スーツの横歩きは無いので、前歩きのコマを横移動にも使う（同じテクスチャを共有する）。
             var frames = new AvatarFrames
             {
-                Stand = Compose(set, head, set.Stand, colors, false),
-                WalkFront = new Texture2D[set.Front.Length],
-                WalkSide = new Texture2D[set.Side.Length]
+                Stand = Compose(set, head, suit ? set.SuitStand : set.Stand, colors, false),
+                WalkFront = new Texture2D[front.Length]
             };
-            for (int i = 0; i < set.Front.Length; i++)
-                frames.WalkFront[i] = Compose(set, head, set.Front[i], colors, false);
+            for (int i = 0; i < front.Length; i++)
+                frames.WalkFront[i] = Compose(set, head, front[i], colors, false);
+            if (suit)
+            {
+                frames.WalkSide = frames.WalkFront;
+                return frames;
+            }
+
+            frames.WalkSide = new Texture2D[set.Side.Length];
             for (int i = 0; i < set.Side.Length; i++)
                 frames.WalkSide[i] = Compose(set, head, set.Side[i], colors, false);
             return frames;
         }
 
         /// <summary>待機ポーズ 1 枚。読み取り可能なテクスチャで返す。pixelHeight が 0 なら DisplayHeight。</summary>
-        public Texture2D CreateStand(string id, UniformKit kit, Color32 hairColor, int pixelHeight = 0)
+        public Texture2D CreateStand(string id, UniformKit kit, Color32 hairColor, int pixelHeight = 0, AvatarOutfit outfit = AvatarOutfit.Uniform)
         {
             if (!Ready || string.IsNullOrEmpty(id)) return null;
             var set = ScaledFor(pixelHeight > 0 ? pixelHeight : DisplayHeight);
+            if (UsesSuit(outfit))
+                return Compose(set, set.Heads[HeadIndex(id)], set.SuitStand, SuitColorsFor(id, kit, hairColor), true);
             return Compose(set, set.Heads[HeadIndex(id)], set.Stand, Colors(id, kit, hairColor), true);
+        }
+
+        /// <summary>スタッフの服装。フロント（秘書、GM、各部）はスーツ、監督やコーチはユニフォーム。</summary>
+        public static AvatarOutfit OutfitOf(StaffMember staff)
+        {
+            return staff != null && staff.IsFrontOffice ? AvatarOutfit.Suit : AvatarOutfit.Uniform;
+        }
+
+        bool UsesSuit(AvatarOutfit outfit)
+        {
+            return outfit == AvatarOutfit.Suit && _suitStand != null && _suitFront.Length > 0;
         }
 
         public static void Destroy(AvatarFrames frames)
@@ -213,7 +263,22 @@ namespace SoccerClub.UI
             if (frames == null) return;
             DestroyTexture(frames.Stand);
             DestroyAll(frames.WalkFront);
-            DestroyAll(frames.WalkSide);
+            // スーツは横歩きに前歩きのコマを共有しているので、二重に消さない。
+            if (frames.WalkSide != frames.WalkFront) DestroyAll(frames.WalkSide);
+        }
+
+        /// <summary>スーツの塗り。BodyFills と同じ並び: 肌、4th 靴、3rd ネクタイ（クラブの 1st）、2nd シャツ、1st スーツ。最後は髪。</summary>
+        static Color32[] SuitColorsFor(string id, UniformKit kit, Color32 hair)
+        {
+            return new[]
+            {
+                SkinColor(id),
+                SuitColors[Hash(id + "#shoes") % SuitColors.Length],
+                kit.First,
+                ShirtColor,
+                SuitColors[Hash(id + "#suit") % SuitColors.Length],
+                hair
+            };
         }
 
         static Color32[] Colors(string id, UniformKit kit, Color32 hair)
@@ -329,7 +394,9 @@ namespace SoccerClub.UI
                 Eyes = map.Scale(_eyes),
                 Stand = map.Scale(_stand),
                 Front = map.Scale(_front),
-                Side = map.Scale(_side)
+                Side = map.Scale(_side),
+                SuitStand = map.Scale(_suitStand),
+                SuitFront = map.Scale(_suitFront)
             };
             _scaled[height] = set;
             return set;
@@ -655,6 +722,8 @@ namespace SoccerClub.UI
             public ScaledPose Stand;
             public ScaledPose[] Front;
             public ScaledPose[] Side;
+            public ScaledPose SuitStand;
+            public ScaledPose[] SuitFront;
         }
     }
 

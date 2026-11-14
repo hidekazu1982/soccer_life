@@ -14,7 +14,7 @@ namespace SoccerClubSim.EditorTools
     ///   新機能   : +0.1.0
     ///   機能修正 : +0.0.1
     /// ・Build Profiles から手動でビルドしたとき : ダイアログで「機能修正 / 新機能 / 上げない」を選ぶ
-    /// ・AndroidApkBuild.cs やバッチモードの自動ビルド : ダイアログなしで +0.0.1
+    /// ・AndroidApkBuild.cs / NightlyApkBuilder.cs / バッチモードの自動ビルド : ダイアログなしで +0.0.1
     /// Android の versionCode もバージョンから計算して設定する（必ず増える）。
     /// </summary>
     public class ApkVersionBumper : IPreprocessBuildWithReport
@@ -26,6 +26,12 @@ namespace SoccerClubSim.EditorTools
         public int callbackOrder => -100;
 
         enum Bump { None, Patch, Minor }
+
+        /// <summary>
+        /// 自動ビルドのスクリプトが BuildPlayer の前に true にする。
+        /// true の間はダイアログを出さずに +0.0.1 する。
+        /// </summary>
+        public static bool ForceAutomated;
 
         public void OnPreprocessBuild(BuildReport report)
         {
@@ -87,8 +93,9 @@ namespace SoccerClubSim.EditorTools
         // 画面操作なしで動くビルド（AndroidApkBuild.cs 経由・バッチモード）か
         static bool IsAutomatedBuild()
         {
-            if (Application.isBatchMode) return true;
-            return Environment.StackTrace.Contains("AndroidApkBuild");
+            if (ForceAutomated || Application.isBatchMode) return true;
+            string stack = Environment.StackTrace;
+            return stack.Contains("AndroidApkBuild") || stack.Contains("NightlyApkBuilder");
         }
 
         static bool TryParse(string version, out int major, out int minor, out int patch)

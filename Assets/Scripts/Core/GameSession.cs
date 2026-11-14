@@ -86,8 +86,28 @@ namespace SoccerClub.Core
         MonthLedger _pendingReport;
         SponsorOffer _pendingOffer;
         SponsorCutNotice _pendingCut;
+        readonly RelationshipService _relations = new RelationshipService();
 
         public IReadOnlyList<StaffMember> FrontMarket => _frontMarket;
+
+        /// <summary>選手同士の関係（友達・恋人・夫婦）。</summary>
+        public RelationshipService Relations => _relations;
+
+        /// <summary>全クラブの所属・アカデミーと無所属の選手。</summary>
+        public List<Player> AllPlayers()
+        {
+            var result = new List<Player>(_freeAgents.Count + Clubs.Count * 40);
+            for (int c = 0; c < Clubs.Count; c++)
+            {
+                var club = Clubs[c];
+                if (club == null) continue;
+                if (club.Squad != null) result.AddRange(club.Squad);
+                if (club.Academy != null) result.AddRange(club.Academy);
+            }
+
+            result.AddRange(_freeAgents);
+            return result;
+        }
 
         sealed class PendingGrowth
         {
@@ -130,6 +150,8 @@ namespace SoccerClub.Core
             Clubs = clubs;
             PlayerClub = playerClub;
             _random = random;
+            if (match is MatchSimulationManager simulation)
+                simulation.RelationLookup = (a, b) => _relations.StageBetween(a.Id, b.Id);
             ReleaseOperatingReserve(playerClub);
             Economy.OnBankrupt += club =>
             {
@@ -530,6 +552,7 @@ namespace SoccerClub.Core
                 }
 
                 RefillFrontMarket();
+                _relations.MonthlyUpdate(Clubs, _freeAgents, Time.CurrentDate);
             }
 
             if (IsContractRenewalDay())
@@ -1590,6 +1613,8 @@ namespace SoccerClub.Core
         void ResetFreeAgentCareer(Player player)
         {
             var fresh = WorldFactory.CreatePlayer(_random, player.Id, 18, GrowthPhase.Youth, 1d, player.PreferredPosition);
+            // 同じ id の別人になるので、前の人の関係は引き継がない。
+            _relations.Forget(player.Id);
             player.Age = 18;
             player.Phase = GrowthPhase.Youth;
             player.Offense = fresh.Offense;

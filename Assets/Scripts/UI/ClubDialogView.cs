@@ -1892,7 +1892,7 @@ namespace SoccerClub.UI
             ReleasePortrait();
             if (!_avatars.Ready) _avatars.Load();
             if (!_avatars.Ready) return null;
-            var stand = _avatars.CreateStand(staff.Id, AvatarLibrary.Kit(club.EmblemIndex), AvatarLibrary.NaturalHair(staff.Id));
+            var stand = _avatars.CreateStand(staff.Id, AvatarLibrary.Kit(club.EmblemIndex), AvatarLibrary.NaturalHair(staff.Id), 0, AvatarLibrary.OutfitOf(staff));
             var circle = CircleBust(stand);
             if (stand != null) UnityEngine.Object.Destroy(stand);
             if (circle == null) return null;

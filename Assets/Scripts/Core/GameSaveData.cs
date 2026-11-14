@@ -53,6 +53,18 @@ namespace SoccerClub.Core
         public long SupportDoneTicks;
         public string[] SupportSnoozeKeys;
         public long[] SupportSnoozeUntil;
+        // 選手同士の関係（友達・恋人・夫婦）。古いセーブでは null。
+        public RelationshipSave[] Relationships;
+    }
+
+    [Serializable]
+    public sealed class RelationshipSave
+    {
+        public string PlayerIdA;
+        public string PlayerIdB;
+        public int Stage;
+        public int Affinity;
+        public long SinceTicks;
     }
 
     [Serializable]
@@ -224,6 +236,8 @@ namespace SoccerClub.Core
         public int Children;
         public int[] Suitabilities;
         public string ContractSalary;
+        // 0 = 未設定（古いセーブ。id から決める）、1 = 男性、2 = 女性。
+        public int Gender;
     }
 
     [Serializable]

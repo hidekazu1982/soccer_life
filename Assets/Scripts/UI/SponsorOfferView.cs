@@ -272,7 +272,8 @@ namespace SoccerClub.UI
                 id,
                 AvatarLibrary.Kit(club.EmblemIndex),
                 AvatarLibrary.NaturalHair(id),
-                AvatarLibrary.SheetHeight);
+                AvatarLibrary.SheetHeight,
+                AvatarLibrary.OutfitOf(speaker));
         }
 
         void EnsureTextures()

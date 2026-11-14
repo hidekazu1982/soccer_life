@@ -607,6 +607,8 @@ namespace SoccerClub.UI
                 Player player;
                 StaffMember staff;
                 if (!session.TryClubPerson(_visible[i], out player, out staff)) continue;
+                // 選手の結婚・子供は RelationshipService が決める。ここではスタッフだけ。
+                if (player != null || staff == null) continue;
                 int age = player != null ? player.Age : (staff != null ? staff.Age : 0);
                 bool married = player != null ? player.Married : staff != null && staff.Married;
                 int children = player != null ? player.Children : (staff != null ? staff.Children : 0);

@@ -121,4 +121,20 @@ namespace SoccerClub.Core
         Advertising,
         Operating
     }
+
+    /// <summary>選手の性別。男女は 5:5 で、同じチーム・同じリーグで混ざる。</summary>
+    public enum Gender
+    {
+        Male,
+        Female
+    }
+
+    /// <summary>選手同士の関係の段階。None は親密度だけを持つ状態。</summary>
+    public enum RelationStage
+    {
+        None,
+        Friend,
+        Lover,
+        Married
+    }
 }

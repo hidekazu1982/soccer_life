@@ -15,8 +15,17 @@ namespace SoccerClub.Match
         public const double AllPlayersStaminaDrain = 3d;
         public const double ParticipantExtraDrain = 7d;
 
+        /// <summary>同じ試合に一緒に出ている相手との関係で、実効攻撃・実効守備に掛ける上乗せ（いちばん強い関係の1つだけ）。</summary>
+        public const double FriendChemistry = 0.01d;
+        public const double LoverChemistry = 0.02d;
+        public const double MarriedChemistry = 0.03d;
+
         readonly ILineupSelector _lineupSelector;
         readonly GameRandom _random;
+        readonly Dictionary<Player, double> _chemistry = new Dictionary<Player, double>();
+
+        /// <summary>2人の関係の段階を返す。null なら連携の上乗せは無し。GameSession が設定する。</summary>
+        public Func<Player, Player, RelationStage> RelationLookup { get; set; }
 
         public MatchSimulationManager(ILineupSelector lineupSelector, GameRandom random = null)
         {
@@ -38,6 +47,9 @@ namespace SoccerClub.Match
             var substitutions = new List<Substitution>();
             ResetSheetStamina(homeState.Sheet);
             ResetSheetStamina(awayState.Sheet);
+            _chemistry.Clear();
+            RefreshChemistry(homeState.Sheet);
+            RefreshChemistry(awayState.Sheet);
             NoteAppeared(homeState.Sheet, homeAppeared);
             NoteAppeared(awayState.Sheet, awayAppeared);
 
@@ -48,8 +60,8 @@ namespace SoccerClub.Match
                 var defense = homeAttacks ? awayState : homeState;
                 ResolveAttackRound(round, attack, defense, resultEvents);
                 DrainForRound(homeState, awayState, resultEvents[resultEvents.Count - 1]);
-                TrySubstitute(homeState, true, round, substitutions);
-                TrySubstitute(awayState, false, round, substitutions);
+                if (TrySubstitute(homeState, true, round, substitutions)) RefreshChemistry(homeState.Sheet);
+                if (TrySubstitute(awayState, false, round, substitutions)) RefreshChemistry(awayState.Sheet);
                 NoteAppeared(homeState.Sheet, homeAppeared);
                 NoteAppeared(awayState.Sheet, awayAppeared);
             }
@@ -89,6 +101,9 @@ namespace SoccerClub.Match
             };
             var homeState = new MatchTeamState { Club = home, Sheet = _lineupSelector.BuildSheet(home) };
             var awayState = new MatchTeamState { Club = away, Sheet = _lineupSelector.BuildSheet(away) };
+            _chemistry.Clear();
+            RefreshChemistry(homeState.Sheet);
+            RefreshChemistry(awayState.Sheet);
             ResolvePenalty(result, homeState, awayState);
             return result;
         }
@@ -102,7 +117,7 @@ namespace SoccerClub.Match
             return _random.NextDouble() < h / total;
         }
 
-        static double TeamPower(MatchTeamState team)
+        double TeamPower(MatchTeamState team)
         {
             double sum = 0d;
             var xi = team.Sheet.StartingXi;
@@ -110,7 +125,7 @@ namespace SoccerClub.Match
             {
                 var slot = xi[i];
                 if (slot == null || slot.Player == null) continue;
-                sum += slot.Player.EffectiveOffense(slot.Slot);
+                sum += Offense(slot.Player, slot.Slot);
             }
             return Math.Max(0.0001d, sum);
         }
@@ -140,8 +155,8 @@ namespace SoccerClub.Match
             int d = 0;
             while (a < attackers.Length && d < defensePlayers.Length)
             {
-                double off = attackers[a].EffectiveOffense(attackerSlots[a]);
-                double def = defensePlayers[d].EffectiveDefense(defenseSlots[d]);
+                double off = Offense(attackers[a], attackerSlots[a]);
+                double def = Defense(defensePlayers[d], defenseSlots[d]);
                 if (Roll(off, def))
                 {
                     attackerLost.Add(false);
@@ -269,9 +284,78 @@ namespace SoccerClub.Match
             return result;
         }
 
-        static double Weight(LineupSlot slot, bool byOffense)
+        double Weight(LineupSlot slot, bool byOffense)
         {
-            return byOffense ? slot.Player.EffectiveOffense(slot.Slot) : slot.Player.EffectiveDefense(slot.Slot);
+            return byOffense ? Offense(slot.Player, slot.Slot) : Defense(slot.Player, slot.Slot);
+        }
+
+        double Offense(Player player, Position slot)
+        {
+            return player.EffectiveOffense(slot) * Chemistry(player);
+        }
+
+        double Defense(Player player, Position slot)
+        {
+            return player.EffectiveDefense(slot) * Chemistry(player);
+        }
+
+        double Chemistry(Player player)
+        {
+            return player != null && _chemistry.TryGetValue(player, out var value) ? value : 1d;
+        }
+
+        /// <summary>スタメンの各選手について、一緒に出ている相手との一番強い関係の上乗せを決める。</summary>
+        void RefreshChemistry(TeamSheet sheet)
+        {
+            if (sheet == null || sheet.StartingXi == null) return;
+            var xi = sheet.StartingXi;
+            for (int i = 0; i < xi.Length; i++)
+            {
+                var player = xi[i]?.Player;
+                if (player != null) _chemistry.Remove(player);
+            }
+
+            if (sheet.Bench != null)
+            {
+                for (int i = 0; i < sheet.Bench.Length; i++)
+                {
+                    if (sheet.Bench[i] != null) _chemistry.Remove(sheet.Bench[i]);
+                }
+            }
+
+            var lookup = RelationLookup;
+            if (lookup == null) return;
+            for (int i = 0; i < xi.Length; i++)
+            {
+                var a = xi[i]?.Player;
+                if (a == null) continue;
+                for (int j = i + 1; j < xi.Length; j++)
+                {
+                    var b = xi[j]?.Player;
+                    if (b == null || ReferenceEquals(a, b)) continue;
+                    double bonus = ChemistryFor(lookup(a, b));
+                    if (bonus <= 0d) continue;
+                    Raise(a, bonus);
+                    Raise(b, bonus);
+                }
+            }
+        }
+
+        void Raise(Player player, double bonus)
+        {
+            double next = 1d + bonus;
+            if (!_chemistry.TryGetValue(player, out var current) || next > current) _chemistry[player] = next;
+        }
+
+        public static double ChemistryFor(RelationStage stage)
+        {
+            switch (stage)
+            {
+                case RelationStage.Married: return MarriedChemistry;
+                case RelationStage.Lover: return LoverChemistry;
+                case RelationStage.Friend: return FriendChemistry;
+                default: return 0d;
+            }
         }
 
         static bool IsGoalkeeper(LineupSlot slot)
@@ -424,11 +508,12 @@ namespace SoccerClub.Match
             }
         }
 
-        void TrySubstitute(MatchTeamState team, bool home, int round, List<Substitution> substitutions)
+        /// <summary>交代したら true。</summary>
+        bool TrySubstitute(MatchTeamState team, bool home, int round, List<Substitution> substitutions)
         {
             var sheet = team.Sheet;
-            if (sheet.SubstitutionsUsed >= TeamSheet.MaxSubstitutions) return;
-            if (sheet.Bench == null || sheet.Bench.Length == 0) return;
+            if (sheet.SubstitutionsUsed >= TeamSheet.MaxSubstitutions) return false;
+            if (sheet.Bench == null || sheet.Bench.Length == 0) return false;
 
             int worstIndex = -1;
             double worstRatio = 1d;
@@ -444,7 +529,7 @@ namespace SoccerClub.Match
                 }
             }
 
-            if (worstIndex < 0) return;
+            if (worstIndex < 0) return false;
 
             var targetSlot = sheet.StartingXi[worstIndex].Slot;
             int benchIndex = -1;
@@ -463,7 +548,7 @@ namespace SoccerClub.Match
                 }
             }
 
-            if (benchIndex < 0) return;
+            if (benchIndex < 0) return false;
 
             var outgoing = sheet.StartingXi[worstIndex].Player;
             var incoming = sheet.Bench[benchIndex];
@@ -481,6 +566,8 @@ namespace SoccerClub.Match
                     In = incoming
                 });
             }
+
+            return true;
         }
 
         void ResolvePenalty(MatchResult result, MatchTeamState home, MatchTeamState away)
