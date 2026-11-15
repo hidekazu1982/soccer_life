@@ -1200,7 +1200,8 @@ namespace SoccerClub.Core
                 ? BigInteger.Zero
                 : ClubMath.RoundCoins(ClubMath.ToDouble(salary) * percent / 100d);
             double leave = 1d - ClubMath.NegotiationChance(GmLevel(club));
-            var spouse = _relations.SpouseIn(club, player);
+            // 出場機会の少ないベテラン（GMが承認する場合）は、配偶者がいても移籍しやすさを変えない。
+            var spouse = approve ? null : _relations.SpouseIn(club, player);
             if (spouse != null) leave *= RelationshipService.SpouseLeaveFactor;
             bool leaves = _random.NextDouble() < leave;
             var story = new ClubStory
