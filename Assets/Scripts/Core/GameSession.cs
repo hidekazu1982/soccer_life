@@ -88,10 +88,80 @@ namespace SoccerClub.Core
         SponsorCutNotice _pendingCut;
         readonly RelationshipService _relations = new RelationshipService();
 
+        /// <summary>関係イベント（友達・恋人・夫婦・親友）は、前回からこの日数たつまで起きない（全種類で共通、2日に1回）。</summary>
+        public const int RelationEventIntervalDays = 2;
+
+        /// <summary>最後に関係イベントで段階が進んだ日。default は未発生。</summary>
+        DateTime _lastRelationEvent;
+
         public IReadOnlyList<StaffMember> FrontMarket => _frontMarket;
 
         /// <summary>選手同士の関係（友達・恋人・夫婦）。</summary>
         public RelationshipService Relations => _relations;
+
+        /// <summary>今日、関係イベントを起こしてよいか（前回から2日以上たったか）。</summary>
+        public bool RelationEventReady
+        {
+            get
+            {
+                if (_lastRelationEvent == default) return true;
+                return (Time.CurrentDate.Date - _lastRelationEvent.Date).TotalDays >= RelationEventIntervalDays;
+            }
+        }
+
+        /// <summary>関係イベントを待っている自クラブの組。</summary>
+        public List<RelationshipService.EventCandidate> RelationEventCandidates()
+        {
+            return _relations.EventCandidates(PlayerClub, Time.CurrentDate.Date);
+        }
+
+        /// <summary>関係イベントの結果。段階を進め、次のイベントまでの間隔を数え始める。</summary>
+        public bool CompleteRelationEvent(string a, string b, RelationStage next)
+        {
+            if (!RelationEventReady) return false;
+            if (!_relations.PromoteByEvent(PlayerClub, a, b, next, Time.CurrentDate.Date)) return false;
+            _lastRelationEvent = Time.CurrentDate.Date;
+            if (next == RelationStage.Married && PlayerClub != null) _relations.SyncMarried(PlayerClub.Squad);
+            return true;
+        }
+
+        /// <summary>イベントの優先順。結婚、恋人、親友、友達の順に見せる。</summary>
+        public static int RelationEventPriority(RelationStage next)
+        {
+            switch (next)
+            {
+                case RelationStage.Married: return 3;
+                case RelationStage.Lover: return 2;
+                case RelationStage.BestFriend: return 1;
+                default: return 0;
+            }
+        }
+
+        /// <summary>
+        /// 画面を通さないシミュレーター用。関係イベントが起きたものとして、優先順の高い段階、親密度の高い組から1つ進める。
+        /// 乱数は使わない。
+        /// </summary>
+        public bool SimulateRelationEvent()
+        {
+            if (!RelationEventReady) return false;
+            var list = RelationEventCandidates();
+            int best = -1;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (best < 0) { best = i; continue; }
+                var x = list[i];
+                var y = list[best];
+                int px = RelationEventPriority(x.Next);
+                int py = RelationEventPriority(y.Next);
+                if (px != py) { if (px > py) best = i; continue; }
+                if (x.Rel.Affinity != y.Rel.Affinity) { if (x.Rel.Affinity > y.Rel.Affinity) best = i; continue; }
+                if (string.CompareOrdinal(x.Rel.PlayerIdA + x.Rel.PlayerIdB, y.Rel.PlayerIdA + y.Rel.PlayerIdB) < 0) best = i;
+            }
+
+            if (best < 0) return false;
+            var pick = list[best];
+            return CompleteRelationEvent(pick.Rel.PlayerIdA, pick.Rel.PlayerIdB, pick.Next);
+        }
 
         /// <summary>全クラブの所属・アカデミーと無所属の選手。</summary>
         public List<Player> AllPlayers()
@@ -150,8 +220,13 @@ namespace SoccerClub.Core
             Clubs = clubs;
             PlayerClub = playerClub;
             _random = random;
+            // 自クラブの選手同士は、メイン画面の関係イベントで段階が進む。
+            _relations.EventClubId = playerClub != null ? playerClub.Id : null;
             if (match is MatchSimulationManager simulation)
+            {
                 simulation.RelationLookup = (a, b) => _relations.StageBetween(a.Id, b.Id);
+                simulation.ClubStrengthModifier = ClubMatchFactor;
+            }
             ReleaseOperatingReserve(playerClub);
             Economy.OnBankrupt += club =>
             {
@@ -1498,6 +1573,23 @@ namespace SoccerClub.Core
 
         /// <summary>自クラブの連覇数（直前のシーズンまで）。</summary>
         public int TitleStreak;
+
+        /// <summary>
+        /// 初年度（2026-08-01〜2027-07-31）だけ、他クラブの試合での攻撃・守備にかける倍率（弱体化補正）。1 で無効。
+        /// 選手の能力そのものは変えない。シミュレーターから変えられる。
+        /// </summary>
+        public const double DefaultFirstSeasonRivalScale = 0.8d;
+        public static double FirstSeasonRivalScale = DefaultFirstSeasonRivalScale;
+
+        /// <summary>試合での強さの倍率。初年度の他クラブだけ FirstSeasonRivalScale。</summary>
+        double ClubMatchFactor(Club club)
+        {
+            if (club == null || club.IsPlayerOwned) return 1d;
+            double factor = FirstSeasonRivalScale;
+            if (factor <= 0d || factor >= 1d) return 1d;
+            if (Time == null || Time.CurrentDate >= SeasonStart.AddYears(1)) return 1d;
+            return factor;
+        }
 
         /// <summary>
         /// シーズンの始めに、他クラブの選手の能力を「リーグLVの標準」に合わせる。

@@ -134,6 +134,7 @@ namespace SoccerClub.UI
         readonly AvatarLibrary _library = new AvatarLibrary();
         readonly Dictionary<string, Walker> _walkers = new Dictionary<string, Walker>();
         readonly List<Walker> _drawOrder = new List<Walker>();
+        readonly Dictionary<string, string> _companions = new Dictionary<string, string>();
         readonly List<string> _ids = new List<string>();
         readonly List<Zone> _zones = new List<Zone>();
         readonly List<bool> _squadFlags = new List<bool>();
@@ -157,6 +158,11 @@ namespace SoccerClub.UI
         const float MeetGap = 56f;
         const float MeetSpeed = 1.75f;
 
+        // 恋人・夫婦は並んで歩く。id の小さいほうが先に歩き、もう一人が右どなりについて行く。
+        const float CompanionGap = 46f;
+        const float CompanionSlack = 36f;
+        const float CompanionSpeed = 1.2f;
+
         public void ClearSelection()
         {
             SelectedId = null;
@@ -176,6 +182,9 @@ namespace SoccerClub.UI
             if (frames == null || frames.WalkSide == null || frames.WalkSide.Length == 0) return null;
             return frames.WalkSide[0];
         }
+
+        /// <summary>恋人・夫婦の組（id → 相手の id）。メイン画面では並んで歩く。</summary>
+        public Dictionary<string, string> Companions => _companions;
 
         public bool TryFocusPoint(string id, out Vector2 point)
         {
@@ -685,6 +694,13 @@ namespace SoccerClub.UI
                 return;
             }
 
+            Walker leader;
+            if (TryLeader(walker, out leader))
+            {
+                FollowLeader(walker, leader, deltaTime);
+                return;
+            }
+
             if (!walker.Walking)
             {
                 if (_time < walker.IdleUntil) return;
@@ -692,6 +708,35 @@ namespace SoccerClub.UI
             }
 
             MoveToward(walker, deltaTime, walker.Speed, false);
+        }
+
+        /// <summary>恋人・夫婦の相手が先に歩く側で、いま一緒に歩ける状態ならその相手。</summary>
+        bool TryLeader(Walker walker, out Walker leader)
+        {
+            leader = null;
+            string partner;
+            if (string.IsNullOrEmpty(walker.Id) || !_companions.TryGetValue(walker.Id, out partner)) return false;
+            if (string.CompareOrdinal(partner, walker.Id) >= 0) return false;
+            if (!TryWalker(partner, out leader)) return false;
+            if (leader.Hidden || leader.Leaving || leader.Arriving || leader.Alpha < 0.35f) return false;
+            return leader.Zone == walker.Zone;
+        }
+
+        /// <summary>先に歩く相手の右どなりへついて行く。少し離れるまでは立ち止まって相手のほうを向く。</summary>
+        void FollowLeader(Walker walker, Walker leader, float deltaTime)
+        {
+            walker.Direct = false;
+            walker.Target = ClampToZone(walker.Zone, leader.Feet + new Vector2(CompanionGap, 2f));
+            float distance = (walker.Target - walker.Feet).magnitude;
+            if (!walker.Walking && distance <= CompanionSlack)
+            {
+                if (leader.Walking) walker.Facing = leader.Facing;
+                else UpdateFacing(walker, leader.Feet - walker.Feet);
+                return;
+            }
+
+            float speed = Mathf.Max(walker.Speed, leader.Speed) * CompanionSpeed;
+            MoveToward(walker, deltaTime, speed, true);
         }
 
         void MoveToward(Walker walker, float deltaTime, float speed, bool hold)

@@ -112,6 +112,12 @@ namespace SoccerClub.Core
 
         /// <summary>成長施設の上限「リーグLV＋この値」（調整用、0 で無制限）。</summary>
         public int Allowance = Facility.DefaultLeagueLevelAllowance;
+
+        /// <summary>true なら投資はサポートキャラの提案（施設・人事とも週 1 回）に全部応える形だけで行う。</summary>
+        public bool FollowSupport;
+
+        /// <summary>初年度の他クラブの弱体化補正（調整用）。</summary>
+        public double FirstSeasonRivalScale = GameSession.DefaultFirstSeasonRivalScale;
     }
 
     /// <summary>
@@ -151,6 +157,7 @@ namespace SoccerClub.Core
                 ? Settings.TrainingCostGrowthPermil : Facility.DefaultTrainingCostGrowthPermil;
             Facility.GrowthFacilityBaseScale = Settings.BaseScale > 0d ? Settings.BaseScale : Facility.DefaultGrowthFacilityBaseScale;
             Facility.LeagueLevelAllowance = Settings.Allowance >= 0 ? Settings.Allowance : Facility.DefaultLeagueLevelAllowance;
+            GameSession.FirstSeasonRivalScale = Settings.FirstSeasonRivalScale > 0d ? Settings.FirstSeasonRivalScale : GameSession.DefaultFirstSeasonRivalScale;
             GameSession.RivalStreakBoost = Settings.Streak >= 0d && Settings.Streak < 1d ? Settings.Streak : GameSession.DefaultRivalStreakBoost;
             GameSession.RivalDroughtRelief = Settings.Relief >= 0d && Settings.Relief < 1d ? Settings.Relief : GameSession.DefaultRivalDroughtRelief;
             GameSession.RivalStrengthScale = Settings.RivalScale > 0d ? Settings.RivalScale : GameSession.DefaultRivalStrengthScale;
@@ -175,7 +182,9 @@ namespace SoccerClub.Core
             }
 
             RunMorningEvents();
-            Count(Session.SpendForSimulation(Settings.FillEmptyFront));
+            Count(Settings.FollowSupport
+                ? Session.AcceptSupportForSimulation()
+                : Session.SpendForSimulation(Settings.FillEmptyFront));
 
             Session.ClearSeasonNotice();
             Session.RollDailyGrowth();
@@ -183,6 +192,8 @@ namespace SoccerClub.Core
             var played = Session.Time.CurrentDate;
             Session.AdvanceDay();
             DaysSimulated++;
+            // メイン画面の関係イベントの代わり（2日に1回まで）。
+            Session.SimulateRelationEvent();
 
             Session.TryCreateSponsorOffer(played);
             if (Session.HasMonthReport) Session.DismissMonthReport();

@@ -51,10 +51,16 @@ namespace SoccerClub.Core
         public bool StaffOfferDone;
         // サポートキャラ。今日対応済みの日付と、キャンセルで出さない内容（期限つき）。
         public long SupportDoneTicks;
+        /// <summary>施設のレベルアップを最後に提案した日。0 は未提案。</summary>
+        public long SupportFacilityTicks;
+        /// <summary>フロント人事を最後に提案した日。0 は未提案。</summary>
+        public long SupportFrontTicks;
         public string[] SupportSnoozeKeys;
         public long[] SupportSnoozeUntil;
         // 選手同士の関係（友達・恋人・夫婦）。古いセーブでは null。
         public RelationshipSave[] Relationships;
+        /// <summary>最後に関係イベント（友達・恋人・夫婦・親友）が起きた日。0 は未発生。名前は互換のため据え置き。</summary>
+        public long LastFriendEventTicks;
     }
 
     [Serializable]

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 using SoccerClub.Competition;
 using SoccerClub.Data;
@@ -68,6 +68,33 @@ namespace SoccerClub.Core
                 }
 
                 break;
+            }
+
+            return spend;
+        }
+
+        /// <summary>
+        /// サポートキャラ（秘書・GM）の提案に毎回「レベルアップ」「契約する」で応える遊び方を再現する。
+        /// 提案は施設・人事とも週に 1 回まで（ゲーム本体と同じ）。
+        /// </summary>
+        public SimulationSpend AcceptSupportForSimulation()
+        {
+            var spend = new SimulationSpend();
+            var suggestion = CurrentSupport;
+            if (suggestion == null) return spend;
+            if (!AcceptSupport(suggestion)) return spend;
+            if (suggestion.Kind == SupportKind.Front)
+            {
+                spend.Front++;
+                return spend;
+            }
+
+            switch (suggestion.Facility)
+            {
+                case FacilityKind.Stadium: spend.Stadium++; break;
+                case FacilityKind.TrainingGround: spend.TrainingGround++; break;
+                case FacilityKind.TrainingFacility: spend.TrainingFacility++; break;
+                case FacilityKind.Clubhouse: spend.Clubhouse++; break;
             }
 
             return spend;

@@ -349,6 +349,8 @@ namespace SoccerClub.Core
             _status = "右下の「1日進める」で日が進みます。シーズン中の休日は5秒、ウィンターブレイクとオフシーズンは1秒です。";
         }
 
+        float _companionRefresh;
+
         void TickCrowd(float deltaTime)
         {
             if (_crowd == null || Session == null) return;
@@ -371,6 +373,14 @@ namespace SoccerClub.Core
             }
 
             Session.CopyGroundAbsentees(Session.PlayerClub, _groundAbsentees);
+            // 恋人・夫婦の組は1秒ごとに取り直す（関係イベントや移籍で変わる）。
+            _companionRefresh -= deltaTime;
+            if (_companionRefresh <= 0f)
+            {
+                _companionRefresh = 1f;
+                Session.Relations.CopyCouples(Session.PlayerClub, _crowd.Companions);
+            }
+
             _crowd.Tick(deltaTime, Session.PlayerClub, _groundAbsentees, stageDeparture, hideNonSquad);
         }
 
@@ -539,7 +549,7 @@ namespace SoccerClub.Core
             bool holdNotice = seasonNotice && !_fullAuto;
             if (_phase == DayPhase.Idle && Session != null && Session.CurrentStory != null && !_dialogs.IsOpen)
                 OpenStoryPhase();
-            else if (_autoPlay && _phase == DayPhase.Idle && _dayElapsed < 0f && !holdDialog && !holdNotice)
+            else if (_autoPlay && _phase == DayPhase.Idle && _dayElapsed < 0f && !holdDialog && !holdNotice && !_miniEvents.HoldsDay)
                 BeginDayAdvance();
         }
 
@@ -2048,7 +2058,9 @@ namespace SoccerClub.Core
             bool castPresent = Session != null
                 && _crowd != null
                 && !Session.IsClosedPeriod(Session.Time.CurrentDate);
-            _miniEvents.Tick(Session, _crowd, castPresent, deltaTime);
+            // 友達イベントは、メイン画面が見えているときだけ（操作中でも）割り込ませる。
+            bool canShow = !CoveringScreen && !_dialogs.IsOpen;
+            _miniEvents.Tick(Session, _crowd, castPresent, deltaTime, canShow);
 
             Vector2 focus;
             bool follow = _miniEvents.TryCameraFocus(_crowd, out focus);

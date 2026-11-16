@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using SoccerClub.Core;
 using SoccerClub.Data;
@@ -18,6 +18,7 @@ namespace SoccerClub.Match
         /// <summary>同じ試合に一緒に出ている相手との関係で、実効攻撃・実効守備に掛ける上乗せ（いちばん強い関係の1つだけ）。</summary>
         public const double FriendChemistry = 0.01d;
         public const double LoverChemistry = 0.02d;
+        public const double BestFriendChemistry = 0.02d;
         public const double MarriedChemistry = 0.03d;
 
         readonly ILineupSelector _lineupSelector;
@@ -26,6 +27,11 @@ namespace SoccerClub.Match
 
         /// <summary>2人の関係の段階を返す。null なら連携の上乗せは無し。GameSession が設定する。</summary>
         public Func<Player, Player, RelationStage> RelationLookup { get; set; }
+
+        /// <summary>クラブごとの試合での強さの倍率（攻撃・守備にかける）。null なら 1。GameSession が設定する。</summary>
+        public Func<Club, double> ClubStrengthModifier { get; set; }
+
+        readonly Dictionary<Player, double> _teamFactor = new Dictionary<Player, double>();
 
         public MatchSimulationManager(ILineupSelector lineupSelector, GameRandom random = null)
         {
@@ -48,6 +54,7 @@ namespace SoccerClub.Match
             ResetSheetStamina(homeState.Sheet);
             ResetSheetStamina(awayState.Sheet);
             _chemistry.Clear();
+            SetTeamFactors(home, away);
             RefreshChemistry(homeState.Sheet);
             RefreshChemistry(awayState.Sheet);
             NoteAppeared(homeState.Sheet, homeAppeared);
@@ -102,6 +109,7 @@ namespace SoccerClub.Match
             var homeState = new MatchTeamState { Club = home, Sheet = _lineupSelector.BuildSheet(home) };
             var awayState = new MatchTeamState { Club = away, Sheet = _lineupSelector.BuildSheet(away) };
             _chemistry.Clear();
+            SetTeamFactors(home, away);
             RefreshChemistry(homeState.Sheet);
             RefreshChemistry(awayState.Sheet);
             ResolvePenalty(result, homeState, awayState);
@@ -301,7 +309,30 @@ namespace SoccerClub.Match
 
         double Chemistry(Player player)
         {
-            return player != null && _chemistry.TryGetValue(player, out var value) ? value : 1d;
+            if (player == null) return 1d;
+            double value = _chemistry.TryGetValue(player, out var chem) ? chem : 1d;
+            if (_teamFactor.TryGetValue(player, out var team)) value *= team;
+            return value;
+        }
+
+        /// <summary>試合の開始時に、両クラブの所属選手へクラブの倍率を割り当てる。倍率 1 のクラブは登録しない。</summary>
+        void SetTeamFactors(Club home, Club away)
+        {
+            _teamFactor.Clear();
+            var modifier = ClubStrengthModifier;
+            if (modifier == null) return;
+            AddTeamFactor(home, modifier(home));
+            AddTeamFactor(away, modifier(away));
+        }
+
+        void AddTeamFactor(Club club, double factor)
+        {
+            if (club == null || club.Squad == null || Math.Abs(factor - 1d) < 1e-9) return;
+            for (int i = 0; i < club.Squad.Count; i++)
+            {
+                var player = club.Squad[i];
+                if (player != null) _teamFactor[player] = factor;
+            }
         }
 
         /// <summary>スタメンの各選手について、一緒に出ている相手との一番強い関係の上乗せを決める。</summary>
@@ -353,6 +384,7 @@ namespace SoccerClub.Match
             {
                 case RelationStage.Married: return MarriedChemistry;
                 case RelationStage.Lover: return LoverChemistry;
+                case RelationStage.BestFriend: return BestFriendChemistry;
                 case RelationStage.Friend: return FriendChemistry;
                 default: return 0d;
             }

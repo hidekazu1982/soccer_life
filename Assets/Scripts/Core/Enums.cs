@@ -129,12 +129,16 @@ namespace SoccerClub.Core
         Female
     }
 
-    /// <summary>選手同士の関係の段階。None は親密度だけを持つ状態。</summary>
+    /// <summary>
+    /// 選手同士の関係の段階。None は親密度だけを持つ状態。
+    /// 異性は 友達→恋人→夫婦、同性は 友達→親友。セーブは数値で持つので、新しい段階は末尾に足す。
+    /// </summary>
     public enum RelationStage
     {
         None,
         Friend,
         Lover,
-        Married
+        Married,
+        BestFriend
     }
 }

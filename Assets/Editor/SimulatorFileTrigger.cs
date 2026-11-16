@@ -41,6 +41,8 @@ namespace SoccerClub.EditorTools
         static readonly List<double> _reliefs = new List<double>();
         static readonly List<double> _streaks = new List<double>();
         static readonly List<double> _allows = new List<double>();
+        static readonly List<double> _supports = new List<double>();
+        static readonly List<double> _firsts = new List<double>();
         static readonly List<double[]> _combos = new List<double[]>();
         static int _stepIndex;
         static readonly System.Text.StringBuilder _log = new System.Text.StringBuilder();
@@ -81,6 +83,8 @@ namespace SoccerClub.EditorTools
             _reliefs.Clear();
             _streaks.Clear();
             _allows.Clear();
+            _supports.Clear();
+            _firsts.Clear();
             try
             {
                 foreach (var raw in File.ReadAllLines(RequestPath))
@@ -89,14 +93,14 @@ namespace SoccerClub.EditorTools
                     int eq = line.IndexOf('=');
                     if (eq <= 0) continue;
                     var key = line.Substring(0, eq).Trim().ToLowerInvariant();
-                    if (key == "steps" || key == "train" || key == "house" || key == "rival" || key == "base" || key == "relief" || key == "streak" || key == "allow")
+                    if (key == "steps" || key == "train" || key == "house" || key == "rival" || key == "base" || key == "relief" || key == "streak" || key == "allow" || key == "support" || key == "first")
                     {
-                        var list = key == "steps" ? _steps : key == "train" ? _trains : key == "house" ? _houses : key == "rival" ? _rivals : key == "base" ? _bases : key == "relief" ? _reliefs : key == "streak" ? _streaks : _allows;
+                        var list = key == "steps" ? _steps : key == "train" ? _trains : key == "house" ? _houses : key == "rival" ? _rivals : key == "base" ? _bases : key == "relief" ? _reliefs : key == "streak" ? _streaks : key == "allow" ? _allows : key == "support" ? _supports : _firsts;
                         foreach (var part in line.Substring(eq + 1).Split(','))
                         {
                             double step;
                             if (double.TryParse(part.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out step)
-                                && (step > 1d || ((key == "rival" || key == "base") && step > 0d) || ((key == "relief" || key == "streak") && step >= 0d && step < 1d) || (key == "allow" && step >= 0d)))
+                                && (step > 1d || ((key == "rival" || key == "base") && step > 0d) || ((key == "relief" || key == "streak") && step >= 0d && step < 1d) || ((key == "allow" || key == "support") && step >= 0d) || (key == "first" && step > 0d)))
                                 list.Add(step);
                         }
 
@@ -124,6 +128,8 @@ namespace SoccerClub.EditorTools
                 if (_reliefs.Count == 0) _reliefs.Add(GameSession.DefaultRivalDroughtRelief);
                 if (_streaks.Count == 0) _streaks.Add(GameSession.DefaultRivalStreakBoost);
                 if (_allows.Count == 0) _allows.Add(SoccerClub.Data.Facility.DefaultLeagueLevelAllowance);
+                if (_supports.Count == 0) _supports.Add(0d);
+                if (_firsts.Count == 0) _firsts.Add(GameSession.DefaultFirstSeasonRivalScale);
                 _combos.Clear();
                 foreach (var st in _steps)
                     foreach (var tr in _trains)
@@ -133,7 +139,9 @@ namespace SoccerClub.EditorTools
                                     foreach (var rl in _reliefs)
                                         foreach (var sk in _streaks)
                                             foreach (var al in _allows)
-                                                _combos.Add(new[] { st, Math.Round(tr * 1000d), Math.Round(ho * 1000d), rv, bs, rl, sk, al });
+                                                foreach (var sp in _supports)
+                                                    foreach (var fs in _firsts)
+                                                        _combos.Add(new[] { st, Math.Round(tr * 1000d), Math.Round(ho * 1000d), rv, bs, rl, sk, al, sp, fs });
                 _stepIndex = 0;
                 _firstSeed = seed;
                 _nextSeed = seed;
@@ -169,6 +177,8 @@ namespace SoccerClub.EditorTools
             settings.Relief = _combos[_stepIndex][5];
             settings.Streak = _combos[_stepIndex][6];
             settings.Allowance = (int)Math.Round(_combos[_stepIndex][7]);
+            settings.FollowSupport = _combos[_stepIndex][8] > 0.5d;
+            settings.FirstSeasonRivalScale = _combos[_stepIndex][9];
             _sim = new HeadlessSimulator(settings);
             if (_nextSeed.HasValue) _nextSeed = _nextSeed.Value + 1;
             _watch = Stopwatch.StartNew();
@@ -226,6 +236,8 @@ namespace SoccerClub.EditorTools
                     + " relief=" + _sim.Settings.Relief.ToString("0.###", CultureInfo.InvariantCulture)
                     + " streak=" + _sim.Settings.Streak.ToString("0.###", CultureInfo.InvariantCulture)
                     + " allow=" + _sim.Settings.Allowance.ToString(CultureInfo.InvariantCulture)
+                    + (_sim.Settings.FollowSupport ? " support" : "")
+                    + " first=" + _sim.Settings.FirstSeasonRivalScale.ToString("0.###", CultureInfo.InvariantCulture)
                     + " seed=" + _sim.Settings.Seed + " " + _watch.Elapsed.TotalSeconds.ToString("0.0") + "s\n" + _sim.BuildSummary() + "csv: " + path);
                 return;
             }
@@ -241,6 +253,8 @@ namespace SoccerClub.EditorTools
                     + " relief=" + _sim.Settings.Relief.ToString("0.###", CultureInfo.InvariantCulture)
                     + " streak=" + _sim.Settings.Streak.ToString("0.###", CultureInfo.InvariantCulture)
                     + " allow=" + _sim.Settings.Allowance.ToString(CultureInfo.InvariantCulture)
+                    + (_sim.Settings.FollowSupport ? " support" : "")
+                    + " first=" + _sim.Settings.FirstSeasonRivalScale.ToString("0.###", CultureInfo.InvariantCulture)
                     + " seed=" + _sim.Settings.Seed + " " + _sim.Records.Count + "/" + _sim.Settings.Seasons + "  "
                     + _sim.Session.Time.CurrentDate.ToString("yyyy/MM/dd") + "  "
                     + _watch.Elapsed.TotalSeconds.ToString("0") + "s");

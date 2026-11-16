@@ -6,7 +6,8 @@ using SoccerClub.Data;
 namespace SoccerClub.Personnel
 {
     /// <summary>
-    /// 選手同士の関係（友達・恋人・夫婦）。毎月1日に親密度を更新し、段階を進める。
+    /// 選手同士の関係。異性は 友達→恋人→夫婦、同性は 友達→親友。毎月1日に親密度を更新し、段階を進める。
+    /// EventClubId のクラブ（プレイヤーのクラブ）だけは、友達になるのをメイン画面の友達イベントに任せる。
     /// プレイヤーは操作せず見守る。乱数は使わず、id と月から値を決める。
     /// </summary>
     public sealed class RelationshipService
@@ -23,6 +24,12 @@ namespace SoccerClub.Personnel
         public const int BreakUpThreshold = 40;
 
         public const int MarriageThreshold = 90;
+
+        /// <summary>同性の友達がこの値以上で親友になる（恋人と同じ値）。</summary>
+        public const int BestFriendThreshold = 60;
+
+        /// <summary>親友がこの値を下回ると友達に戻る（別れと同じ値）。</summary>
+        public const int BestFriendLossThreshold = 40;
 
         /// <summary>夫婦になるまでに、恋人でいる最短の月数（1シーズン）。</summary>
         public const int MarriageMonths = 12;
@@ -51,6 +58,12 @@ namespace SoccerClub.Personnel
 
         readonly List<Relationship> _list = new List<Relationship>();
         readonly Dictionary<(string, string), Relationship> _byPair = new Dictionary<(string, string), Relationship>();
+
+        /// <summary>
+        /// このクラブのトップチーム同士は、条件を満たしても段階が自動では進まない（友達・恋人・夫婦・親友）。
+        /// メイン画面の関係イベント（PromoteByEvent）で進む。後退（別れ・解消）は自動のまま。null なら全クラブ自動。
+        /// </summary>
+        public string EventClubId { get; set; }
 
         /// <summary>段階が変わったとき。2つ目の引数は変わる前の段階。通知・UI用。</summary>
         public event Action<Relationship, RelationStage> StageChanged;
@@ -103,6 +116,139 @@ namespace SoccerClub.Personnel
             return result;
         }
 
+        /// <summary>恋人・夫婦（どちらか1人だけの相手）か。親友は何人いてもよいので含めない。</summary>
+        public static bool IsPartner(RelationStage stage)
+        {
+            return stage == RelationStage.Lover || stage == RelationStage.Married;
+        }
+
+        /// <summary>
+        /// club のトップチームにいる恋人・夫婦の組を dest に入れる（両方の id から相手の id を引ける）。
+        /// メイン画面で一緒に歩かせるのに使う。
+        /// </summary>
+        public void CopyCouples(Club club, Dictionary<string, string> dest)
+        {
+            if (dest == null) return;
+            dest.Clear();
+            if (club == null || club.Squad == null) return;
+            var members = new HashSet<string>();
+            for (int i = 0; i < club.Squad.Count; i++)
+            {
+                var p = club.Squad[i];
+                if (p != null && !string.IsNullOrEmpty(p.Id)) members.Add(p.Id);
+            }
+
+            for (int i = 0; i < _list.Count; i++)
+            {
+                var rel = _list[i];
+                if (!IsPartner(rel.Stage)) continue;
+                if (!members.Contains(rel.PlayerIdA) || !members.Contains(rel.PlayerIdB)) continue;
+                dest[rel.PlayerIdA] = rel.PlayerIdB;
+                dest[rel.PlayerIdB] = rel.PlayerIdA;
+            }
+        }
+
+        /// <summary>関係イベントを待っている組と、イベントで進む先の段階。</summary>
+        public struct EventCandidate
+        {
+            public Relationship Rel;
+            public RelationStage Next;
+        }
+
+        /// <summary>
+        /// club のトップチーム同士で、段階が進む条件を満たしてイベントを待っている組。
+        /// 友達（None→30以上）、親友（同性の友達→60以上）、恋人（異性の友達→60以上・18歳以上・お互い相手なし）、
+        /// 夫婦（恋人→90以上・恋人になって12か月以上）。
+        /// </summary>
+        public List<EventCandidate> EventCandidates(Club club, DateTime today)
+        {
+            var result = new List<EventCandidate>();
+            if (club == null || club.Squad == null) return result;
+            var members = new Dictionary<string, Player>();
+            for (int i = 0; i < club.Squad.Count; i++)
+            {
+                var p = club.Squad[i];
+                if (p != null && !string.IsNullOrEmpty(p.Id)) members[p.Id] = p;
+            }
+
+            var partnered = new HashSet<string>();
+            for (int i = 0; i < _list.Count; i++)
+            {
+                var rel = _list[i];
+                if (!IsPartner(rel.Stage)) continue;
+                partnered.Add(rel.PlayerIdA);
+                partnered.Add(rel.PlayerIdB);
+            }
+
+            for (int i = 0; i < _list.Count; i++)
+            {
+                var rel = _list[i];
+                if (!members.TryGetValue(rel.PlayerIdA, out var a) || !members.TryGetValue(rel.PlayerIdB, out var b)) continue;
+                var next = NextStage(rel, a, b, partnered, today);
+                if (next != RelationStage.None) result.Add(new EventCandidate { Rel = rel, Next = next });
+            }
+
+            return result;
+        }
+
+        /// <summary>条件を満たしていれば進む先の段階。進めなければ None。</summary>
+        static RelationStage NextStage(Relationship rel, Player a, Player b, HashSet<string> partnered, DateTime today)
+        {
+            switch (rel.Stage)
+            {
+                case RelationStage.None:
+                    return rel.Affinity >= FriendThreshold ? RelationStage.Friend : RelationStage.None;
+                case RelationStage.Friend:
+                    if (a.Gender == b.Gender)
+                        return rel.Affinity >= BestFriendThreshold ? RelationStage.BestFriend : RelationStage.None;
+                    if (rel.Affinity < LoverThreshold || a.Age < AdultAge || b.Age < AdultAge) return RelationStage.None;
+                    if (partnered.Contains(a.Id) || partnered.Contains(b.Id)) return RelationStage.None;
+                    return RelationStage.Lover;
+                case RelationStage.Lover:
+                    return rel.Affinity >= MarriageThreshold && MonthsSince(rel.Since, today) >= MarriageMonths
+                        ? RelationStage.Married
+                        : RelationStage.None;
+                default:
+                    return RelationStage.None;
+            }
+        }
+
+        /// <summary>関係イベントの結果。いまも条件を満たしているときだけ段階を進める。</summary>
+        public bool PromoteByEvent(Club club, string a, string b, RelationStage next, DateTime today)
+        {
+            var list = EventCandidates(club, today);
+            for (int i = 0; i < list.Count; i++)
+            {
+                var rel = list[i].Rel;
+                if (list[i].Next != next || !rel.Involves(a) || !rel.Involves(b) || a == b) continue;
+                ChangeStage(rel, next, today);
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 古いセーブで同性の恋人・夫婦になっている組を親友に直す。ロード直後に呼ぶ。
+        /// </summary>
+        public void ApplyGenderRules(IEnumerable<Player> players)
+        {
+            if (players == null) return;
+            var gender = new Dictionary<string, Gender>();
+            foreach (var p in players)
+            {
+                if (p != null && !string.IsNullOrEmpty(p.Id)) gender[p.Id] = p.Gender;
+            }
+
+            for (int i = 0; i < _list.Count; i++)
+            {
+                var rel = _list[i];
+                if (!IsPartner(rel.Stage)) continue;
+                if (!gender.TryGetValue(rel.PlayerIdA, out var ga) || !gender.TryGetValue(rel.PlayerIdB, out var gb)) continue;
+                if (ga == gb) rel.Stage = RelationStage.BestFriend;
+            }
+        }
+
         /// <summary>恋人か配偶者の id。いなければ null。</summary>
         public string PartnerOf(string playerId, out RelationStage stage)
         {
@@ -111,7 +257,7 @@ namespace SoccerClub.Personnel
             for (int i = 0; i < _list.Count; i++)
             {
                 var rel = _list[i];
-                if (rel.Stage < RelationStage.Lover || !rel.Involves(playerId)) continue;
+                if (!IsPartner(rel.Stage) || !rel.Involves(playerId)) continue;
                 stage = rel.Stage;
                 return rel.Other(playerId);
             }
@@ -139,10 +285,12 @@ namespace SoccerClub.Personnel
             var clubOf = new Dictionary<string, int>();
             int monthIndex = date.Year * 12 + date.Month;
             var touched = new HashSet<Relationship>();
+            int eventClub = -1;
 
             int clubCount = clubs == null ? 0 : clubs.Count;
             for (int c = 0; c < clubCount; c++)
             {
+                if (clubs[c] != null && !string.IsNullOrEmpty(EventClubId) && clubs[c].Id == EventClubId) eventClub = c;
                 var squad = clubs[c] != null ? clubs[c].Squad : null;
                 if (squad == null) continue;
                 for (int i = 0; i < squad.Count; i++)
@@ -194,7 +342,7 @@ namespace SoccerClub.Personnel
                 rel.Affinity = Clamp(rel.Affinity - SeparatedDecay, floor);
             }
 
-            UpdateStages(people, clubOf, date);
+            UpdateStages(people, clubOf, eventClub, date);
             SyncMarried(people.Values);
         }
 
@@ -232,13 +380,13 @@ namespace SoccerClub.Personnel
             return (int)Math.Round(baseGain, MidpointRounding.AwayFromZero) + ageBonus + positionBonus + noise;
         }
 
-        void UpdateStages(Dictionary<string, Player> people, Dictionary<string, int> clubOf, DateTime date)
+        void UpdateStages(Dictionary<string, Player> people, Dictionary<string, int> clubOf, int eventClub, DateTime date)
         {
             var partnered = new HashSet<string>();
             for (int i = 0; i < _list.Count; i++)
             {
                 var rel = _list[i];
-                if (rel.Stage < RelationStage.Lover) continue;
+                if (!IsPartner(rel.Stage)) continue;
                 partnered.Add(rel.PlayerIdA);
                 partnered.Add(rel.PlayerIdB);
             }
@@ -253,6 +401,10 @@ namespace SoccerClub.Personnel
                     partnered.Remove(rel.PlayerIdB);
                     ChangeStage(rel, RelationStage.Friend, date);
                 }
+                else if (rel.Stage == RelationStage.BestFriend && rel.Affinity < BestFriendLossThreshold)
+                {
+                    ChangeStage(rel, RelationStage.Friend, date);
+                }
                 else if (rel.Stage == RelationStage.Friend && rel.Affinity < FriendLossThreshold)
                 {
                     ChangeStage(rel, RelationStage.None, date);
@@ -263,11 +415,23 @@ namespace SoccerClub.Personnel
             for (int i = 0; i < _list.Count; i++)
             {
                 var rel = _list[i];
+                // プレイヤーのクラブ同士の組は、関係イベントが起きるまで段階が進まない。
+                if (WaitsForEvent(rel, clubOf, eventClub)) continue;
                 if (rel.Stage == RelationStage.None && rel.Affinity >= FriendThreshold)
                     ChangeStage(rel, RelationStage.Friend, date);
 
                 if (rel.Stage == RelationStage.Friend && rel.Affinity >= LoverThreshold)
-                    loverCandidates.Add(rel);
+                {
+                    bool sameGender = people.TryGetValue(rel.PlayerIdA, out var pa) && people.TryGetValue(rel.PlayerIdB, out var pb) && pa.Gender == pb.Gender;
+                    if (sameGender)
+                    {
+                        if (rel.Affinity >= BestFriendThreshold) ChangeStage(rel, RelationStage.BestFriend, date);
+                    }
+                    else
+                    {
+                        loverCandidates.Add(rel);
+                    }
+                }
                 else if (rel.Stage == RelationStage.Lover && rel.Affinity >= MarriageThreshold && MonthsSince(rel.Since, date) >= MarriageMonths)
                     ChangeStage(rel, RelationStage.Married, date);
             }
@@ -279,7 +443,7 @@ namespace SoccerClub.Personnel
                 var rel = loverCandidates[i];
                 if (partnered.Contains(rel.PlayerIdA) || partnered.Contains(rel.PlayerIdB)) continue;
                 if (!people.TryGetValue(rel.PlayerIdA, out var a) || !people.TryGetValue(rel.PlayerIdB, out var b)) continue;
-                if (a.Age < AdultAge || b.Age < AdultAge) continue;
+                if (a.Gender == b.Gender || a.Age < AdultAge || b.Age < AdultAge) continue;
                 if (!clubOf.TryGetValue(a.Id, out var clubA) || !clubOf.TryGetValue(b.Id, out var clubB) || clubA != clubB) continue;
                 ChangeStage(rel, RelationStage.Lover, date);
                 partnered.Add(rel.PlayerIdA);
@@ -291,6 +455,12 @@ namespace SoccerClub.Personnel
                 var rel = _list[i];
                 if (rel.Stage == RelationStage.None && rel.Affinity <= 0) RemoveAt(i);
             }
+        }
+
+        static bool WaitsForEvent(Relationship rel, Dictionary<string, int> clubOf, int eventClub)
+        {
+            if (eventClub < 0) return false;
+            return clubOf.TryGetValue(rel.PlayerIdA, out var a) && clubOf.TryGetValue(rel.PlayerIdB, out var b) && a == eventClub && b == eventClub;
         }
 
         void ChangeStage(Relationship rel, RelationStage next, DateTime date)
@@ -397,7 +567,7 @@ namespace SoccerClub.Personnel
                 Relationship.Order(save.PlayerIdA, save.PlayerIdB, out var first, out var second);
                 if (_byPair.ContainsKey((first, second))) continue;
                 int stage = save.Stage;
-                if (stage < (int)RelationStage.None || stage > (int)RelationStage.Married) stage = (int)RelationStage.None;
+                if (stage < (int)RelationStage.None || stage > (int)RelationStage.BestFriend) stage = (int)RelationStage.None;
                 var rel = new Relationship
                 {
                     PlayerIdA = first,

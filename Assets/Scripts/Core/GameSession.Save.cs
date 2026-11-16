@@ -64,6 +64,7 @@ namespace SoccerClub.Core
             WritePersonnel(file);
             WriteSupport(file);
             file.Relationships = _relations.Write();
+            file.LastFriendEventTicks = _lastRelationEvent == default ? 0 : _lastRelationEvent.Ticks;
             return file;
         }
 
@@ -134,6 +135,7 @@ namespace SoccerClub.Core
             session._pendingCut = ReadCut(file.PendingSponsorCut);
             // 無所属のキャリアやり直し（ReadPersonnel 内）で関係を消せるよう、先に読む。
             session._relations.Read(file.Relationships);
+            session._lastRelationEvent = file.LastFriendEventTicks > 0 ? new DateTime(file.LastFriendEventTicks) : default;
             session.ReadPersonnel(file);
             session.ReadSupport(file);
             var market = ReadStaffList(file.FrontMarket);
@@ -143,6 +145,8 @@ namespace SoccerClub.Core
             }
 
             // 古いセーブのミニイベントの結婚は、夫婦の関係に合わせて外す。
+            // 古いセーブで同性の恋人・夫婦になっている組は親友に直してから、夫婦の印を揃える。
+            session._relations.ApplyGenderRules(session.AllPlayers());
             session._relations.SyncMarried(session.AllPlayers());
             return session;
         }

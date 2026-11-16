@@ -33,6 +33,11 @@ namespace SoccerClubSim.EditorTools
         /// </summary>
         public static bool ForceAutomated;
 
+        /// <summary>
+        /// 自動ビルドで上げ方を指定したいときに使う。-1 = 指定なし、0 = 上げない、1 = +0.0.1、2 = +0.1.0
+        /// </summary>
+        public static int ForcedBump = -1;
+
         public void OnPreprocessBuild(BuildReport report)
         {
             if (report.summary.platform != BuildTarget.Android) return;
@@ -44,7 +49,13 @@ namespace SoccerClubSim.EditorTools
                 Debug.Log($"[ApkVersionBumper] バージョン「{current}」を基準の {BaseVersion} に置き換えます。");
             }
 
-            Bump bump = IsAutomatedBuild() ? Bump.Patch : AskBump(major, minor, patch);
+            Bump bump;
+            if (ForcedBump >= 0 && ForcedBump <= 2)
+                bump = (Bump)ForcedBump;
+            else if (IsAutomatedBuild())
+                bump = Bump.Patch;
+            else
+                bump = AskBump(major, minor, patch);
 
             switch (bump)
             {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
 using SoccerClub.Data;
@@ -37,7 +37,9 @@ namespace SoccerClub.Core
 
     /// <summary>
     /// サポートキャラ（Figma main の support と support_event）。
-    /// ・優先順位は 練習場、トレーニング室、クラブハウス、スタジアム、フロント人事。
+    /// ・施設のレベルアップは週に 1 回まで（前回施設を勧めた日から 7 日後以降。勧めた日のうちは出し続ける）。
+    ///   条件を満たす施設のうち、費用が最も安いものを勧める。施設を勧めない日はフロント人事を探す。
+    /// ・フロント人事も週に 1 回まで（前回人事を勧めた日から 7 日後以降。勧めた日のうちは出し続ける）。
     /// ・お金の判定は高速シミュレーターと同じ（資金が総年俸を下回らない範囲でだけ勧める）。
     /// ・スタジアムは、ホームの入場者が収容の 80% を超えているときだけ勧める。
     /// ・フロントは空き枠を先に勧める。空きがなければ、在籍 1 年以上の人より高レベルの候補との交代を勧める。
@@ -46,6 +48,12 @@ namespace SoccerClub.Core
     public sealed partial class GameSession
     {
         const int SupportTenureDays = 365;
+
+        /// <summary>施設のレベルアップを勧める間隔（日）。</summary>
+        const int SupportFacilityIntervalDays = 7;
+
+        /// <summary>フロント人事を勧める間隔（日）。</summary>
+        const int SupportFrontIntervalDays = 7;
 
         static readonly FacilityKind[] SupportFacilityOrder =
         {
@@ -57,6 +65,8 @@ namespace SoccerClub.Core
 
         readonly Dictionary<string, long> _supportSnooze = new Dictionary<string, long>();
         long _supportDoneTicks;
+        long _supportFacilityTicks;
+        long _supportFrontTicks;
 
         // 毎フレーム呼ばれるので、日付と資金が変わったときだけ探し直す。
         SupportSuggestion _supportCache;
@@ -131,26 +141,59 @@ namespace SoccerClub.Core
         SupportSuggestion FindSupport(long today)
         {
             PruneSupportSnooze(today);
+            return FindFacilitySupport(today) ?? FindWeeklyFrontSupport(today);
+        }
+
+        /// <summary>前回の人事の提案から 7 日たっていれば、空き枠、次に交代の順で探す。</summary>
+        SupportSuggestion FindWeeklyFrontSupport(long today)
+        {
+            // 提案した日はその日のうちは出し続け、次は 7 日後から。
+            if (_supportFrontTicks > 0
+                && today != _supportFrontTicks
+                && today < new DateTime(_supportFrontTicks).AddDays(SupportFrontIntervalDays).Ticks)
+                return null;
+
+            var best = FindFrontSupport(today, true) ?? FindFrontSupport(today, false);
+            if (best != null) _supportFrontTicks = today;
+            return best;
+        }
+
+        /// <summary>
+        /// 前回の施設の提案から 7 日たっていれば、条件を満たす施設のうち費用が最も安いものを勧める。
+        /// 費用が同じなら 練習場、トレーニング室、クラブハウス、スタジアムの順。
+        /// </summary>
+        SupportSuggestion FindFacilitySupport(long today)
+        {
+            // 提案した日はその日のうちは出し続け、次は 7 日後から。
+            if (_supportFacilityTicks > 0
+                && today != _supportFacilityTicks
+                && today < new DateTime(_supportFacilityTicks).AddDays(SupportFacilityIntervalDays).Ticks)
+                return null;
+
+            SupportSuggestion best = null;
             for (int i = 0; i < SupportFacilityOrder.Length; i++)
             {
                 var kind = SupportFacilityOrder[i];
                 if (kind == FacilityKind.Stadium && !HomeAttendanceExceedsCapacity()) continue;
                 if (!SimulationCanUpgrade(kind)) continue;
                 var facility = PlayerClub.Facilities.Get(kind);
-                var suggestion = new SupportSuggestion
+                var cost = facility.NextUpgradeCost();
+                string key = "F:" + (int)kind + ":" + (facility.Level + 1);
+                if (IsSnoozed(key, today)) continue;
+                if (best != null && cost >= best.Cost) continue;
+                best = new SupportSuggestion
                 {
                     Kind = SupportKind.Facility,
                     Facility = kind,
                     CurrentLevel = facility.Level,
                     TargetLevel = facility.Level + 1,
-                    Cost = facility.NextUpgradeCost(),
-                    Key = "F:" + (int)kind + ":" + (facility.Level + 1)
+                    Cost = cost,
+                    Key = key
                 };
-                if (IsSnoozed(suggestion.Key, today)) continue;
-                return suggestion;
             }
 
-            return FindFrontSupport(today, true) ?? FindFrontSupport(today, false);
+            if (best != null) _supportFacilityTicks = today;
+            return best;
         }
 
         /// <summary>
@@ -233,6 +276,8 @@ namespace SoccerClub.Core
         {
             if (file == null) return;
             file.SupportDoneTicks = _supportDoneTicks;
+            file.SupportFacilityTicks = _supportFacilityTicks;
+            file.SupportFrontTicks = _supportFrontTicks;
             file.SupportSnoozeKeys = new string[_supportSnooze.Count];
             file.SupportSnoozeUntil = new long[_supportSnooze.Count];
             int index = 0;
@@ -248,10 +293,14 @@ namespace SoccerClub.Core
         {
             _supportSnooze.Clear();
             _supportDoneTicks = 0;
+            _supportFacilityTicks = 0;
+            _supportFrontTicks = 0;
             _supportDirty = true;
             _supportCache = null;
             if (file == null) return;
             _supportDoneTicks = file.SupportDoneTicks;
+            _supportFacilityTicks = file.SupportFacilityTicks;
+            _supportFrontTicks = file.SupportFrontTicks;
             var keys = file.SupportSnoozeKeys;
             var until = file.SupportSnoozeUntil;
             int count = keys == null || until == null ? 0 : Math.Min(keys.Length, until.Length);

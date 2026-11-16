@@ -34,7 +34,7 @@ namespace SoccerClub.UI
     /// 重ね順は Figma と同じ: 頭（肌、髪色、線）→ 体（肌、4th、3rd、2nd、1st、線）→ 口 → 目。
     /// 頭は front_head_01〜 の髪型ごとに head_NN_skin / head_NN_hair / head_NN_line を持ち、ID から 1 つ選ぶ。
     /// スーツは Figma の character_suit（suit_front_NN_*）。1st スーツ、2nd シャツ、3rd ネクタイ、4th 靴。
-    /// スーツには待機と横歩きがまだ無いので、待機は suit_stand（無ければ前歩きの 1 コマ目）、横歩きは前歩きで代用する。
+    /// 横歩きは Figma の suit_side_walk（suit_side_NN_*）。待機はまだ無いので suit_stand（無ければ前歩きの 1 コマ目）で代用する。
     /// </summary>
     public sealed class AvatarLibrary
     {
@@ -112,6 +112,7 @@ namespace SoccerClub.UI
         Pose[] _side = new Pose[0];
         Pose _suitStand;
         Pose[] _suitFront = new Pose[0];
+        Pose[] _suitSide = new Pose[0];
 
         readonly Dictionary<int, Scaled> _scaled = new Dictionary<int, Scaled>();
         int _displayWidth;
@@ -130,6 +131,7 @@ namespace SoccerClub.UI
             _front = LoadSeries(layout, "front_");
             _side = LoadSeries(layout, "side_");
             _suitFront = LoadSeries(layout, "suit_front_");
+            _suitSide = LoadSeries(layout, "suit_side_");
             _suitStand = LoadPose(layout, "suit_stand")
                          ?? (_suitFront.Length > 0 ? _suitFront[0] : null);
             if (_suitFront.Length == 0) Debug.LogWarning("character_suit の部品が無いので、フロントもユニフォームで表示する: Resources/" + Folder);
@@ -217,7 +219,6 @@ namespace SoccerClub.UI
             var colors = suit ? SuitColorsFor(id, kit, hairColor) : Colors(id, kit, hairColor);
             var head = set.Heads[HeadIndex(id)];
             var front = suit ? set.SuitFront : set.Front;
-            // スーツの横歩きは無いので、前歩きのコマを横移動にも使う（同じテクスチャを共有する）。
             var frames = new AvatarFrames
             {
                 Stand = Compose(set, head, suit ? set.SuitStand : set.Stand, colors, false),
@@ -225,15 +226,17 @@ namespace SoccerClub.UI
             };
             for (int i = 0; i < front.Length; i++)
                 frames.WalkFront[i] = Compose(set, head, front[i], colors, false);
-            if (suit)
+            var side = suit ? set.SuitSide : set.Side;
+            if (side.Length == 0)
             {
+                // 横歩きの部品が無いときは、前歩きのコマを横移動にも使う（同じテクスチャを共有する）。
                 frames.WalkSide = frames.WalkFront;
                 return frames;
             }
 
-            frames.WalkSide = new Texture2D[set.Side.Length];
-            for (int i = 0; i < set.Side.Length; i++)
-                frames.WalkSide[i] = Compose(set, head, set.Side[i], colors, false);
+            frames.WalkSide = new Texture2D[side.Length];
+            for (int i = 0; i < side.Length; i++)
+                frames.WalkSide[i] = Compose(set, head, side[i], colors, false);
             return frames;
         }
 
@@ -396,7 +399,8 @@ namespace SoccerClub.UI
                 Front = map.Scale(_front),
                 Side = map.Scale(_side),
                 SuitStand = map.Scale(_suitStand),
-                SuitFront = map.Scale(_suitFront)
+                SuitFront = map.Scale(_suitFront),
+                SuitSide = map.Scale(_suitSide)
             };
             _scaled[height] = set;
             return set;
@@ -724,6 +728,7 @@ namespace SoccerClub.UI
             public ScaledPose[] Side;
             public ScaledPose SuitStand;
             public ScaledPose[] SuitFront;
+            public ScaledPose[] SuitSide;
         }
     }
 
