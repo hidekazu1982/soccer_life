@@ -21,6 +21,10 @@ namespace SoccerClub.UI
         const float CardPitch = 270f;
         const float CurrentCardY = 420f;
         static readonly Color PlayedCardColor = Hex(0xD1D1D6);
+        // 終わった試合は勝敗で色を変える。黒い文字が読めるよう明るめの青・赤・黄。
+        static readonly Color WinCardColor = Hex(0x9CC8FF);
+        static readonly Color DefeatCardColor = Hex(0xFFA8A8);
+        static readonly Color DrawCardColor = Hex(0xFFE27A);
         static readonly Color FutureCardColor = Hex(0xF2F2F7);
         static readonly Rect ScheduleHit = new Rect(CardX, -2000f, CardSize, 5080f);
 
@@ -84,6 +88,8 @@ namespace SoccerClub.UI
             public string Title;
             public bool Played;
             public string Result;
+            /// <summary>自クラブから見た勝敗。1 勝ち、0 分け、-1 負け。まだの試合は 0。</summary>
+            public int Outcome;
         }
 
         /// <summary>画面を開くたびに呼ぶ。日程と順位を取り直し、スクロールを今日の試合と自クラブの行に合わせる。</summary>
@@ -148,7 +154,8 @@ namespace SoccerClub.UI
                     Home = home,
                     Title = title,
                     Played = fixture.Result != null,
-                    Result = ResultText(fixture, home)
+                    Result = ResultText(fixture, home),
+                    Outcome = OutcomeOf(fixture, home)
                 });
             }
 
@@ -213,6 +220,23 @@ namespace SoccerClub.UI
         }
 
         /// <summary>自クラブから見た勝敗と「自分-相手」。PK 決着は数字のあとに PK を付ける。</summary>
+        static int OutcomeOf(Fixture fixture, bool home)
+        {
+            var result = fixture.Result;
+            if (result == null) return 0;
+            int mine = home ? result.HomeGoals : result.AwayGoals;
+            int theirs = home ? result.AwayGoals : result.HomeGoals;
+            return mine > theirs ? 1 : mine < theirs ? -1 : 0;
+        }
+
+        static Color CardColor(Card card)
+        {
+            if (!card.Played) return FutureCardColor;
+            if (card.Outcome > 0) return WinCardColor;
+            if (card.Outcome < 0) return DefeatCardColor;
+            return card.Result != null ? DrawCardColor : PlayedCardColor;
+        }
+
         static string ResultText(Fixture fixture, bool home)
         {
             var result = fixture.Result;
@@ -244,7 +268,7 @@ namespace SoccerClub.UI
 
         void DrawCard(Card card, float y, Func<int, Texture2D> emblemOf)
         {
-            Fill(new Rect(CardX, y, CardSize, CardSize), card.Played ? PlayedCardColor : FutureCardColor);
+            Fill(new Rect(CardX, y, CardSize, CardSize), CardColor(card));
             float center = CardX + CardSize * 0.5f;
             Label(center, y + 27.5f, card.Home ? "HOME" : "AWAY", _side);
 

@@ -114,6 +114,44 @@ namespace SoccerClub.UI
         Texture2D _tailUp;
 
         public bool Active => !string.IsNullOrEmpty(_speakerId);
+
+        /// <summary>
+        /// 関係イベント（友達・親友・恋人・夫婦）を mini_event_sp で見せている最中。
+        /// 歩いているキャラにはズームも吹き出しも出さず、GameRunner が立ち絵の画面を重ねる。
+        /// </summary>
+        public bool Spotlight => Active && _talkFriend;
+
+        /// <summary>mini_event_sp に渡す中身。</summary>
+        public sealed class SpotlightCue
+        {
+            public string LeftId;
+            public string LeftName;
+            public string LeftLine;
+            public string RightId;
+            public string RightName;
+            public string RightLine;
+            public string Result;
+            public int Beat;
+        }
+
+        readonly SpotlightCue _spotlight = new SpotlightCue();
+
+        public SpotlightCue CurrentSpotlight
+        {
+            get
+            {
+                if (!Spotlight) return null;
+                _spotlight.LeftId = _beatId[0];
+                _spotlight.LeftName = _beatName[0];
+                _spotlight.LeftLine = _beatLine[0];
+                _spotlight.RightId = _beatId[1];
+                _spotlight.RightName = _beatName[1];
+                _spotlight.RightLine = _beatLine[1];
+                _spotlight.Result = _beatCount > 2 ? _beatLine[2] : null;
+                _spotlight.Beat = _beat;
+                return _spotlight;
+            }
+        }
         public string SpeakerId => _speakerId;
 
         /// <summary>友達イベントを見せている最中。オートの日送りを始めずに待ってもらう。</summary>
@@ -176,6 +214,15 @@ namespace SoccerClub.UI
                 _nextAttempted = false;
             }
 
+            if (_gathering && _play.Armed && _play.Relation)
+            {
+                // 関係イベントは歩み寄りを待たずにすぐ始める。2人はそのまま歩かせる。
+                crowd.ReleaseStand(_play.A, _play.B);
+                StartTalk();
+                QueueNext(session, crowd);
+                return;
+            }
+
             if (_gathering)
             {
                 if (!_play.Armed || crowd.StandLost(_play.A, _play.B))
@@ -202,7 +249,8 @@ namespace SoccerClub.UI
 
             if (Active)
             {
-                if (crowd.StandLost(_play.A, _play.B))
+                // 関係イベントは立ち絵で見せるので、歩いているキャラが画面から出ても続ける。
+                if (!_talkFriend && crowd.StandLost(_play.A, _play.B))
                 {
                     FinishTalk(session, crowd);
                     return;
@@ -409,7 +457,7 @@ namespace SoccerClub.UI
         public bool TryCameraFocus(GroundCrowd crowd, out Vector2 focus)
         {
             focus = _heldFocus;
-            if (!Active) return false;
+            if (!Active || _talkFriend) return false;
             Vector2 live;
             if (crowd != null && crowd.TryFocusPoint(_speakerId, out live))
             {

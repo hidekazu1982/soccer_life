@@ -186,6 +186,7 @@ namespace SoccerClub.Core
         float _viewZoom = 1f;
         Vector2 _viewOrigin;
         readonly MiniEventDirector _miniEvents = new MiniEventDirector();
+        readonly MiniEventSpotlight _spotlight = new MiniEventSpotlight();
         Font _font;
         string _bootError;
         bool _worldUiReady;
@@ -776,7 +777,8 @@ namespace SoccerClub.Core
             UseMainWorld();
             _mainScreen.DrawScenery(club);
             bool hideCast = Session.IsClosedPeriod(Session.Time.CurrentDate);
-            string talking = _miniEvents.Active ? _miniEvents.SpeakerId : null;
+            // 関係イベントは立ち絵で見せるので、歩いているキャラは話す動きをさせない。
+            string talking = _miniEvents.Active && !_miniEvents.Spotlight ? _miniEvents.SpeakerId : null;
             if (_crowd != null && !hideCast)
                 _crowd.Draw(_dayElapsed, true, talking);
             _mainScreen.DrawClubhouse(club);
@@ -838,6 +840,8 @@ namespace SoccerClub.Core
             DrawFullAutoButton(MainFullAutoAnchor);
             DrawDebugMenu();
             DrawDayControl();
+            if (!hideCast)
+                DrawMiniEventSpotlight();
             if (_dialogs.IsOpen)
             {
                 UseUiScreen();
@@ -950,9 +954,22 @@ namespace SoccerClub.Core
             return new Vector2((screenX - offsetX) / uiScale, (screenY - offsetY) / uiScale);
         }
 
+        /// <summary>友達・親友・恋人・夫婦のイベント（mini_event_sp）。メイン画面の上に2人の立ち絵を重ねる。</summary>
+        void DrawMiniEventSpotlight()
+        {
+            var cue = _miniEvents.CurrentSpotlight;
+            if (cue == null)
+            {
+                _spotlight.Clear();
+                return;
+            }
+
+            _spotlight.Draw(Session, cue, _font);
+        }
+
         void DrawCharacterMessage(Club club)
         {
-            if (club == null || _crowd == null || !_miniEvents.Active) return;
+            if (club == null || _crowd == null || !_miniEvents.Active || _miniEvents.Spotlight) return;
             Vector2 head;
             if (!_crowd.TryHeadPoint(_miniEvents.SpeakerId, out head)) return;
             _miniEvents.Draw(
@@ -1668,12 +1685,28 @@ namespace SoccerClub.Core
         }
 
         // log。Figma main の 31,252 / 405×368。キャラクター詳細を開いているときは重なるので出さない。
+        // 横長のスマホでは左端にインカメラが来るので、セーフエリアの分（分からなければ 90）右へずらす。
+        const float PhoneCameraMargin = 90f;
+
         static Vector2 GrowthLogOrigin
         {
             get
             {
                 var rect = ShiftLeft(PinTop(new Rect(31f, 252f, 405f, 368f)));
-                return new Vector2(rect.x, rect.y);
+                return new Vector2(rect.x + LeftCameraInset, rect.y);
+            }
+        }
+
+        /// <summary>画面の左端からインカメラ（切り欠き）を避ける幅。基準座標の px。画面が 16:9 より横長のときだけ。</summary>
+        static float LeftCameraInset
+        {
+            get
+            {
+                if (HorizontalEdgeInset <= 0f || Screen.width <= 0 || Screen.height <= 0) return 0f;
+                float uiScale = Mathf.Min(Screen.width / (float)ReferenceWidth, Screen.height / (float)ReferenceHeight);
+                if (uiScale <= 0f) return 0f;
+                float safeLeft = Screen.safeArea.xMin / uiScale;
+                return Mathf.Max(safeLeft, PhoneCameraMargin);
             }
         }
 
@@ -1892,6 +1925,7 @@ namespace SoccerClub.Core
             && !_supportOpen
             && !_fullAuto
             && !_dialogs.IsOpen
+            && !_miniEvents.Spotlight
             && (_phase == DayPhase.Idle || (_phase == DayPhase.Advancing && !_matchScreen))
             && (_crowd == null || _crowd.SelectedId == null)
             && Session.CurrentStory == null
