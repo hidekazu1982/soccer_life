@@ -39,6 +39,12 @@ namespace SoccerClub.Core
         public string TicketKey;
         public string CampKey;
         public string RenewalKey;
+
+        /// <summary>契約満了の会議室をまだ見せていない選手。</summary>
+        public PlayerSave[] ExpiryQueue;
+
+        /// <summary>最後に出した季節のイベント（年:id）。</summary>
+        public string SeasonalKey;
         public WindowDealSave[] Deals;
         public ClubStorySave Story;
         public PlayerSave[] FreeAgents;
@@ -55,12 +61,20 @@ namespace SoccerClub.Core
         public long SupportFacilityTicks;
         /// <summary>フロント人事を最後に提案した日。0 は未提案。</summary>
         public long SupportFrontTicks;
+        /// <summary>選ぶまで出し続けている提案のキー。なければ null（古いセーブも null）。</summary>
+        public string SupportPendingKey;
         public string[] SupportSnoozeKeys;
         public long[] SupportSnoozeUntil;
         // 選手同士の関係（友達・恋人・夫婦）。古いセーブでは null。
         public RelationshipSave[] Relationships;
         /// <summary>最後に関係イベント（友達・恋人・夫婦・親友）が起きた日。0 は未発生。名前は互換のため据え置き。</summary>
         public long LastFriendEventTicks;
+
+        /// <summary>居残り練習を抽選した週（月曜）。0 は未抽選。</summary>
+        public long ExtraPracticeWeekTicks;
+
+        /// <summary>その週に居残り練習をする日。0 はその週は無し。</summary>
+        public long ExtraPracticeDayTicks;
     }
 
     [Serializable]

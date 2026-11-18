@@ -28,6 +28,9 @@ namespace SoccerClubSim.EditorTools
         // ドライブに置くファイル名の接頭辞
         const string FileNamePrefix = "soccer_life";
 
+        // ドライブに APK を残す日数（これより古いものは、最新版を除いて削除）
+        const int KeepDays = 14;
+
         // 他のポストプロセスより後に動かす
         public int callbackOrder => 1000;
 
@@ -122,6 +125,37 @@ namespace SoccerClubSim.EditorTools
             long sizeMb = new FileInfo(dst).Length / (1024 * 1024);
             Debug.Log($"[ApkDriveUploader] Google ドライブへコピーしました（{sizeMb} MB）: {dst}\n" +
                       "アップロードはパソコン版 Google ドライブがバックグラウンドで行います。");
+
+            DeleteOldApks(folder, dst);
+        }
+
+        // 作ってから KeepDays 日を過ぎた APK をドライブから消す。最新版（今コピーしたもの）は必ず残す。
+        // パソコン版 Google ドライブで消したファイルは、ドライブのゴミ箱に 30 日間残る。
+        static void DeleteOldApks(string folder, string newest)
+        {
+            DateTime limit = DateTime.Now.AddDays(-KeepDays);
+            int deleted = 0;
+
+            foreach (string file in Directory.GetFiles(folder, "*.apk"))
+            {
+                if (string.Equals(Path.GetFullPath(file), Path.GetFullPath(newest), StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (File.GetLastWriteTime(file) >= limit) continue;
+
+                try
+                {
+                    File.Delete(file);
+                    deleted++;
+                    Debug.Log($"[ApkDriveUploader] {KeepDays} 日を過ぎた APK を削除しました: {Path.GetFileName(file)}");
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[ApkDriveUploader] 古い APK を削除できませんでした: {Path.GetFileName(file)} ({e.Message})");
+                }
+            }
+
+            if (deleted > 0)
+                Debug.Log($"[ApkDriveUploader] 古い APK を {deleted} 件削除しました（{KeepDays} 日より前のもの）");
         }
 
         static string SanitizeFileName(string s)

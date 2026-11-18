@@ -413,6 +413,8 @@ namespace SoccerClub.Core
                 if (_pending.ContainsKey(player.Id)) continue;
                 _pending[player.Id] = RollOne(PlayerClub, player, false, rivalLevel);
             }
+
+            RollExtraPractice();
         }
 
         void RollRoster(Club club, List<Player> roster, bool academy, int? forcedLevel, bool restAfterMatch)
@@ -607,6 +609,7 @@ namespace SoccerClub.Core
             bool monthEnd = closing.Day == DateTime.DaysInMonth(closing.Year, closing.Month);
 
             FinishGrowth();
+            ApplyExtraPractice();
             EnsureContracts();
             var fixtures = Calendar.PlayDate(Time.CurrentDate);
             ApplyMatchConsequences(fixtures);

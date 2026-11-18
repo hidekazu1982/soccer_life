@@ -60,9 +60,11 @@ namespace SoccerClubSim.EditorTools
             if (EditorApplication.timeSinceStartup >= nextRequestCheck)
             {
                 nextRequestCheck = EditorApplication.timeSinceStartup + 5;
-                if (File.Exists(RequestPath) && !IsBusy)
+                if (File.Exists(RequestPath))
                 {
-                    HandleRequest();
+                    // 未コンパイルの変更があるとビルドが失敗するので、先に取り込んでコンパイルを待つ
+                    if (!IsBusy) AssetDatabase.Refresh();
+                    if (!IsBusy) HandleRequest();
                     return;
                 }
             }
@@ -81,6 +83,10 @@ namespace SoccerClubSim.EditorTools
             // 作業中・コンパイル中・プレイ中は次の確認まで待つ（30 分の枠内で再挑戦）
             if (IsBusy) return;
 
+            // 未コンパイルの変更を取り込む。コンパイルが始まったら次の確認まで待つ
+            AssetDatabase.Refresh();
+            if (IsBusy) return;
+
             EditorPrefs.SetString(PrefKeyLastDate, today);
 
             if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.Android)
@@ -96,9 +102,51 @@ namespace SoccerClubSim.EditorTools
                 return;
             }
 
-            WriteStatus($"START 変更あり（例: {changed}）");
-            RunBuild(1);
+            int autoBump = DecideBumpFromMemo(out string reason);
+            WriteStatus($"START 変更あり（例: {changed}） → {BumpLabel(autoBump)}（{reason}）");
+            RunBuild(autoBump);
         }
+
+        // ---------- バージョンの自動判定 ----------
+        // CHANGES_NEXT.md（リリースノートの元になる変更メモ）を見て決める。
+        //   新機能 +0.1.0 : 「追加」「新設」「導入」「新機能」を含む行がある（台詞・文言などの追加は除く）
+        //   機能修正 +0.0.1 : それ以外（メモがない場合も含む）
+        static readonly string[] MinorWords = { "追加", "新設", "導入", "新機能" };
+        static readonly string[] MinorExemptWords = { "台詞", "セリフ", "文言", "テキスト", "パターン", "翻訳" };
+
+        static string MemoPath => Path.Combine(ProjectRoot, "CHANGES_NEXT.md");
+
+        static int DecideBumpFromMemo(out string reason)
+        {
+            if (!File.Exists(MemoPath))
+            {
+                reason = "変更メモなし";
+                return 1;
+            }
+
+            int lines = 0;
+            foreach (string raw in File.ReadAllLines(MemoPath, System.Text.Encoding.UTF8))
+            {
+                string line = raw.Trim().TrimStart('﻿');
+                if (line.Length == 0 || line.StartsWith("#")) continue;
+                lines++;
+
+                bool hasMinor = MinorWords.Any(w => line.Contains(w));
+                bool exempt = MinorExemptWords.Any(w => line.Contains(w));
+                if (hasMinor && !exempt)
+                {
+                    string shortLine = line.Length > 40 ? line.Substring(0, 40) + "…" : line;
+                    reason = $"新機能の行あり: {shortLine}";
+                    return 2;
+                }
+            }
+
+            reason = lines == 0 ? "変更メモなし" : $"修正・調整のみ（{lines} 行）";
+            return 1;
+        }
+
+        static string BumpLabel(int bump) =>
+            bump == 2 ? "新機能 +0.1.0" : bump == 0 ? "上げない" : "機能修正 +0.0.1";
 
         static void HandleRequest()
         {
@@ -120,9 +168,15 @@ namespace SoccerClubSim.EditorTools
                 return;
             }
 
-            int bump = text == "minor" ? 2 : text == "none" ? 0 : 1;
-            string label = bump == 2 ? "新機能 +0.1.0" : bump == 0 ? "上げない" : "機能修正 +0.0.1";
-            WriteStatus($"START 依頼ビルド（{label}）");
+            // 中身: auto（または空）= 変更メモから自動判定 / minor / patch / none
+            int bump;
+            string reason = "指定";
+            if (text == "minor") bump = 2;
+            else if (text == "patch") bump = 1;
+            else if (text == "none") bump = 0;
+            else bump = DecideBumpFromMemo(out reason);
+
+            WriteStatus($"START 依頼ビルド（{BumpLabel(bump)}、{reason}）");
             RunBuild(bump);
         }
 
@@ -130,6 +184,12 @@ namespace SoccerClubSim.EditorTools
         static void RunBuild(int bump)
         {
             running = true;
+
+            // 失敗したら番号を戻せるように覚えておく
+            string prevVersion = PlayerSettings.bundleVersion;
+            int prevCode = PlayerSettings.Android.bundleVersionCode;
+            bool succeeded = false;
+
             try
             {
                 string[] scenes = EditorBuildSettings.scenes
@@ -158,10 +218,11 @@ namespace SoccerClubSim.EditorTools
                     options = BuildOptions.None
                 });
 
-                if (report.summary.result == BuildResult.Succeeded)
+                succeeded = report.summary.result == BuildResult.Succeeded;
+                if (succeeded)
                     WriteStatus($"SUCCESS v{PlayerSettings.bundleVersion} {OutputPath}");
                 else
-                    WriteStatus($"FAIL {report.summary.result} errors={report.summary.totalErrors}");
+                    WriteStatus($"FAIL {report.summary.result} errors={report.summary.totalErrors}（番号は v{prevVersion} に戻しました）");
             }
             catch (Exception e)
             {
@@ -170,6 +231,12 @@ namespace SoccerClubSim.EditorTools
             }
             finally
             {
+                if (!succeeded && PlayerSettings.bundleVersion != prevVersion)
+                {
+                    PlayerSettings.bundleVersion = prevVersion;
+                    PlayerSettings.Android.bundleVersionCode = prevCode;
+                    AssetDatabase.SaveAssets();
+                }
                 ApkVersionBumper.ForceAutomated = false;
                 ApkVersionBumper.ForcedBump = -1;
                 running = false;

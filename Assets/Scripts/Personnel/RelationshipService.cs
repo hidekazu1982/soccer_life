@@ -229,6 +229,23 @@ namespace SoccerClub.Personnel
         }
 
         /// <summary>
+        /// イベント（居残り練習など）で親密度を足す。関係が無ければ作る。段階は変えない
+        /// （自クラブ同士は条件を満たせば関係イベントの候補になり、他は月初の更新で進む）。
+        /// </summary>
+        public void AddAffinity(string a, string b, int amount, DateTime date)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b) || a == b || amount == 0) return;
+            var rel = Find(a, b);
+            if (rel == null)
+            {
+                if (amount < 0) return;
+                rel = Add(a, b, date);
+            }
+
+            rel.Affinity = Clamp(rel.Affinity + amount, rel.Stage == RelationStage.Married ? MarriedFloor : 0);
+        }
+
+        /// <summary>
         /// 古いセーブで同性の恋人・夫婦になっている組を親友に直す。ロード直後に呼ぶ。
         /// </summary>
         public void ApplyGenderRules(IEnumerable<Player> players)

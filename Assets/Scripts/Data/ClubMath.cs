@@ -524,6 +524,36 @@ namespace SoccerClub.Data
             }
         }
 
+        /// <summary>
+        /// 自クラブの移籍（放出）イベントで残す最低人数。GK2・DF5・MF5・FW3（計15人）。
+        /// 放出したあとも全グループがこの人数を下回らなければ、移籍イベントを出してよい。
+        /// </summary>
+        public static int TransferGroupFloor(PositionGroup group)
+        {
+            switch (group)
+            {
+                case PositionGroup.GK: return 2;
+                case PositionGroup.DF: return 5;
+                case PositionGroup.MF: return 5;
+                default: return 3;
+            }
+        }
+
+        /// <summary>この選手を放出しても、全ポジショングループが TransferGroupFloor を下回らない。</summary>
+        public static bool TransferKeepsFloors(Club club, Player player)
+        {
+            if (club == null || club.Squad == null || player == null) return false;
+            var leaving = PositionUtility.GroupOf(player.PreferredPosition);
+            foreach (PositionGroup group in Enum.GetValues(typeof(PositionGroup)))
+            {
+                int count = SquadGroupCount(club, group);
+                if (group == leaving) count--;
+                if (count < TransferGroupFloor(group)) return false;
+            }
+
+            return true;
+        }
+
         /// <summary>所属選手のうち、得意ポジションがそのグループの人数。</summary>
         public static int SquadGroupCount(Club club, PositionGroup group)
         {

@@ -4,7 +4,10 @@ using UnityEngine;
 
 namespace SoccerClub.UI
 {
-    /// <summary>会議室での補強と移籍。GMは右に立ち、強化部と選手が左から入る。</summary>
+    /// <summary>
+    /// 会議室での補強と移籍。Figma の meeting_event。GMは右に立ち、強化部と選手が左から入る。
+    /// 立ち絵は character3（1218 角）を左 -97,0 / 右 820,0 に置き、セリフは立ち絵の下の枠に出す。
+    /// </summary>
     public sealed class MeetingRoomView
     {
         public const float SlideSeconds = 0.6f;
@@ -14,34 +17,59 @@ namespace SoccerClub.UI
         public const float CenterSeconds = 1.6f;
         public const float DialogSeconds = 3.4f;
 
-        const float CharacterY = 247f;
-        const float CharacterW = 692f;
-        const float CharacterH = 971f;
-        const float LeftRestX = 200f;
-        const float RightX = 1028f;
-        // 画面外の待機位置。16:9 より横長の端末では背景が左右に広がるので、その分さらに外へ出す。
-        const float OffXBase = -740f;
+        // character_l / character_r（203:10 / 172:92）。1218 角を -97,0 と 820,0 に置く。
+        // シートは 2048 角の中の 212,46 / 1622×1998 なので、1218/2048 倍した位置（SponsorOfferView と同じ）。
+        const float SheetScale = 1218f / 2048f;
+        const float LeftFrameX = -97f;
+        const float RightFrameX = 820f;
+        const float FrameY = 0f;
+        // 画面外の待機位置（1218 角の枠の左端）。16:9 より横長の端末では背景が左右に広がるので、その分さらに外へ出す。
+        const float OffXBase = -1220f;
         static float OffX => OffXBase - GameRunner.HorizontalEdgeInset;
 
-        static readonly Rect LeftBubble = new Rect(143f, 88f, 800f, 160f);
-        // 吹き出しの帯。Figma sponsor の message（吹き出し 112,848）から、部署 233 / 名前 391、高さ 60、上辺の中央に重ねる。
+        // character_message_l / character_message_r（203:2 / 184:40）。枠 800×200（白 90%・角丸 10）、
+        // 上辺に部署 200×60（黒）と名前 400×60（#D1D1D6）を重ね、本文は 720×120 の左寄せ。
+        static readonly Rect LeftBubble = new Rect(112f, 848f, 800f, 200f);
+        static readonly Rect RightBubble = new Rect(1029f, 848f, 800f, 200f);
+        const float PlateY = 818f;
         const float PlateHeight = 60f;
         const float DepartmentPlateOffset = 121f;
         const float DepartmentPlateWidth = 200f;
+        const float DepartmentTextOffset = 150f;
+        const float DepartmentTextWidth = 160f;
         const float NamePlateOffset = 279f;
         const float NamePlateWidth = 400f;
+        const float NameTextOffset = 329f;
+        const float NameTextWidth = 300f;
+        const float LineOffsetX = 40f;
+        const float LineOffsetY = 48f;
+        const float LineWidth = 720f;
+        const float LineHeight = 120f;
+        const float BoxRadius = 10f;
+        const float BoxAlpha = 0.9f;
         static readonly Color NamePlateColor = new Color(0xD1 / 255f, 0xD1 / 255f, 0xD6 / 255f, 1f);
         const string ScoutDepartment = "強化部";
         const string GmDepartment = "GM";
         const string PlayerDepartment = "選手";
-        static readonly Rect RightBubble = new Rect(971f, 87f, 800f, 160f);
-        static readonly Rect Banner = new Rect(640f, 309f, 640f, 155f);
-        static readonly Rect SuccessPanel = new Rect(480f, 466f, 960f, 240f);
-        static readonly Rect SuccessMessage = new Rect(534f, 499f, 852f, 78f);
-        static readonly Rect FeeBar = new Rect(780f, 593f, 360f, 32f);
-        static readonly Rect FeeLabel = new Rect(780f, 593f, 92f, 32f);
-        static readonly Rect SalaryBar = new Rect(780f, 641f, 360f, 32f);
-        static readonly Rect SalaryLabel = new Rect(780f, 641f, 92f, 32f);
+
+        // text（127:143）。上の中央、128px。
+        static readonly Rect Banner = new Rect(640f, 32f, 640f, 155f);
+        // contract_payment（203:40）。枠 1200×280、文は上から 2 行、金額は 2 段（ラベル 200×60 黒、金額 400×60 灰）。
+        static readonly Rect ResultPanel = new Rect(360f, 767f, 1200f, 280f);
+        static readonly Rect ResultMessage = new Rect(360f, 788f, 1200f, 78f);
+        const float AmountLabelX = 681f;
+        const float AmountLabelWidth = 200f;
+        const float AmountLabelTextX = 710f;
+        const float AmountLabelTextWidth = 160f;
+        const float AmountValueX = 839f;
+        const float AmountValueWidth = 400f;
+        const float AmountValueTextX = 909f;
+        const float AmountValueTextWidth = 320f;
+        const float AmountHeight = 60f;
+        const float FirstAmountY = 882f;
+        const float SecondAmountY = 958f;
+        // 移籍金は 1 段だけなので、2 段の真ん中に置く。
+        const float SingleAmountY = 920f;
 
         public struct Marks
         {
@@ -64,7 +92,6 @@ namespace SoccerClub.UI
 
         readonly AvatarLibrary _avatars = new AvatarLibrary();
         Texture2D _background;
-        Texture2D _disc;
         Texture2D _scoutPortrait;
         Texture2D _gmPortrait;
         Texture2D _playerPortrait;
@@ -80,13 +107,11 @@ namespace SoccerClub.UI
         bool _rightTalkingNext;
         bool _libraryLoaded;
 
-        GUIStyle _lineCenter;
-        GUIStyle _lineRight;
-        GUIStyle _name;
+        GUIStyle _line;
+        GUIStyle _plateText;
+        GUIStyle _department;
         GUIStyle _banner;
         GUIStyle _message;
-        GUIStyle _pillLabel;
-        GUIStyle _pillValue;
         Font _font;
 
         public static Marks Timeline(bool success)
@@ -136,6 +161,285 @@ namespace SoccerClub.UI
 
         public static float TransferResultAt => TransferTimeline(false).NegotiateEnd;
 
+        /// <summary>
+        /// 契約満了。GM が呼び出し（選手はまだいない）→ 選手が入る → あいさつ → GM が切り出す → 満了を伝える（「契約満了」）
+        /// → 選手の返事 → GM の見送り → 選手が出ていく。
+        /// </summary>
+        public static Marks ExpiryTimeline()
+        {
+            var marks = new Marks();
+            marks.ScoutTalkEnd = LineSeconds + 0.4f;                       // call
+            marks.PlayerInEnd = marks.ScoutTalkEnd + SlideSeconds;
+            marks.GreetEnd = marks.PlayerInEnd + LineSeconds;              // greet
+            marks.GmGreetEnd = marks.GreetEnd + LineSeconds + 0.6f;        // notice
+            marks.ResultEnd = marks.GmGreetEnd + LineSeconds + 0.6f;       // verdict
+            marks.PlayerReactEnd = marks.ResultEnd + LineSeconds + 0.8f;   // react
+            marks.GmReactEnd = marks.PlayerReactEnd + LineSeconds;         // farewell
+            marks.PlayerExitStart = marks.GmReactEnd;
+            marks.End = marks.PlayerExitStart + SlideSeconds + 0.4f;
+            return marks;
+        }
+
+        /// <summary>契約満了の文字が出る時刻。</summary>
+        public static float ExpiryResultAt => ExpiryTimeline().GmGreetEnd;
+
+        public static float ExpiryDuration => ExpiryTimeline().End;
+
+        string[] _expiryLines;
+
+        /// <summary>新年あいさつ。秘書が左から入り、あいさつ・チームの話・抱負を話す。</summary>
+        public static Marks NewYearTimeline()
+        {
+            var marks = new Marks();
+            marks.PlayerInEnd = SlideSeconds;
+            marks.GreetEnd = marks.PlayerInEnd + LineSeconds + 0.8f;   // greet
+            marks.GmGreetEnd = marks.GreetEnd + LineSeconds + 0.8f;    // review
+            marks.ResultEnd = marks.GmGreetEnd + LineSeconds + 0.8f;   // wish
+            marks.End = marks.ResultEnd + 0.6f;
+            return marks;
+        }
+
+        public static float NewYearDuration => NewYearTimeline().End;
+
+        static readonly string[] NewYearRoles = { "greet", "review", "wish" };
+
+        static readonly RoleLineCatalog NewYearLines = new RoleLineCatalog(
+            "NewYear.csv",
+            NewYearRoles,
+            new System.Collections.Generic.Dictionary<string, string>
+            {
+                { "greet", "オーナー、あけましておめでとうございます！" },
+                { "review", "前半戦、選手たちはよく頑張っていました。" },
+                { "wish", "今年もよろしくお願いします！" }
+            });
+
+        /// <summary>
+        /// 季節のイベント。選手（2人なら左右から同時に）が入り、line1（A）、line2（B。1人なら A）、line3（A）の順に話す。
+        /// line3 が無い会話は2つで終わる。
+        /// </summary>
+        public static Marks SeasonalTimeline(int lineCount)
+        {
+            var marks = new Marks();
+            marks.PlayerInEnd = SlideSeconds;
+            marks.GreetEnd = marks.PlayerInEnd + LineSeconds + 1.0f;      // line1
+            marks.GmGreetEnd = marks.GreetEnd + LineSeconds + 1.0f;       // line2
+            marks.ResultEnd = lineCount > 2 ? marks.GmGreetEnd + LineSeconds + 1.0f : marks.GmGreetEnd; // line3
+            marks.End = marks.ResultEnd + 0.6f;
+            return marks;
+        }
+
+        public static float SeasonalDuration(ClubStory story)
+        {
+            int season;
+            var script = SeasonalScript(story, out season);
+            return SeasonalTimeline(script != null ? script.LineCount : 2).End;
+        }
+
+        /// <summary>WindowKey「季節の id|会話の番号|B の id」から会話を引く。</summary>
+        static SeasonalCatalog.Script SeasonalScript(ClubStory story, out int index)
+        {
+            index = -1;
+            if (story == null || string.IsNullOrEmpty(story.WindowKey)) return null;
+            var parts = story.WindowKey.Split('|');
+            if (parts.Length < 2 || !int.TryParse(parts[1], out index)) return null;
+            var script = SeasonalCatalog.ScriptAt(index);
+            return script != null && script.SeasonId == parts[0] ? script : null;
+        }
+
+        static string SeasonalSeasonId(ClubStory story)
+        {
+            if (story == null || string.IsNullOrEmpty(story.WindowKey)) return null;
+            return story.WindowKey.Split('|')[0];
+        }
+
+        static string SeasonalPartnerId(ClubStory story)
+        {
+            if (story == null || string.IsNullOrEmpty(story.WindowKey)) return null;
+            var parts = story.WindowKey.Split('|');
+            return parts.Length >= 3 && parts[2].Length > 0 ? parts[2] : null;
+        }
+
+        // 右の画面外の待機位置（1218 角の枠の左端）。
+        static float OffRightX => GameRunner.ReferenceWidth + GameRunner.HorizontalEdgeInset;
+
+        // ---- 会議イベントにしたお知らせ（ウィンターブレイク・キャンプ・チケット代） ----
+
+        /// <summary>会議室で見せるお知らせの種類か。</summary>
+        public static bool IsNoticeKind(ClubStoryKind kind)
+        {
+            return kind == ClubStoryKind.WinterBreak || kind == ClubStoryKind.Camp || kind == ClubStoryKind.Ticket;
+        }
+
+        /// <summary>お知らせを話す人。ウィンターブレイクは秘書、キャンプは監督、チケット代は事業部（いちばんレベルの高い人）。</summary>
+        public static StaffMember NoticeSpeaker(GameSession session, ClubStoryKind kind, out string department)
+        {
+            department = "";
+            var club = session != null ? session.PlayerClub : null;
+            if (club == null) return null;
+            switch (kind)
+            {
+                case ClubStoryKind.WinterBreak:
+                    department = "秘書";
+                    return club.Front != null ? club.Front.Secretary : null;
+                case ClubStoryKind.Camp:
+                    department = "監督";
+                    return club.Team != null ? club.Team.Manager : null;
+                case ClubStoryKind.Ticket:
+                    department = "事業部";
+                    StaffMember best = null;
+                    var slots = club.Front != null ? club.Front.Business : null;
+                    if (slots != null)
+                    {
+                        for (int i = 0; i < slots.Length; i++)
+                        {
+                            if (slots[i] != null && (best == null || slots[i].Level > best.Level)) best = slots[i];
+                        }
+                    }
+
+                    return best;
+                default:
+                    return null;
+            }
+        }
+
+        public static Marks NoticeTimeline()
+        {
+            var marks = new Marks();
+            marks.PlayerInEnd = SlideSeconds;
+            marks.GreetEnd = marks.PlayerInEnd + LineSeconds + 1.0f;   // 1
+            marks.GmGreetEnd = marks.GreetEnd + LineSeconds + 1.2f;    // 2
+            marks.End = marks.GmGreetEnd + 0.6f;
+            return marks;
+        }
+
+        public static float NoticeDuration => NoticeTimeline().End;
+
+        static readonly RoleLineCatalog NoticeLines = new RoleLineCatalog(
+            "MeetingNotice.csv",
+            new[] { "winter.1", "winter.2", "camp.1", "camp.2", "ticket.1", "ticket.2" },
+            new System.Collections.Generic.Dictionary<string, string>
+            {
+                { "winter.1", "オーナー、ウィンターブレイクに入りました。" },
+                { "winter.2", "{start}から{end}までは試合がありません。" },
+                { "camp.1", "オーナー、開幕に向けたキャンプが始まりました。" },
+                { "camp.2", "1週間、しっかり鍛えて開幕を迎えます。" },
+                { "ticket.1", "オーナー、今シーズンのチケット代を決めました。" },
+                { "ticket.2", "{price}にしました。" }
+            });
+
+        StaffMember _noticeSpeaker;
+        string _noticeDepartment;
+        Texture2D _noticePortrait;
+        string[] _noticeLines;
+
+        void DrawNotice(ClubStory story, GameSession session, float time)
+        {
+            var marks = NoticeTimeline();
+            float leftX = time < marks.PlayerInEnd ? Move(OffX, LeftFrameX, 0f, time) : LeftFrameX;
+            DrawFigure(_noticePortrait, leftX, _leftTalking);
+            string name = _noticeSpeaker != null && !string.IsNullOrEmpty(_noticeSpeaker.Name) ? _noticeSpeaker.Name : _noticeDepartment;
+            if (_noticeLines == null)
+                _noticeLines = BuildNoticeLines(story.Kind, session, name);
+            if (time >= marks.PlayerInEnd && time < marks.GreetEnd)
+                DrawBubble(LeftBubble, _noticeDepartment, name, _noticeLines[0]);
+            else if (time >= marks.GreetEnd && time < marks.End)
+                DrawBubble(LeftBubble, _noticeDepartment, name, _noticeLines[1]);
+
+            switch (story.Kind)
+            {
+                case ClubStoryKind.WinterBreak:
+                    DrawBanner("ウィンターブレイク");
+                    break;
+                case ClubStoryKind.Camp:
+                    DrawBanner("キャンプ");
+                    break;
+                case ClubStoryKind.Ticket:
+                    DrawBanner("チケット代");
+                    // 金額は 2 つ目の台詞のあいだ、右側に 1 段で出す。
+                    if (time >= marks.GreetEnd && session != null && session.PlayerClub != null)
+                        DrawAmountAt(1180f, 640f, "チケット代", new System.Numerics.BigInteger(session.PlayerClub.TicketPrice));
+                    break;
+            }
+        }
+
+        static string[] BuildNoticeLines(ClubStoryKind kind, GameSession session, string speaker)
+        {
+            string prefix = kind == ClubStoryKind.WinterBreak ? "winter" : kind == ClubStoryKind.Camp ? "camp" : "ticket";
+            var club = session != null ? session.PlayerClub : null;
+            int rank = 0;
+            int teams = 0;
+            if (session != null && session.League != null && club != null)
+            {
+                var table = session.League.Table();
+                teams = table.Count;
+                rank = table.IndexOf(club) + 1;
+            }
+
+            string start = "";
+            string end = "";
+            if (session != null)
+            {
+                var season = session.CurrentSeasonStart;
+                start = SoccerClub.Time.WinterBreak.Start(season).ToString("MM/dd", System.Globalization.CultureInfo.InvariantCulture);
+                end = SoccerClub.Time.WinterBreak.End(season).ToString("MM/dd", System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            int seasonNo = session != null ? session.CurrentSeasonStart.Year - GameSession.SeasonStart.Year + 1 : 1;
+            bool first = seasonNo <= 1;
+            bool champion = session != null && session.TitleStreak > 0 && !first;
+            var tokens = new System.Collections.Generic.Dictionary<string, string>
+            {
+                { "speaker", speaker ?? "" },
+                { "club", club != null ? club.Name ?? "" : "" },
+                { "start", start },
+                { "end", end },
+                { "price", club != null ? MoneyText.Format(club.TicketPrice) : "" },
+                { "rank", rank.ToString() }
+            };
+            System.Func<string, bool> matches = condition =>
+            {
+                switch (condition)
+                {
+                    case "first_season": return first;
+                    case "champion": return champion;
+                    case "top3": return rank >= 1 && rank <= 3;
+                    case "lower": return rank >= 1 && teams > 0 && rank > teams / 2;
+                    default: return false;
+                }
+            };
+
+            var all = NoticeLines.Lines(matches, tokens, new System.Random(seasonNo * 17 + rank));
+            var roles = NoticeLines.Roles;
+            var result = new string[2];
+            for (int i = 0; i < roles.Count; i++)
+            {
+                if (roles[i] == prefix + ".1") result[0] = all[i];
+                else if (roles[i] == prefix + ".2") result[1] = all[i];
+            }
+
+            return result;
+        }
+
+        /// <summary>金額の 1 段を任意の位置に出す（ラベル 200×60 黒、金額 400×60 灰）。</summary>
+        void DrawAmountAt(float x, float y, string caption, System.Numerics.BigInteger amount)
+        {
+            float valueX = x + (AmountValueX - AmountLabelX);
+            Fill(new Rect(valueX, y, AmountValueWidth, AmountHeight), NamePlateColor, AmountHeight * 0.5f);
+            GUI.Label(new Rect(valueX + (AmountValueTextX - AmountValueX), y, AmountValueTextWidth, AmountHeight), MoneyText.Format(amount), _plateText);
+            Fill(new Rect(x, y, AmountLabelWidth, AmountHeight), Color.black, AmountHeight * 0.5f);
+            GUI.Label(new Rect(x + (AmountLabelTextX - AmountLabelX), y, AmountLabelTextWidth, AmountHeight), caption, _department);
+        }
+
+        Player _partner;
+        Texture2D _partnerPortrait;
+        Texture2D _seasonBackground;
+        string _seasonBackgroundPath;
+        string[] _seasonalLines;
+
+        StaffMember _secretary;
+        Texture2D _secretaryPortrait;
+        string[] _newYearLines;
+
         public static float TransferDuration(bool leaves) => TransferTimeline(leaves).End;
 
         public void Clear()
@@ -146,6 +450,16 @@ namespace SoccerClub.UI
             _gm = null;
             _focus = null;
             _onSheet = false;
+            _expiryLines = null;
+            _newYearLines = null;
+            _seasonalLines = null;
+            _noticeLines = null;
+            _noticeSpeaker = null;
+            DestroyTexture(ref _noticePortrait);
+            _partner = null;
+            DestroyTexture(ref _partnerPortrait);
+            _secretary = null;
+            DestroyTexture(ref _secretaryPortrait);
             DestroyTexture(ref _scoutPortrait);
             DestroyTexture(ref _gmPortrait);
             DestroyTexture(ref _playerPortrait);
@@ -159,8 +473,9 @@ namespace SoccerClub.UI
             EnsureCast(story, session);
             // 背景は 16:9 の枠ではなく実際の画面全体まで広げ、比率を保ったまま覆う。
             var screen = FullScreenRect();
-            if (_background != null)
-                GUI.DrawTexture(screen, _background, ScaleMode.ScaleAndCrop, false);
+            var background = story.Kind == ClubStoryKind.Seasonal ? SeasonBackground(story) ?? _background : _background;
+            if (background != null)
+                GUI.DrawTexture(screen, background, ScaleMode.ScaleAndCrop, false);
             else
             {
                 GUI.color = new Color(0.12f, 0.14f, 0.16f, 1f);
@@ -169,21 +484,51 @@ namespace SoccerClub.UI
             }
 
             bool transfer = story.Kind == ClubStoryKind.Transfer;
-            var marks = transfer ? TransferTimeline(outcome) : Timeline(outcome);
             float time = elapsed < 0f ? 0f : elapsed;
             _leftTalking = _leftTalkingNext;
             _rightTalking = _rightTalkingNext;
             _leftTalkingNext = false;
             _rightTalkingNext = false;
+            if (story.Kind == ClubStoryKind.ContractExpiry)
+            {
+                DrawExpiry(session, time);
+                return;
+            }
+
+            if (story.Kind == ClubStoryKind.NewYear)
+            {
+                DrawNewYear(session, time);
+                return;
+            }
+
+            if (story.Kind == ClubStoryKind.Seasonal)
+            {
+                DrawSeasonal(story, session, time);
+                return;
+            }
+
+            if (IsNoticeKind(story.Kind))
+            {
+                DrawNotice(story, session, time);
+                return;
+            }
+
+            var marks = transfer ? TransferTimeline(outcome) : Timeline(outcome);
             DrawFigures(time, marks, transfer ? outcome : !outcome);
             if (transfer)
                 DrawTransferLines(time, marks, outcome);
             else
                 DrawLines(story, time, marks, outcome);
             if (transfer && outcome && time >= marks.PlayerReactEnd)
+            {
+                DrawBanner("移籍決定");
                 DrawTransferDialog(story);
+            }
             else if (!transfer && outcome && time >= marks.GmReactEnd)
+            {
+                DrawBanner("獲得成功！");
                 DrawSuccess(story);
+            }
         }
 
         void DrawFigures(float time, Marks marks, bool slideOut)
@@ -193,35 +538,37 @@ namespace SoccerClub.UI
             if (!playerOn)
             {
                 if (time < marks.ScoutInEnd)
-                    leftX = Move(OffX, LeftRestX, 0f, time);
+                    leftX = Move(OffX, LeftFrameX, 0f, time);
                 else if (time < marks.GmTalkEnd)
-                    leftX = LeftRestX;
+                    leftX = LeftFrameX;
                 else
-                    leftX = Move(LeftRestX, OffX, marks.GmTalkEnd, time);
+                    leftX = Move(LeftFrameX, OffX, marks.GmTalkEnd, time);
             }
             else if (slideOut && time >= marks.PlayerExitStart)
-                leftX = Move(LeftRestX, OffX, marks.PlayerExitStart, time);
+                leftX = Move(LeftFrameX, OffX, marks.PlayerExitStart, time);
             else if (time < marks.PlayerInEnd)
-                leftX = Move(OffX, LeftRestX, marks.ScoutOutEnd, time);
+                leftX = Move(OffX, LeftFrameX, marks.ScoutOutEnd, time);
             else
-                leftX = LeftRestX;
+                leftX = LeftFrameX;
 
             var portrait = playerOn ? _playerPortrait : _scoutPortrait;
             DrawFigure(portrait, leftX, _leftTalking);
-            DrawFigure(_gmPortrait, RightX, _rightTalking);
+            DrawFigure(_gmPortrait, RightFrameX, _rightTalking);
         }
 
-        static void DrawFigure(Texture2D portrait, float x, bool talking)
+        /// <summary>frameX は 1218 角の枠の左端。シートはその中の 212,46 / 1622×1998（1218/2048 倍）に描く。</summary>
+        static void DrawFigure(Texture2D portrait, float frameX, bool talking)
         {
             if (portrait == null) return;
-            // シートは髪型のぶん左右に広い。高さを CharacterH に合わせ、体の中心を CharacterW の中央に置く。
-            float width = CharacterH * (portrait.width / (float)Mathf.Max(1, portrait.height));
-            float left = x + (CharacterW - width) * 0.5f;
-            // 体の枠（CharacterW）が実際の画面（背景を広げた範囲）の外にあるときは描かない。
+            var rect = new Rect(
+                frameX + 212f * SheetScale,
+                FrameY + 46f * SheetScale,
+                1622f * SheetScale,
+                1998f * SheetScale);
+            // 実際の画面（背景を広げた範囲）の外にあるときは描かない。
             var visible = FullScreenRect();
-            if (x >= visible.xMax || x + CharacterW <= visible.xMin) return;
-            var rect = TalkMotion.Apply(new Rect(left, CharacterY, width, CharacterH), talking);
-            GUI.DrawTexture(rect, portrait, ScaleMode.StretchToFill, true);
+            if (rect.xMin >= visible.xMax || rect.xMax <= visible.xMin) return;
+            GUI.DrawTexture(TalkMotion.Apply(rect, talking), portrait, ScaleMode.StretchToFill, true);
         }
 
         void DrawLines(ClubStory story, float time, Marks marks, bool success)
@@ -234,12 +581,11 @@ namespace SoccerClub.UI
             {
                 string position = player != null ? player.BestPosition().ToString() : "";
                 int age = player != null ? player.Age : 0;
-                DrawBubble(LeftBubble, ScoutDepartment, scoutName, null);
-                GUI.Label(new Rect(163f, 129f, 760f, 39f), "新しい選手情報をもってきました。", _lineCenter);
-                GUI.Label(
-                    new Rect(163f, 168f, 760f, 39f),
-                    position + " の " + playerName + " 選手、" + age + "歳 です。",
-                    _lineRight);
+                DrawBubble(
+                    LeftBubble,
+                    ScoutDepartment,
+                    scoutName,
+                    "新しい選手の情報を持ってきました。\n" + position + " の " + playerName + " 選手、" + age + "歳 です。");
             }
             else if (time >= marks.ScoutTalkEnd && time < marks.GmTalkEnd)
                 DrawBubble(RightBubble, GmDepartment, gmName, "獲得の交渉をしてみよう。");
@@ -319,27 +665,187 @@ namespace SoccerClub.UI
                 DrawBanner(leaves ? "移籍決定..." : "残留決定！");
         }
 
+        void DrawNewYear(GameSession session, float time)
+        {
+            var marks = NewYearTimeline();
+            float leftX = time < marks.PlayerInEnd ? Move(OffX, LeftFrameX, 0f, time) : LeftFrameX;
+            DrawFigure(_secretaryPortrait, leftX, _leftTalking);
+            string name = _secretary != null && !string.IsNullOrEmpty(_secretary.Name) ? _secretary.Name : "秘書";
+            if (_newYearLines == null)
+                _newYearLines = BuildNewYearLines(session, name);
+            if (time >= marks.PlayerInEnd && time < marks.GreetEnd)
+                DrawBubble(LeftBubble, "秘書", name, _newYearLines[0]);
+            else if (time >= marks.GreetEnd && time < marks.GmGreetEnd)
+                DrawBubble(LeftBubble, "秘書", name, _newYearLines[1]);
+            else if (time >= marks.GmGreetEnd && time < marks.End)
+                DrawBubble(LeftBubble, "秘書", name, _newYearLines[2]);
+            DrawBanner("謹賀新年");
+        }
+
+        void DrawSeasonal(ClubStory story, GameSession session, float time)
+        {
+            int index;
+            var script = SeasonalScript(story, out index);
+            var season = SeasonalCatalog.Find(SeasonalSeasonId(story));
+            int count = script != null ? script.LineCount : 2;
+            var marks = SeasonalTimeline(count);
+            bool solo = _partner == null;
+            float leftX = time < marks.PlayerInEnd ? Move(OffX, LeftFrameX, 0f, time) : LeftFrameX;
+            DrawFigure(_playerPortrait, leftX, _leftTalking);
+            if (!solo)
+            {
+                float rightX = time < marks.PlayerInEnd ? Move(OffRightX, RightFrameX, 0f, time) : RightFrameX;
+                DrawFigure(_partnerPortrait, rightX, _rightTalking);
+            }
+
+            if (_seasonalLines == null)
+            {
+                var club = session != null ? session.PlayerClub : null;
+                int year = session != null ? session.Time.CurrentDate.Year : System.DateTime.Today.Year;
+                _seasonalLines = SeasonalCatalog.Lines(
+                    script,
+                    new SeasonalCatalog.Cast { A = _focus, B = _partner },
+                    club != null ? club.Name : "",
+                    year);
+            }
+
+            string nameA = _focus != null && !string.IsNullOrEmpty(_focus.Name) ? _focus.Name : "選手";
+            string nameB = _partner != null && !string.IsNullOrEmpty(_partner.Name) ? _partner.Name : nameA;
+            var lines = _seasonalLines;
+            if (lines.Length > 0 && time >= marks.PlayerInEnd && time < marks.GreetEnd)
+                DrawBubble(LeftBubble, PlayerDepartment, nameA, lines[0]);
+            else if (lines.Length > 1 && time >= marks.GreetEnd && time < marks.GmGreetEnd)
+                DrawBubble(solo ? LeftBubble : RightBubble, PlayerDepartment, solo ? nameA : nameB, lines[1]);
+            else if (lines.Length > 2 && time >= marks.GmGreetEnd && time < marks.ResultEnd)
+                DrawBubble(LeftBubble, PlayerDepartment, nameA, lines[2]);
+            if (season != null && !string.IsNullOrEmpty(season.Banner))
+                DrawBanner(season.Banner);
+        }
+
+        /// <summary>季節の背景。Seasons.csv の background を Resources から読み、無ければ null（会議室の背景を使う）。</summary>
+        Texture2D SeasonBackground(ClubStory story)
+        {
+            var season = SeasonalCatalog.Find(SeasonalSeasonId(story));
+            string path = season != null ? season.Background : null;
+            if (string.IsNullOrEmpty(path)) return null;
+            if (_seasonBackgroundPath != path)
+            {
+                _seasonBackgroundPath = path;
+                _seasonBackground = Resources.Load<Texture2D>(path);
+            }
+
+            return _seasonBackground;
+        }
+
+        static string[] BuildNewYearLines(GameSession session, string secretaryName)
+        {
+            var club = session != null ? session.PlayerClub : null;
+            int rank = 0;
+            int teams = 0;
+            if (session != null && session.League != null && club != null)
+            {
+                var table = session.League.Table();
+                teams = table.Count;
+                rank = table.IndexOf(club) + 1;
+            }
+
+            var today = session != null ? session.Time.CurrentDate.Date : System.DateTime.Today;
+            int season = session != null ? session.CurrentSeasonStart.Year - GameSession.SeasonStart.Year + 1 : 1;
+            bool firstSeason = season <= 1;
+            bool champion = session != null && session.TitleStreak > 0;
+            var tokens = new System.Collections.Generic.Dictionary<string, string>
+            {
+                { "year", today.Year.ToString() },
+                { "season", season.ToString() },
+                { "rank", rank.ToString() },
+                { "club", club != null ? club.Name ?? "" : "" },
+                { "secretary", secretaryName ?? "" },
+                { "league", session != null ? session.LeagueLevel.ToString() : "1" }
+            };
+
+            System.Func<string, bool> matches = condition =>
+            {
+                switch (condition)
+                {
+                    case "first_season": return firstSeason;
+                    case "top": return rank == 1;
+                    case "top3": return rank >= 1 && rank <= 3;
+                    case "upper": return rank >= 1 && teams > 0 && rank <= teams / 2;
+                    case "lower": return rank >= 1 && teams > 0 && rank > teams / 2;
+                    case "bottom3": return rank >= 1 && teams > 0 && rank > teams - 3;
+                    case "champion": return champion && !firstSeason;
+                    default: return false;
+                }
+            };
+
+            return NewYearLines.Lines(matches, tokens, new System.Random(today.Year * 31 + rank));
+        }
+
+        void DrawExpiry(GameSession session, float time)
+        {
+            var marks = ExpiryTimeline();
+            float leftX;
+            if (time < marks.ScoutTalkEnd) leftX = OffX;
+            else if (time < marks.PlayerInEnd) leftX = Move(OffX, LeftFrameX, marks.ScoutTalkEnd, time);
+            else if (time < marks.PlayerExitStart) leftX = LeftFrameX;
+            else leftX = Move(LeftFrameX, OffX, marks.PlayerExitStart, time);
+            DrawFigure(_playerPortrait, leftX, _leftTalking);
+            DrawFigure(_gmPortrait, RightFrameX, _rightTalking);
+
+            string gmName = _gm != null && !string.IsNullOrEmpty(_gm.Name) ? _gm.Name : "GM";
+            string playerName = _focus != null && !string.IsNullOrEmpty(_focus.Name) ? _focus.Name : "選手";
+            if (_expiryLines == null)
+            {
+                string spouse = null;
+                if (session != null && session.Relations != null && _focus != null)
+                {
+                    var partner = session.Relations.SpouseIn(session.PlayerClub, _focus);
+                    if (partner != null) spouse = partner.Name;
+                }
+
+                _expiryLines = ContractExpiryCatalog.Lines(new ContractExpiryCatalog.Context
+                {
+                    Player = _focus,
+                    GmName = gmName,
+                    SpouseName = spouse
+                });
+            }
+
+            var lines = _expiryLines;
+            if (time < marks.ScoutTalkEnd)
+                DrawBubble(RightBubble, GmDepartment, gmName, lines[0]);
+            else if (time >= marks.PlayerInEnd && time < marks.GreetEnd)
+                DrawBubble(LeftBubble, PlayerDepartment, playerName, lines[1]);
+            else if (time >= marks.GreetEnd && time < marks.GmGreetEnd)
+                DrawBubble(RightBubble, GmDepartment, gmName, lines[2]);
+            else if (time >= marks.GmGreetEnd && time < marks.ResultEnd)
+                DrawBubble(RightBubble, GmDepartment, gmName, lines[3]);
+            else if (time >= marks.ResultEnd && time < marks.PlayerReactEnd)
+                DrawBubble(LeftBubble, PlayerDepartment, playerName, lines[4]);
+            else if (time >= marks.PlayerReactEnd && time < marks.GmReactEnd)
+                DrawBubble(RightBubble, GmDepartment, gmName, lines[5]);
+
+            if (time >= marks.GmGreetEnd && time < marks.End)
+                DrawBanner("契約満了");
+        }
+
         /// <summary>
-        /// 吹き出しと、その上辺に重ねる「部署名＋名前」の帯。スポンサー獲得（Figma sponsor の message）と同じ形。
-        /// 名前の帯は灰色に黒文字、左端に部署名の黒い帯を重ねる。
+        /// セリフの枠と、その上辺に重ねる「部署名＋名前」の帯。Figma meeting_event の character_message_l / _r。
+        /// 名前の帯は灰色に黒文字、左に部署名の黒い帯を重ねる。
         /// </summary>
         void DrawBubble(Rect bubble, string department, string name, string line)
         {
             if (bubble == LeftBubble) _leftTalkingNext = true;
             else if (bubble == RightBubble) _rightTalkingNext = true;
             GUI.color = Color.white;
-            GUI.DrawTexture(bubble, Texture2D.whiteTexture);
-
-            float top = bubble.y - PlateHeight * 0.5f;
-            var namePlate = new Rect(bubble.x + NamePlateOffset, top, NamePlateWidth, PlateHeight);
-            var deptPlate = new Rect(bubble.x + DepartmentPlateOffset, top, DepartmentPlateWidth, PlateHeight);
-            FillPill(namePlate, NamePlateColor);
-            GUI.Label(new Rect(namePlate.x + 50f, top, namePlate.width - 100f, PlateHeight), name ?? "", _lineCenter);
-            FillPill(deptPlate, Color.black);
-            GUI.Label(new Rect(deptPlate.x + 29f, top, deptPlate.width - 40f, PlateHeight), department ?? "", _name);
-
+            Fill(bubble, new Color(1f, 1f, 1f, BoxAlpha), BoxRadius);
             if (!string.IsNullOrEmpty(line))
-                GUI.Label(bubble, line, _lineCenter);
+                GUI.Label(new Rect(bubble.x + LineOffsetX, bubble.y + LineOffsetY, LineWidth, LineHeight), line, _line);
+
+            Fill(new Rect(bubble.x + NamePlateOffset, PlateY, NamePlateWidth, PlateHeight), NamePlateColor, PlateHeight * 0.5f);
+            GUI.Label(new Rect(bubble.x + NameTextOffset, PlateY, NameTextWidth, PlateHeight), name ?? "", _plateText);
+            Fill(new Rect(bubble.x + DepartmentPlateOffset, PlateY, DepartmentPlateWidth, PlateHeight), Color.black, PlateHeight * 0.5f);
+            GUI.Label(new Rect(bubble.x + DepartmentTextOffset, PlateY, DepartmentTextWidth, PlateHeight), department ?? "", _department);
         }
 
         /// <summary>UiFitMatrix の基準座標で、実際の画面全体を表す矩形。16:9 ちょうどなら 0,0,1920,1080。</summary>
@@ -350,59 +856,44 @@ namespace SoccerClub.UI
             return new Rect(-ix, -iy, GameRunner.ReferenceWidth + ix * 2f, GameRunner.ReferenceHeight + iy * 2f);
         }
 
-        static void FillPill(Rect rect, Color color)
+        static void Fill(Rect rect, Color color, float radius)
         {
-            GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f, color, 0f, rect.height * 0.5f);
+            GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f, color, 0f, radius);
         }
 
         void DrawBanner(string text)
         {
-            _banner.fontSize = text != null && text.Length >= 7 ? 84 : 96;
             GUI.Label(Banner, text ?? "", _banner);
+        }
+
+        void DrawResultPanel(string message)
+        {
+            GUI.color = Color.white;
+            Fill(ResultPanel, new Color(1f, 1f, 1f, BoxAlpha), BoxRadius);
+            GUI.Label(ResultMessage, message, _message);
         }
 
         void DrawSuccess(ClubStory story)
         {
-            GUI.color = Color.white;
-            GUI.DrawTexture(SuccessPanel, Texture2D.whiteTexture);
             var total = story.Fee + story.Salary;
-            GUI.Label(
-                SuccessMessage,
-                "獲得成功です！\n契約金と年俸、合わせて" + MoneyText.Format(total) + "を強化費から支払います。",
-                _message);
-            DrawMoney(FeeBar, FeeLabel, "契約金", story.Fee);
-            DrawMoney(SalaryBar, SalaryLabel, "年俸", story.Salary);
+            DrawResultPanel("獲得成功です！\n契約金と年俸、合わせて" + MoneyText.Format(total) + "を強化費から支払います。");
+            DrawAmount(FirstAmountY, "契約金", story.Fee);
+            DrawAmount(SecondAmountY, "年俸", story.Salary);
         }
 
         void DrawTransferDialog(ClubStory story)
         {
-            GUI.color = Color.white;
-            GUI.DrawTexture(SuccessPanel, Texture2D.whiteTexture);
-            GUI.Label(SuccessMessage, "移籍が決定しました。\n移籍金が支払われます。", _message);
-            var fee = new Rect(780f, 610f, 360f, 32f);
-            var label = new Rect(780f, 610f, 92f, 32f);
-            DrawMoney(fee, label, "移籍金", story.Fee);
+            DrawResultPanel("移籍が決定しました。\n移籍金が支払われます。");
+            DrawAmount(SingleAmountY, "移籍金", story.Fee);
         }
 
-        void DrawMoney(Rect bar, Rect label, string caption, System.Numerics.BigInteger amount)
+        /// <summary>金額の 1 段。灰色の金額の帯の左端に、黒いラベルの帯を重ねる。</summary>
+        void DrawAmount(float y, string caption, System.Numerics.BigInteger amount)
         {
-            DrawPlate(bar, 0.5f);
-            DrawPlate(label, 0.5f);
-            GUI.Label(label, caption, _pillLabel);
-            GUI.Label(new Rect(bar.x + 100f, bar.y, bar.width - 112f, bar.height), MoneyText.Format(amount), _pillValue);
-        }
-
-        void DrawPlate(Rect rect, float alpha)
-        {
-            EnsureDisc();
-            var previous = GUI.color;
-            GUI.color = new Color(0f, 0f, 0f, alpha);
-            float d = rect.height;
-            GUI.DrawTexture(new Rect(rect.x, rect.y, d, d), _disc, ScaleMode.StretchToFill, true);
-            GUI.DrawTexture(new Rect(rect.xMax - d, rect.y, d, d), _disc, ScaleMode.StretchToFill, true);
-            if (rect.width > d)
-                GUI.DrawTexture(new Rect(rect.x + d * 0.5f, rect.y, rect.width - d, rect.height), Texture2D.whiteTexture);
-            GUI.color = previous;
+            Fill(new Rect(AmountValueX, y, AmountValueWidth, AmountHeight), NamePlateColor, AmountHeight * 0.5f);
+            GUI.Label(new Rect(AmountValueTextX, y, AmountValueTextWidth, AmountHeight), MoneyText.Format(amount), _plateText);
+            Fill(new Rect(AmountLabelX, y, AmountLabelWidth, AmountHeight), Color.black, AmountHeight * 0.5f);
+            GUI.Label(new Rect(AmountLabelTextX, y, AmountLabelTextWidth, AmountHeight), caption, _department);
         }
 
         void EnsureCast(ClubStory story, GameSession session)
@@ -431,6 +922,28 @@ namespace SoccerClub.UI
             var position = player != null ? player.BestPosition() : Position.CF;
             _scout = FindScout(front, position);
             _gmPortrait = Portrait(_gm, uniform);
+            if (IsNoticeKind(story.Kind))
+            {
+                _noticeSpeaker = NoticeSpeaker(session, story.Kind, out _noticeDepartment);
+                _noticePortrait = Portrait(_noticeSpeaker, uniform);
+            }
+
+            if (story.Kind == ClubStoryKind.Seasonal)
+            {
+                string partnerId = SeasonalPartnerId(story);
+                _partner = FindSquadPlayer(session, partnerId);
+                if (_partner != null)
+                {
+                    var partnerHair = PositionUtility.GroupColor(PositionUtility.GroupOf(_partner.BestPosition()));
+                    _partnerPortrait = _avatars.CreateStand(_partner.Id, uniform, partnerHair, AvatarLibrary.SheetHeight);
+                }
+            }
+
+            if (story.Kind == ClubStoryKind.NewYear)
+            {
+                _secretary = front != null ? front.Secretary : null;
+                _secretaryPortrait = Portrait(_secretary, uniform);
+            }
             _scoutPortrait = Portrait(_scout, uniform);
             if (!string.IsNullOrEmpty(id))
             {
@@ -441,10 +954,22 @@ namespace SoccerClub.UI
             }
         }
 
+        static Player FindSquadPlayer(GameSession session, string id)
+        {
+            if (string.IsNullOrEmpty(id) || session == null || session.PlayerClub == null || session.PlayerClub.Squad == null) return null;
+            var squad = session.PlayerClub.Squad;
+            for (int i = 0; i < squad.Count; i++)
+            {
+                if (squad[i] != null && squad[i].Id == id) return squad[i];
+            }
+
+            return null;
+        }
+
         static Player FocusPlayer(ClubStory story, GameSession session)
         {
             if (story == null) return null;
-            if (story.Kind == ClubStoryKind.Signing) return story.Incoming;
+            if (story.Kind == ClubStoryKind.Signing || story.Kind == ClubStoryKind.ContractExpiry) return story.Incoming;
             if (session == null || session.PlayerClub == null || session.PlayerClub.Squad == null) return null;
             if (string.IsNullOrEmpty(story.PlayerId)) return null;
             var squad = session.PlayerClub.Squad;
@@ -487,70 +1012,26 @@ namespace SoccerClub.UI
                 _background = Resources.Load<Texture2D>("MainScreen/bg_meeting_room");
         }
 
-        void EnsureDisc()
-        {
-            if (_disc != null) return;
-            const int size = 32;
-            _disc = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            _disc.hideFlags = HideFlags.HideAndDontSave;
-            var pixels = new Color32[size * size];
-            float radius = (size - 1) * 0.5f;
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    float dx = x - radius;
-                    float dy = y - radius;
-                    if (dx * dx + dy * dy <= radius * radius)
-                        pixels[y * size + x] = new Color32(255, 255, 255, 255);
-                }
-            }
-
-            _disc.SetPixels32(pixels);
-            _disc.Apply(false, true);
-        }
-
         void EnsureStyles(Font font)
         {
-            if (_lineCenter != null && _font == font) return;
+            if (_line != null && _font == font) return;
             _font = font;
-            _lineCenter = new GUIStyle(GUI.skin.label)
+            var label = new GUIStyle(GUI.skin.label)
             {
                 font = font,
                 fontSize = 32,
                 alignment = TextAnchor.MiddleCenter,
-                wordWrap = true,
                 clipping = TextClipping.Overflow,
+                wordWrap = false,
+                padding = new RectOffset(0, 0, 0, 0),
+                margin = new RectOffset(0, 0, 0, 0),
                 normal = { textColor = Color.black }
             };
-            _lineRight = new GUIStyle(_lineCenter) { alignment = TextAnchor.MiddleRight };
-            _name = new GUIStyle(_lineCenter)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = Color.white }
-            };
-            _banner = new GUIStyle(_lineCenter)
-            {
-                fontSize = 96,
-                alignment = TextAnchor.MiddleCenter
-            };
-            _message = new GUIStyle(_lineCenter)
-            {
-                wordWrap = true,
-                alignment = TextAnchor.MiddleCenter
-            };
-            _pillLabel = new GUIStyle(_lineCenter)
-            {
-                fontSize = 20,
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = Color.white }
-            };
-            _pillValue = new GUIStyle(_lineCenter)
-            {
-                fontSize = 24,
-                alignment = TextAnchor.MiddleRight,
-                normal = { textColor = Color.white }
-            };
+            _line = new GUIStyle(label) { alignment = TextAnchor.MiddleLeft, wordWrap = true };
+            _plateText = new GUIStyle(label);
+            _department = new GUIStyle(label) { normal = { textColor = Color.white } };
+            _banner = new GUIStyle(label) { fontSize = 128, fontStyle = FontStyle.Bold };
+            _message = new GUIStyle(label) { alignment = TextAnchor.UpperCenter };
         }
 
         static float Move(float from, float to, float start, float time)

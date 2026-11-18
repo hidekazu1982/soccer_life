@@ -264,10 +264,12 @@ namespace SoccerClub.UI
                 }
 
                 // 関係イベントは最後の「〜になった！」の吹き出しが出た時点で段階を進める。途中で止まれば進まない。
+                // 居残り練習は Next = None。結果は日送りの締めで反映済みの扱いなので、ここでは何もしない。
                 if (_talkFriend && !_friendDone && _beat == _beatCount - 1)
                 {
                     _friendDone = true;
-                    session.CompleteRelationEvent(_friendA, _friendB, _talkNext);
+                    if (_talkNext != RelationStage.None)
+                        session.CompleteRelationEvent(_friendA, _friendB, _talkNext);
                 }
 
                 QueueNext(session, crowd);
@@ -290,7 +292,7 @@ namespace SoccerClub.UI
                 if (_friendCheck <= 0f)
                 {
                     _friendCheck = FriendCheckSeconds;
-                    if (session.RelationEventReady && TryFill(session, crowd, _play, true))
+                    if ((session.RelationEventReady || ExtraPracticeWaiting(session)) && TryFill(session, crowd, _play, true))
                     {
                         _gathering = true;
                         _gatherTime = 0f;
@@ -387,7 +389,9 @@ namespace SoccerClub.UI
             if (_visible.Count == 0) return false;
             _fill = cue;
             cue.Clear();
-            bool started = friendOnly ? TryRelation(session, crowd) : TryStart(session, crowd);
+            bool started = friendOnly
+                ? TryExtraPractice(session) || TryRelation(session, crowd)
+                : TryExtraPractice(session) || TryStart(session, crowd);
             _fill = null;
             if (started && cue.Armed) return true;
             cue.Clear();
@@ -664,30 +668,14 @@ namespace SoccerClub.UI
                         b = swap;
                     }
 
-                    string lineA;
-                    string lineB;
                     string nameA = NameOf(a, null);
                     string nameB = NameOf(b, null);
+                    // 台詞は Resources/Master/RelationEvents.csv（RelationEventCatalog）から、2人が満たす条件で選ぶ。
+                    string lineA;
+                    string lineB;
                     string result;
-                    switch (next)
-                    {
-                        case RelationStage.Married:
-                            MarriageLines(a, b, out lineA, out lineB);
-                            result = nameA + "と" + nameB + "が結婚した！";
-                            break;
-                        case RelationStage.Lover:
-                            LoverLines(a, b, out lineA, out lineB);
-                            result = nameA + "と" + nameB + "が恋人になった！";
-                            break;
-                        case RelationStage.BestFriend:
-                            BestFriendLines(a, b, nameB, out lineA, out lineB);
-                            result = nameA + "と" + nameB + "が親友になった！";
-                            break;
-                        default:
-                            FriendLines(a, b, out lineA, out lineB);
-                            result = nameA + "と" + nameB + "が友達になった！";
-                            break;
-                    }
+                    if (!RelationEventCatalog.TryPick(next, a, b, n => UnityEngine.Random.Range(0, n), out lineA, out lineB, out result))
+                        continue;
 
                     if (BeginRelation(crowd, a.Id, nameA, lineA, b.Id, nameB, lineB, result, next)) return true;
                 }
@@ -696,62 +684,51 @@ namespace SoccerClub.UI
             return false;
         }
 
-        static void LoverLines(Player a, Player b, out string lineA, out string lineB)
+        /// <summary>今日の居残り練習があり、まだ見せていない。</summary>
+        bool ExtraPracticeWaiting(GameSession session)
         {
-            string meB = CharacterLife.Pronoun(b.Id);
-            switch (UnityEngine.Random.Range(0, 3))
-            {
-                case 0:
-                    lineA = "あのさ、ずっと言いたかったことがあるんだ。好きです。";
-                    lineB = "……" + meB + "も、同じ気持ちだよ。";
-                    return;
-                case 1:
-                    lineA = "試合のあと、いちばんに話したくなるのはきみなんだ。";
-                    lineB = "うれしい。" + meB + "もそうだったよ。";
-                    return;
-                default:
-                    lineA = "今度のオフ、二人で出かけない？　大事な話がしたい。";
-                    lineB = "うん。……その話、たぶん" + meB + "も同じだと思う。";
-                    return;
-            }
+            var info = session.TodayExtraPractice;
+            return info != null && !info.Applied && !_seen.Contains(ExtraPracticeKey(info));
         }
 
-        static void MarriageLines(Player a, Player b, out string lineA, out string lineB)
+        static string ExtraPracticeKey(GameSession.ExtraPracticeInfo info)
         {
-            switch (UnityEngine.Random.Range(0, 3))
-            {
-                case 0:
-                    lineA = "これからもずっと一緒にいてほしい。結婚しよう。";
-                    lineB = "はい。よろしくお願いします！";
-                    return;
-                case 1:
-                    lineA = "引退したあとも、となりにいてくれる？";
-                    lineB = "もちろん。ずっと一緒だよ。";
-                    return;
-                default:
-                    lineA = "このクラブで出会えてよかった。家族になってください。";
-                    lineB = "……うん。喜んで！";
-                    return;
-            }
+            return PairKey(info.PlayerIdA, info.PlayerIdB, "extra_practice", info.Date);
         }
 
-        static void BestFriendLines(Player a, Player b, string nameB, out string lineA, out string lineB)
+        /// <summary>
+        /// 居残り練習（GameSession.RollExtraPractice が日送りの初めに決める）。2人が画面に映っていれば、
+        /// 関係イベントと同じ立ち絵の画面（mini_event_sp）で見せる。能力と親密度は日の締めで反映する。
+        /// 台詞は Resources/Master/ExtraPractice.csv。
+        /// </summary>
+        bool TryExtraPractice(GameSession session)
         {
-            switch (UnityEngine.Random.Range(0, 3))
+            if (_visible.Count < 2 || !ExtraPracticeWaiting(session)) return false;
+            if ((_fill != _play && _play.Relation) || (_fill != _next && _next.Relation)) return false;
+            var info = session.TodayExtraPractice;
+            if (!_visible.Contains(info.PlayerIdA) || !_visible.Contains(info.PlayerIdB)) return false;
+            if (!Free(info.PlayerIdA) || !Free(info.PlayerIdB)) return false;
+            Player a;
+            Player b;
+            StaffMember unused;
+            if (!session.TryClubPerson(info.PlayerIdA, out a, out unused) || a == null) return false;
+            if (!session.TryClubPerson(info.PlayerIdB, out b, out unused) || b == null) return false;
+            if (UnityEngine.Random.value < 0.5f)
             {
-                case 0:
-                    lineA = nameB + "とは、何でも話せるね。";
-                    lineB = "うん、いちばんの親友だよ！";
-                    return;
-                case 1:
-                    lineA = "調子が悪いとき、いつも声をかけてくれてありがとう。";
-                    lineB = "おたがいさま。これからも助け合おう！";
-                    return;
-                default:
-                    lineA = "引退しても、ずっと付き合っていこうな。";
-                    lineB = "当たり前だよ。一生の親友だ！";
-                    return;
+                var swap = a;
+                a = b;
+                b = swap;
             }
+
+            string lineA;
+            string lineB;
+            string result;
+            if (!ExtraPracticeCatalog.TryPick(info.Stat, a, b, n => UnityEngine.Random.Range(0, n), out lineA, out lineB, out result))
+                return false;
+            if (!BeginRelation(_crowd, a.Id, NameOf(a, null), lineA, b.Id, NameOf(b, null), lineB, result, RelationStage.None))
+                return false;
+            _seen.Add(ExtraPracticeKey(info));
+            return true;
         }
 
         bool Free(string id)
@@ -759,82 +736,6 @@ namespace SoccerClub.UI
             if (_play.Uses(id) && _fill != _play) return false;
             if (_next.Uses(id) && _fill != _next) return false;
             return true;
-        }
-
-        /// <summary>友達になる理由。2人に共通する点から1つ選ぶ。何も無ければ居残り練習。</summary>
-        static void FriendLines(Player a, Player b, out string lineA, out string lineB)
-        {
-            var reasons = new List<int>(8);
-            string food = CharacterLife.FavoriteFood(a.Id);
-            string hobby = CharacterLife.Hobby(a.Id);
-            string movie = CharacterLife.Movie(a.Id);
-            string country;
-            string activity;
-            CharacterLife.Travel(a.Id, out country, out activity);
-            string countryB;
-            string activityB;
-            CharacterLife.Travel(b.Id, out countryB, out activityB);
-            int monthA;
-            int dayA;
-            int monthB;
-            int dayB;
-            CharacterLife.Birthday(a.Id, out monthA, out dayA);
-            CharacterLife.Birthday(b.Id, out monthB, out dayB);
-
-            if (!string.IsNullOrEmpty(food) && food == CharacterLife.FavoriteFood(b.Id)) reasons.Add(0);
-            if (!string.IsNullOrEmpty(hobby) && hobby == CharacterLife.Hobby(b.Id)) reasons.Add(1);
-            if (!string.IsNullOrEmpty(country) && country == countryB) reasons.Add(2);
-            if (!string.IsNullOrEmpty(movie) && movie == CharacterLife.Movie(b.Id)) reasons.Add(3);
-            if (monthA == monthB) reasons.Add(4);
-            if (PositionUtility.GroupOf(a.PreferredPosition) == PositionUtility.GroupOf(b.PreferredPosition)) reasons.Add(5);
-            if (Math.Abs(a.Age - b.Age) <= 3) reasons.Add(6);
-            int reason = reasons.Count > 0 ? reasons[UnityEngine.Random.Range(0, reasons.Count)] : 7;
-            string me = CharacterLife.Pronoun(a.Id);
-
-            switch (reason)
-            {
-                case 0:
-                    lineA = "え、" + food + "が好きなの？　" + me + "も大好き！";
-                    lineB = "本当？　今度一緒に食べに行こうよ。";
-                    return;
-                case 1:
-                    if (CharacterLife.IsMovie(hobby))
-                    {
-                        lineA = "趣味が映画なんだって？　" + me + "もよく観るよ。";
-                        lineB = "うれしい！　今度おすすめを教えて。";
-                    }
-                    else
-                    {
-                        lineA = "趣味が" + hobby + "なんだって？　" + me + "も！";
-                        lineB = "仲間がいてうれしい。今度一緒にやろう！";
-                    }
-
-                    return;
-                case 2:
-                    lineA = country + "が好きなの？　" + me + "もずっと気になってた。";
-                    lineB = "いつか一緒に" + country + "へ行けたらいいね！";
-                    return;
-                case 3:
-                    lineA = movie + "映画、" + me + "も好きなんだ。";
-                    lineB = "話が合うね。次のオフに一緒に観に行こう！";
-                    return;
-                case 4:
-                    lineA = "誕生日、同じ" + monthA + "月なんだね！";
-                    lineB = "本当だ！　今年は一緒にお祝いしよう。";
-                    return;
-                case 5:
-                    lineA = "さっきの練習、息がぴったりだったね。";
-                    lineB = "同じポジション同士、もっと話そうよ！";
-                    return;
-                case 6:
-                    lineA = "同じ世代だと、話が合うね。";
-                    lineB = "うん、これからもよろしく！";
-                    return;
-                default:
-                    lineA = "今日も居残り練習、一緒だったね。";
-                    lineB = "ひとりじゃないから頑張れたよ。ありがとう。";
-                    return;
-            }
         }
 
         bool BeginRelation(GroundCrowd crowd, string firstId, string firstName, string firstLine, string secondId, string secondName, string secondLine, string result, RelationStage next)

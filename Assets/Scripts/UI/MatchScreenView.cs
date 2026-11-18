@@ -13,6 +13,7 @@ namespace SoccerClub.UI
     /// 試合日にメイン画面から切り替える、10回抽選の再生画面（Figma game2）。
     /// ホームは左、アウェイは右。攻撃側を左に置いた配置が基準で、アウェイの攻撃では左右を反転する。
     /// 左から 1〜3 が攻撃側（3 がシュートを打つ）、4〜6 が守備側（6 が GK）。
+    /// 上端には自クラブのピッチ上の 11 人を並べ、交代があったらその回から入った選手に切り替える（Figma game の eleven）。
     /// </summary>
     public sealed class MatchScreenView
     {
@@ -43,10 +44,26 @@ namespace SoccerClub.UI
         static readonly Vector2 BallAtFeet = new Vector2(138f, 194f);
         // 体の中心（ボールを当てる位置）。244 角の左上から。
         static readonly Vector2 BodyCenter = new Vector2(122f, 125f);
-        static readonly Rect HomeEmblem = new Rect(32f, 32f, 293f, 220f);
-        static readonly Rect AwayEmblem = new Rect(1597f, 32f, 293f, 220f);
-        // score。ホームは右端 930、「-」は中心 960、アウェイは左端 990。縦の中心 141.5、128px。
-        const float ScoreCenterY = 141.5f;
+        // home_emblem（179:345 / 179:347）。上端に 11 人を並べたので下へずらした。左右の高さは 229 にそろえる。
+        static readonly Rect HomeEmblem = new Rect(32f, 229f, 293f, 220f);
+        static readonly Rect AwayEmblem = new Rect(1597f, 229f, 293f, 220f);
+        // score（179:372）。ホームは右端 930、「-」は中心 960、アウェイは左端 990。上端 266、高さ 155、128px。
+        const float ScoreCenterY = 266f + 155f * 0.5f;
+
+        // eleven（203:78）。160 角のカードを 40,32 から 168 間隔で 11 枚。地は #D9D9D9。
+        // カードの中は character3（244 角）を左へ 41 ずらして上をそろえ、カードの外は切る。名前は 20px、中心 y 206。
+        const float ElevenLeft = 40f;
+        const float ElevenTop = 32f;
+        const float ElevenCard = 160f;
+        const float ElevenStep = 168f;
+        const float ElevenFrameShift = -41f;
+        const float ElevenNameCenterY = 206f;
+        const float ElevenNameHeight = 24f;
+        const int ElevenNameFont = 20;
+        const int ElevenNameMinFont = 12;
+        // 顔に使う横歩きのコマ（Figma は side_walk_06）。
+        const int ElevenWalkFrame = 5;
+        static readonly Color ElevenCardColor = new Color(0xD9 / 255f, 0xD9 / 255f, 0xD9 / 255f, 1f);
         const float ScoreHeight = 155f;
 
         const float WalkFrameSeconds = 0.1f;
@@ -68,6 +85,7 @@ namespace SoccerClub.UI
         GUIStyle _row;
         GUIStyle _scoreRight;
         GUIStyle _name;
+        GUIStyle _elevenName;
         GUIStyle _bigScore;
         GUIStyle _bigScoreLeft;
         GUIStyle _bigScoreRight;
@@ -103,6 +121,7 @@ namespace SoccerClub.UI
             {
                 DrawField(true);
                 DrawHeader(fixture, 0, 0, false, false, 0f);
+                DrawEleven(result, viewer, 0, false);
                 return;
             }
 
@@ -142,6 +161,7 @@ namespace SoccerClub.UI
             float pop = scored ? Mathf.Clamp01((units - ShotEnd) / ScorePopLength) : 1f;
             bool popping = scored && pop < 1f;
             DrawHeader(fixture, homeGoals, awayGoals, popping && attackLeft, popping && !attackLeft, pop);
+            DrawEleven(result, viewer, round, progress >= 1f);
             GUI.color = Color.white;
         }
 
@@ -205,6 +225,82 @@ namespace SoccerClub.UI
             GUIUtility.ScaleAroundPivot(new Vector2(punch, punch), matrix.MultiplyPoint3x4(pivot));
             GUI.Label(rect, text, style);
             GUI.matrix = matrix;
+        }
+
+        // ---- ピッチ上の 11 人 ----
+
+        readonly LineupSlot[] _eleven = new LineupSlot[11];
+
+        /// <summary>
+        /// 自クラブ（viewer）のピッチ上の 11 人を上端に並べる。並びは先発の枠の順。
+        /// 交代は抽選の回のあとに起きるので、round 回目より前の交代を当てはめる。試合が終わったら全部当てはめる。
+        /// </summary>
+        void DrawEleven(MatchResult result, Club viewer, int round, bool finished)
+        {
+            if (result == null) return;
+            bool home = viewer == null || viewer != result.Away;
+            var xi = home ? result.HomeXi : result.AwayXi;
+            var club = home ? result.Home : result.Away;
+            if (xi == null || club == null) return;
+
+            for (int i = 0; i < _eleven.Length; i++)
+            {
+                var slot = i < xi.Length ? xi[i] : null;
+                _eleven[i] = slot == null ? null : new LineupSlot { Slot = slot.Slot, Player = slot.Player };
+            }
+
+            var subs = result.Substitutions;
+            if (subs != null)
+            {
+                for (int i = 0; i < subs.Count; i++)
+                {
+                    var sub = subs[i];
+                    if (sub == null || sub.Home != home) continue;
+                    if (!finished && sub.Round >= round) continue;
+                    if (sub.SlotIndex < 0 || sub.SlotIndex >= _eleven.Length || _eleven[sub.SlotIndex] == null) continue;
+                    _eleven[sub.SlotIndex].Player = sub.In;
+                }
+            }
+
+            for (int i = 0; i < _eleven.Length; i++)
+                DrawElevenCard(i, _eleven[i], club);
+        }
+
+        void DrawElevenCard(int index, LineupSlot slot, Club club)
+        {
+            var card = new Rect(ElevenLeft + ElevenStep * index, ElevenTop, ElevenCard, ElevenCard);
+            GUI.color = Color.white;
+            GUI.DrawTexture(card, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f, ElevenCardColor, 0f, 0f);
+            if (slot == null || slot.Player == null) return;
+
+            var frames = Frames(slot.Player, slot.Slot, club);
+            var walk = frames != null ? frames.WalkSide : null;
+            if (walk != null && walk.Length > 0)
+            {
+                var texture = walk[Mathf.Min(ElevenWalkFrame, walk.Length - 1)];
+                if (texture != null)
+                {
+                    // カードの外を切るため、カードを原点にしたグループの中で 244 角の枠を描く。
+                    GUI.BeginGroup(card);
+                    GUI.DrawTexture(
+                        new Rect(ElevenFrameShift + SheetLeft, SheetTop, SheetWidth, SheetHeight),
+                        texture,
+                        ScaleMode.StretchToFill,
+                        true);
+                    GUI.EndGroup();
+                }
+            }
+
+            string name = slot.Player.Name ?? "";
+            _elevenName.fontSize = ElevenNameFont;
+            float width = _elevenName.CalcSize(new GUIContent(name)).x;
+            if (width > ElevenCard && width > 0f)
+                _elevenName.fontSize = Mathf.Max(ElevenNameMinFont, Mathf.FloorToInt(ElevenNameFont * ElevenCard / width));
+            GUI.Label(
+                new Rect(card.x - 20f, ElevenNameCenterY - ElevenNameHeight * 0.5f, ElevenCard + 40f, ElevenNameHeight),
+                name,
+                _elevenName);
+            _elevenName.fontSize = ElevenNameFont;
         }
 
         // ---- 選手とボール ----
@@ -846,6 +942,7 @@ namespace SoccerClub.UI
                 padding = new RectOffset(0, 0, 0, 0),
                 normal = { textColor = Color.black }
             };
+            _elevenName = new GUIStyle(_name) { fontSize = ElevenNameFont };
             _bigScore = new GUIStyle(GUI.skin.label)
             {
                 font = font,

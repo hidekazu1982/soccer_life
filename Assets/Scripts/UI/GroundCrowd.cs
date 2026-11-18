@@ -129,6 +129,8 @@ namespace SoccerClub.UI
             public Vector2 Anchor;
             public Color32 Hair;
             public float PopupAt;
+            // 恋人・夫婦で後ろをついて行く側が、相手の左右どちらに並ぶか（-1:左 / 1:右 / 0:未決定）。
+            public int CompanionSide;
         }
 
         readonly AvatarLibrary _library = new AvatarLibrary();
@@ -158,10 +160,12 @@ namespace SoccerClub.UI
         const float MeetGap = 56f;
         const float MeetSpeed = 1.75f;
 
-        // 恋人・夫婦は並んで歩く。id の小さいほうが先に歩き、もう一人が右どなりについて行く。
-        const float CompanionGap = 46f;
-        const float CompanionSlack = 36f;
-        const float CompanionSpeed = 1.2f;
+        // 恋人・夫婦は横並びで歩く。id の小さいほうが先に歩き、もう一人がとなりについて行く。
+        // 間隔は2人の体の幅から決め（最低 CompanionGap）、絵が重ならないようにする。
+        const float CompanionGap = 56f;
+        const float CompanionMargin = 8f;
+        const float CompanionSlack = 12f;
+        const float CompanionSpeed = 1.3f;
 
         public void ClearSelection()
         {
@@ -701,6 +705,8 @@ namespace SoccerClub.UI
                 return;
             }
 
+            walker.CompanionSide = 0;
+
             if (!walker.Walking)
             {
                 if (_time < walker.IdleUntil) return;
@@ -722,11 +728,29 @@ namespace SoccerClub.UI
             return leader.Zone == walker.Zone;
         }
 
-        /// <summary>先に歩く相手の右どなりへついて行く。少し離れるまでは立ち止まって相手のほうを向く。</summary>
+        /// <summary>
+        /// 先に歩く相手の左右どちらかのとなりへついて行く。
+        /// いま居る側を保ち（相手の体を横切らない）、エリアの端で並べないときだけ反対側へ移る。
+        /// </summary>
         void FollowLeader(Walker walker, Walker leader, float deltaTime)
         {
             walker.Direct = false;
-            walker.Target = ClampToZone(walker.Zone, leader.Feet + new Vector2(CompanionGap, 2f));
+            float gap = CompanionSpacing(walker, leader);
+            if (walker.CompanionSide == 0)
+                walker.CompanionSide = walker.Feet.x < leader.Feet.x ? -1 : 1;
+
+            var target = SideSpot(walker.Zone, leader, walker.CompanionSide, gap);
+            if (Mathf.Abs(target.x - leader.Feet.x) < gap * 0.75f)
+            {
+                var other = SideSpot(walker.Zone, leader, -walker.CompanionSide, gap);
+                if (Mathf.Abs(other.x - leader.Feet.x) >= gap * 0.75f)
+                {
+                    walker.CompanionSide = -walker.CompanionSide;
+                    target = other;
+                }
+            }
+
+            walker.Target = target;
             float distance = (walker.Target - walker.Feet).magnitude;
             if (!walker.Walking && distance <= CompanionSlack)
             {
@@ -737,6 +761,26 @@ namespace SoccerClub.UI
 
             float speed = Mathf.Max(walker.Speed, leader.Speed) * CompanionSpeed;
             MoveToward(walker, deltaTime, speed, true);
+        }
+
+        static Vector2 SideSpot(Zone zone, Walker leader, int side, float gap)
+        {
+            return ClampToZone(zone, leader.Feet + new Vector2(side * gap, 0f));
+        }
+
+        /// <summary>2人の立ち絵の半分の幅を足した距離＋すき間。絵が取れないときは CompanionGap。</summary>
+        static float CompanionSpacing(Walker a, Walker b)
+        {
+            float half = HalfBodyWidth(a) + HalfBodyWidth(b);
+            return Mathf.Max(CompanionGap, half + CompanionMargin);
+        }
+
+        static float HalfBodyWidth(Walker walker)
+        {
+            var frames = walker.Frames;
+            if (frames == null || frames.Stand == null) return CompanionGap * 0.5f;
+            // 絵の左右には髪のはみ出し分の余白があるので、体の幅（BodyFraction）だけで測る。
+            return frames.Stand.width * CharacterScale * AvatarLibrary.BodyFraction * 0.5f;
         }
 
         void MoveToward(Walker walker, float deltaTime, float speed, bool hold)

@@ -1,0 +1,36 @@
+﻿# 季節のイベントの会話。1行＝1つの会話。季節ごとに、出られる選手がいる行から weight の重みで1つ選ぶ。
+# season: Seasons.csv の id
+# cast: solo（1人）/ pair（友達か親友の2人）/ couple（恋人か夫婦の2人）
+# condition: any / young（全員21歳以下）/ veteran（Aがベテラン）/ married（夫婦。soloは結婚している人）/ lover（恋人同士）/ best_friend（親友同士）/ children（Aに子どもがいる）/ single（soloで結婚していない人）
+# weight: 選ばれやすさ（1が標準。0で無効）
+# line1 = A、line2 = B（solo は A）、line3 = A（空欄なら2つで終わる）。Aが左、Bが右に立つ
+# 使える差し込み: {nameA} {nameB} {meA} {meB}（一人称）{foodA} {foodB}（好物）{hobbyA} {club} {year}
+# 台詞の中では半角カンマを使わない（読点「、」を使う）
+season,cast,condition,weight,line1,line2,line3
+setsubun,pair,young,2,鬼役、ベテランの先輩に頼んでみる？,怒られそう……でも豆まきはしたいね！,じゃあ、二人で頼みに行こう！
+setsubun,solo,any,1,年の数だけ豆を食べるの、けっこう大変だな。,でも、今年もけがなく過ごせますように！,
+setsubun,pair,any,1,恵方巻き、どっちの方角を向くんだっけ？,{meB}も分からない……とりあえず黙って食べよう。,
+valentine,couple,any,3,はい、これ。{nameB}のために作ったんだ。,え、手作り？　ありがとう……大事に食べるね。,
+valentine,solo,single,1,ファンの方からチョコが届いてた！,うれしいな。後半戦も頑張らないと。,
+valentine,pair,any,1,チョコ、いくつもらった？,数えるのはやめておこうよ……。,
+hanami,pair,any,2,練習場の桜、満開だね。,今年はみんなでお花見しようよ。{foodB}も持っていくね。,
+hanami,solo,young,1,場所取りは若手の仕事だって言われた……。,でも、いちばんいい場所を取ってみせる！,
+hanami,couple,any,1,桜、きれいだね。,来年もまた一緒に見に来よう。,うん、約束だよ。
+tanabata,couple,any,3,短冊になんて書いた？,……ずっと一緒にいられますように、って。,{meA}も同じことを書いたよ。
+tanabata,solo,any,1,短冊に「今年こそ試合にたくさん出られますように」って書いた。,願いは自分でかなえないとね。,
+tanabata,pair,best_friend,1,おたがいの願いごと、見せ合おうよ。,「親友とずっとサッカーができますように」……あ、言っちゃった。,
+summer,pair,young,2,屋台で何食べる？,もちろん{foodB}！　あと金魚すくいもやりたい。,よし、全部回ろう！
+summer,couple,any,2,浴衣、似合ってるね。,ありがとう。花火、いちばん近くで見ようよ。,
+summer,solo,any,1,夏祭りの花火、練習場からでも見えるかな。,新しいシーズンも、あの花火みたいに派手にいこう！,
+halloween,pair,young,2,トリック・オア・トリート！,はい、お菓子。……いたずらは監督にしないでよ？,
+halloween,solo,any,1,仮装して練習場に来たら、監督に怒られた……。,でも、みんな笑ってたからよしとしよう。,
+halloween,couple,any,1,その仮装、何のつもり？,かぼちゃのお化け。……{nameA}こそ、かわいすぎない？,
+christmas,couple,lover,3,メリークリスマス。今夜、少しだけ出かけない？,うん。イルミネーション、一緒に見に行こう。,
+christmas,couple,married,3,今年も一年、ありがとう。,こちらこそ。ケーキ、焼いておいたよ。,家族で過ごすクリスマスがいちばんだね。
+christmas,solo,children,2,子どもたちへのプレゼント、やっと用意できた。,サンタの役は、今年も{meA}の仕事だな。,
+christmas,pair,any,1,今年のクリスマスは、チームのみんなでパーティーだって！,じゃあプレゼント交換、何にしようかな。,
+christmas,solo,single,1,クリスマスはひとりで自主トレ……いや、それも悪くない。,来年こそは、誰かと過ごせるかな。,
+newyearseve,pair,any,2,今年もお疲れ様。いろいろあったね。,来年も一緒に頑張ろう。よいお年を！,
+newyearseve,couple,any,2,今年最後の日、一緒にいられてよかった。,来年も、その先も、よろしくね。,
+newyearseve,solo,veteran,1,今年も一年、無事に終えられてほっとしている。,来年も、まだまだ若手には負けないぞ。,
+newyearseve,solo,any,1,今年は{hobbyA}もサッカーも、たくさん頑張れたな。,来年はもっと上を目指そう。,

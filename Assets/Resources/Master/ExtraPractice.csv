@@ -1,0 +1,18 @@
+﻿# 居残り練習の台詞。1行=1パターン。Aが誘い、Bが答える。3つ目の吹き出しが result（空欄なら「AとBの{stat}が上がった！」）。
+# stat: offense（攻撃）/ defense（守備）/ stamina（スタミナ）/ any（どれでも）
+# condition: RelationEvents.csv と同じ（any / food / hobby / hobby_movie / country / movie / birth_month / position / age_close / veteran / young / fallback）
+# weight: 選ばれやすさ（1が標準。0で無効）
+# 使える差し込み: {nameA} {nameB} {meA} {meB} {stat} {food} {hobby} {country} {activity} {movie} {month}
+# 台詞の中では半角カンマを使わない（読点「、」を使う）
+stat,condition,weight,line_a,line_b,result
+offense,any,1,シュート練習、もう少し付き合ってくれない？,いいよ。決まるまでやろう！,
+offense,any,1,さっきのトラップ、もう一回合わせたいんだ。,{meB}も気になってた。やろう！,
+offense,position,1,同じポジション同士、崩しの形を詰めておこうよ。,賛成！　次の試合で試そう。,
+defense,any,1,1対1の守備、相手をしてくれる？,手加減しないからね！,
+defense,any,1,クロスの競り合い、もう少し練習しない？,いいね。何本でも上げるよ！,
+defense,position,1,ラインの上げ下げ、二人で合わせておこう。,うん。声のかけ方も決めようか。,
+stamina,any,1,まだ走れる？　グラウンドもう5周いこう！,望むところ！　先に音を上げたほうがジュースおごりね。,
+stamina,any,1,坂道ダッシュ、一緒にやらない？,きついけど……{nameA}と一緒ならやれる！,
+stamina,young,1,先輩たちに負けないように、もっと走り込もう！,うん！　{meB}たちの体力を見せてやろう！,
+any,age_close,1,同期なんだし、一緒に居残りしようよ。,そうだね。おたがい試合に出られるように頑張ろう！,
+any,fallback,1,もう少しだけ、居残り練習していかない？,いいね。付き合うよ！,

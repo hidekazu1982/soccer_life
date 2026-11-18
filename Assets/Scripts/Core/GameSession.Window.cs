@@ -23,7 +23,11 @@ namespace SoccerClub.Core
         Camp,
         Ticket,
         Renewal,
-        StaffChange
+        StaffChange,
+        /// <summary>契約満了。GM が会議室に選手を呼んで伝える（MeetingRoomView）。</summary>
+        ContractExpiry,
+        /// <summary>季節のイベント（Seasons.csv）。秘書と選手1人が会議室で話す。WindowKey に季節の id。</summary>
+        Seasonal
     }
 
     /// <summary>休日と移籍期間に出す、クリックで進むイベント。</summary>
@@ -81,6 +85,9 @@ namespace SoccerClub.Core
         string _ticketKey;
         string _campKey;
         string _renewalKey;
+
+        /// <summary>最後に出した季節のイベント（年＋id）。同じ日に二度出さない。</summary>
+        string _seasonalKey;
         int _staffOfferMonth;
         int _staffOfferDay;
         int _staffOfferRole;
@@ -89,6 +96,9 @@ namespace SoccerClub.Core
         bool _staffOfferDone;
         readonly List<ScheduledDeal> _deals = new List<ScheduledDeal>();
         ClubStory _story;
+
+        /// <summary>契約更新で満了になった自クラブの選手。1人ずつ会議室で GM が伝える。</summary>
+        readonly List<Player> _expiryQueue = new List<Player>();
 
         sealed class ScheduledDeal
         {
@@ -144,6 +154,9 @@ namespace SoccerClub.Core
                 return true;
             }
 
+            if (TryOpenContractExpiry())
+                return true;
+
             EnsurePersonnelWindow(today);
 
             string winterKey;
@@ -160,6 +173,9 @@ namespace SoccerClub.Core
                 _story = MakeNewYear(today.Year);
                 return true;
             }
+
+            if (TryOpenSeasonal(today))
+                return true;
 
             if (IsCampStart(today))
             {
@@ -261,8 +277,9 @@ namespace SoccerClub.Core
         public bool WillTransferLeave()
         {
             if (_story == null || _story.Kind != ClubStoryKind.Transfer || !_story.Leaves) return false;
-            if (FindSquad(_story.PlayerId) == null) return false;
-            return SquadCount(PlayerClub) > ClubMath.MinimumSquad;
+            var player = FindSquad(_story.PlayerId);
+            if (player == null) return false;
+            return ClubMath.TransferKeepsFloors(PlayerClub, player);
         }
 
         /// <summary>移籍金を受け取って、選手がチームを離れた。</summary>
@@ -421,12 +438,11 @@ namespace SoccerClub.Core
         void PreparePlayerDeals(DateTime today)
         {
             var club = PlayerClub;
-            int count = SquadCount(club);
             var onSheet = SheetIds(club);
             double average = SquadAverage(club);
 
             var outgoing = new List<Player>();
-            if (count > ClubMath.MinimumSquad && club.Squad != null)
+            if (club.Squad != null)
             {
                 for (int i = 0; i < club.Squad.Count; i++)
                 {
@@ -442,10 +458,8 @@ namespace SoccerClub.Core
                 for (int i = 0; i < outgoing.Count; i++)
                     noise[outgoing[i].Id] = _random.Next();
                 outgoing.Sort((a, b) => CompareOutgoing(club, onSheet, noise, a, b));
+                // 全員出ていっても GK2・DF5・MF5・FW3 を下回らない分だけ予定に入れる。
                 KeepPositionFloors(club, outgoing);
-                int cap = count - ClubMath.MinimumSquad;
-                if (outgoing.Count > cap)
-                    outgoing.RemoveRange(cap, outgoing.Count - cap);
             }
 
             var transferDays = DaysInWindow(today);
@@ -629,16 +643,12 @@ namespace SoccerClub.Core
                     return true;
                 }
 
-                if (SquadCount(PlayerClub) <= ClubMath.MinimumSquad)
-                {
-                    _deals.Remove(deal);
-                    continue;
-                }
-
                 _deals.Remove(deal);
 
+                // 予定を組んだあとに人数が変わっていることがあるので、出す日にもう一度確かめる。
                 var player = FindSquad(deal.PlayerId);
                 if (player == null) continue;
+                if (!ClubMath.TransferKeepsFloors(PlayerClub, player)) continue;
                 _story = MakeTransfer(player);
                 return true;
             }
@@ -741,6 +751,104 @@ namespace SoccerClub.Core
             return _renewalKey != key;
         }
 
+        /// <summary>
+        /// 契約満了の会議室。契約更新のお知らせのあとに、満了した選手を1人ずつ開く。
+        /// 満了の処理（所属から外す）は契約更新の時点で済んでいるので、ここでは見せるだけ。GM がいなければ出さない。
+        /// </summary>
+        bool TryOpenContractExpiry()
+        {
+            if (_expiryQueue.Count == 0) return false;
+            var gm = PlayerClub != null && PlayerClub.Front != null ? PlayerClub.Front.GeneralManager : null;
+            if (gm == null)
+            {
+                _expiryQueue.Clear();
+                return false;
+            }
+
+            var player = _expiryQueue[0];
+            _expiryQueue.RemoveAt(0);
+            if (player == null) return TryOpenContractExpiry();
+            var story = new ClubStory
+            {
+                Kind = ClubStoryKind.ContractExpiry,
+                PlayerId = player.Id,
+                Incoming = player
+            };
+            story.Titles[0] = "契約満了";
+            story.Pages[0] = (player.Name ?? "選手") + "との契約が満了しました。";
+            ShowStoryStep(story);
+            _story = story;
+            return true;
+        }
+
+        /// <summary>
+        /// 季節のイベント。その日が Seasons.csv の日付で、所属選手がいれば開く。
+        /// 会話（SeasonTalk.csv）と出る選手は、年と季節から作った乱数で決める（ゲームの乱数の並びを変えない）。
+        /// WindowKey は「季節の id|会話の番号|B の id」、PlayerId は A。
+        /// </summary>
+        bool TryOpenSeasonal(DateTime today)
+        {
+            var season = SeasonalCatalog.On(today);
+            if (season == null || PlayerClub == null || PlayerClub.Squad == null) return false;
+            string key = today.Year.ToString(CultureInfo.InvariantCulture) + ":" + season.Id;
+            if (_seasonalKey == key) return false;
+            _seasonalKey = key;
+
+            var solos = new List<Player>();
+            var members = new Dictionary<string, Player>();
+            for (int i = 0; i < PlayerClub.Squad.Count; i++)
+            {
+                var p = PlayerClub.Squad[i];
+                if (p == null || string.IsNullOrEmpty(p.Id)) continue;
+                solos.Add(p);
+                members[p.Id] = p;
+            }
+
+            if (solos.Count == 0) return false;
+            solos.Sort((x, y) => string.CompareOrdinal(x.Id, y.Id));
+            var pairs = new List<SeasonalCatalog.Cast>();
+            var couples = new List<SeasonalCatalog.Cast>();
+            var relations = _relations.All;
+            for (int i = 0; i < relations.Count; i++)
+            {
+                var rel = relations[i];
+                Player a;
+                Player b;
+                if (!members.TryGetValue(rel.PlayerIdA, out a) || !members.TryGetValue(rel.PlayerIdB, out b)) continue;
+                var cast = new SeasonalCatalog.Cast { A = a, B = b, Stage = rel.Stage };
+                if (RelationshipService.IsPartner(rel.Stage)) couples.Add(cast);
+                else if (rel.Stage == RelationStage.Friend || rel.Stage == RelationStage.BestFriend) pairs.Add(cast);
+            }
+
+            int seed = today.Year * 397;
+            for (int i = 0; i < season.Id.Length; i++)
+                seed = unchecked(seed * 31 + season.Id[i]);
+            var random = new Random(seed & int.MaxValue);
+            SeasonalCatalog.Script script;
+            SeasonalCatalog.Cast chosen;
+            if (!SeasonalCatalog.TryChoose(season, solos, pairs, couples, random, out script, out chosen)) return false;
+
+            // 左右はランダムに入れ替える（会話の A が毎回同じ側の人にならないように）。
+            if (chosen.B != null && random.Next(2) == 0)
+            {
+                var swap = chosen.A;
+                chosen.A = chosen.B;
+                chosen.B = swap;
+            }
+
+            var story = new ClubStory
+            {
+                Kind = ClubStoryKind.Seasonal,
+                PlayerId = chosen.A.Id,
+                WindowKey = season.Id + "|" + script.Index.ToString(CultureInfo.InvariantCulture) + "|" + (chosen.B != null ? chosen.B.Id : "")
+            };
+            story.Titles[0] = string.IsNullOrEmpty(season.Title) ? "季節のイベント" : season.Title;
+            story.Pages[0] = story.Titles[0];
+            ShowStoryStep(story);
+            _story = story;
+            return true;
+        }
+
         ClubStory MakeRenewal(string body)
         {
             var story = new ClubStory { Kind = ClubStoryKind.Renewal };
@@ -756,15 +864,19 @@ namespace SoccerClub.Core
             int held = 0;
             int keptVeterans = 0;
             var expired = new List<string>();
+            var expiredPlayers = new List<Player>();
             for (int i = 0; i < Clubs.Count; i++)
             {
                 var club = Clubs[i];
                 if (club == null) continue;
                 bool report = club.IsPlayerOwned;
                 RaiseFrontOffice(club, report, ref raised, ref held);
-                int kept = ExpireIdleVeterans(club, report ? expired : null);
+                int kept = ExpireIdleVeterans(club, report ? expired : null, report ? expiredPlayers : null);
                 if (report) keptVeterans = kept;
             }
+
+            _expiryQueue.Clear();
+            _expiryQueue.AddRange(expiredPlayers);
 
             return RenewalBody(raised, held, expired, keptVeterans);
         }
@@ -814,7 +926,7 @@ namespace SoccerClub.Core
             if (report) held++;
         }
 
-        int ExpireIdleVeterans(Club club, List<string> names)
+        int ExpireIdleVeterans(Club club, List<string> names, List<Player> players = null)
         {
             if (club.Squad == null || club.MatchesSinceWindow <= 0) return 0;
             var idle = new List<Player>();
@@ -836,6 +948,8 @@ namespace SoccerClub.Core
                 removed++;
                 if (names != null)
                     names.Add(idle[i].Name ?? "選手");
+                if (players != null)
+                    players.Add(idle[i]);
             }
 
             return idle.Count - removed;
@@ -1322,7 +1436,7 @@ namespace SoccerClub.Core
             candidates.AddRange(kept);
         }
 
-        /// <summary>放出候補を上から見て、ポジショングループが最低人数（ClubMath.SquadGroupFloor）を下回る分を外す。</summary>
+        /// <summary>放出候補を上から見て、どれかのポジショングループが移籍の最低人数（ClubMath.TransferGroupFloor）を下回る分を外す。</summary>
         static void KeepPositionFloors(Club club, List<Player> outgoing)
         {
             if (club == null || outgoing == null) return;
@@ -1335,7 +1449,7 @@ namespace SoccerClub.Core
                 var player = outgoing[i];
                 if (player == null) continue;
                 var group = PositionUtility.GroupOf(player.PreferredPosition);
-                if (counts[group] - 1 < ClubMath.SquadGroupFloor(group)) continue;
+                if (counts[group] - 1 < ClubMath.TransferGroupFloor(group)) continue;
                 counts[group]--;
                 kept.Add(player);
             }
@@ -1410,9 +1524,9 @@ namespace SoccerClub.Core
                 return;
             }
 
-            if (SquadCount(PlayerClub) <= ClubMath.MinimumSquad)
+            if (!ClubMath.TransferKeepsFloors(PlayerClub, player))
             {
-                _story.Pages[3] = "所属が15人のため、放出できませんでした。";
+                _story.Pages[3] = "GK2人・DF5人・MF5人・FW3人を下回るため、放出できませんでした。";
                 return;
             }
 
@@ -1734,6 +1848,8 @@ namespace SoccerClub.Core
             file.TicketKey = _ticketKey;
             file.CampKey = _campKey;
             file.RenewalKey = _renewalKey;
+            file.ExpiryQueue = WritePlayers(_expiryQueue);
+            file.SeasonalKey = _seasonalKey;
             file.StaffOfferMonth = _staffOfferMonth;
             file.StaffOfferDay = _staffOfferDay;
             file.StaffOfferRole = _staffOfferRole;
@@ -1760,6 +1876,16 @@ namespace SoccerClub.Core
             _ticketKey = file.TicketKey;
             _campKey = file.CampKey;
             _renewalKey = file.RenewalKey;
+            _seasonalKey = file.SeasonalKey;
+            _expiryQueue.Clear();
+            if (file.ExpiryQueue != null)
+            {
+                for (int i = 0; i < file.ExpiryQueue.Length; i++)
+                {
+                    var queued = ReadOnePlayer(file.ExpiryQueue[i]);
+                    if (queued != null) _expiryQueue.Add(queued);
+                }
+            }
             _staffOfferMonth = file.StaffOfferMonth;
             _staffOfferDay = file.StaffOfferDay;
             _staffOfferRole = file.StaffOfferRole;

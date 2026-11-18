@@ -768,7 +768,7 @@ namespace SoccerClub.UI
                     DrawStrengthen(session, club, setStatus);
                     break;
                 case ClubPage.Players:
-                    DrawPlayers(club);
+                    DrawPlayers(session, club);
                     break;
                 case ClubPage.Staff:
                     DrawTeamStaff(club, ClubhousePageRect, focusCharacter);
@@ -980,7 +980,7 @@ namespace SoccerClub.UI
         /// <summary>
         /// 選手タブ。左が選択中のアバターとスタミナ・攻撃・守備のレーダー、右が所属一覧。
         /// </summary>
-        void DrawPlayers(Club club)
+        void DrawPlayers(GameSession session, Club club)
         {
             DrawTex(PlayerListRect, _playerListFrame);
             DrawTex(PlayerAvatarRect, _avatarFrame);
@@ -998,9 +998,186 @@ namespace SoccerClub.UI
             DrawPlayerScrollbar(content);
 
             var selected = SelectedPlayer();
-            DrawPortrait(selected, club);
+            if (_showProfile && selected != null)
+            {
+                DrawProfile(session, selected);
+            }
+            else
+            {
+                DrawPortrait(selected, club);
+                if (selected != null)
+                    DrawRadar(selected);
+            }
+
             if (selected != null)
-                DrawRadar(selected);
+            {
+                GUI.Label(ProfileToggleRect, _showProfile ? "能力" : "プロフィール", _profileToggle);
+                if (GUI.Button(ProfileToggleRect, GUIContent.none, _hit))
+                    _showProfile = !_showProfile;
+            }
+        }
+
+        // ---- 仮表示：プロフィール（性別・趣味・関係）。Figmaの本番デザインができたら差し替える ----
+
+        static readonly Rect ProfileToggleRect = new Rect(613f, 390f, 150f, 40f);
+        static readonly Rect ProfileTextRect = new Rect(371f, 436f, 383f, 445f);
+        bool _showProfile;
+        string _profileText;
+        string _profileKey;
+        Vector2 _profileScroll;
+        GUIStyle _profileToggle;
+        GUIStyle _profileBody;
+
+        void DrawProfile(GameSession session, Player player)
+        {
+            EnsureProfileStyles();
+            var previous = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, 0.55f);
+            GUI.DrawTexture(new Rect(PlayerAvatarRect.x + 8f, PlayerAvatarRect.y + 48f, PlayerAvatarRect.width - 16f, PlayerAvatarRect.height - 56f), Texture2D.whiteTexture);
+            GUI.color = previous;
+
+            // 選手と日付が変わったときだけ作り直す（関係の一覧は全選手を回すので毎フレームは作らない）。
+            string key = player.Id + "|" + (session != null ? session.Time.CurrentDate.Ticks : 0L);
+            if (_profileKey != key)
+            {
+                _profileKey = key;
+                _profileText = BuildProfile(session, player);
+                _profileScroll = Vector2.zero;
+            }
+
+            float height = _profileBody.CalcHeight(new GUIContent(_profileText), ProfileTextRect.width - 24f);
+            _profileScroll = GUI.BeginScrollView(ProfileTextRect, _profileScroll, new Rect(0f, 0f, ProfileTextRect.width - 24f, height));
+            GUI.Label(new Rect(0f, 0f, ProfileTextRect.width - 24f, height), _profileText, _profileBody);
+            GUI.EndScrollView();
+        }
+
+        static string BuildProfile(GameSession session, Player player)
+        {
+            var sb = new System.Text.StringBuilder(512);
+            int month;
+            int day;
+            CharacterLife.Birthday(player.Id, out month, out day);
+            string hobby = CharacterLife.Hobby(player.Id);
+            if (CharacterLife.IsMovie(hobby)) hobby = "映画（" + CharacterLife.Movie(player.Id) + "）";
+
+            sb.Append("<b>").Append(player.Name).Append("</b>\n");
+            sb.Append("性別：").Append(player.Gender == Gender.Male ? "男性" : "女性");
+            sb.Append("　年齢：").Append(player.Age).Append("\n");
+            sb.Append("誕生日：").Append(month).Append("月").Append(day).Append("日\n");
+            sb.Append("趣味：").Append(hobby).Append("\n");
+            sb.Append("好きな食べ物：").Append(CharacterLife.FavoriteFood(player.Id)).Append("\n");
+            sb.Append("苦手な食べ物：").Append(CharacterLife.DislikedFood(player.Id)).Append("\n");
+            sb.Append("子ども：").Append(player.Children).Append("人\n");
+
+            sb.Append("\n<b>関係</b>\n");
+            var relations = session != null && session.Relations != null ? session.Relations.For(player.Id) : null;
+            if (relations == null || relations.Count == 0)
+            {
+                sb.Append("（まだいません）\n");
+            }
+            else
+            {
+                var people = ProfilePeople(session);
+                for (int i = 0; i < relations.Count; i++)
+                {
+                    var rel = relations[i];
+                    string otherId = rel.Other(player.Id);
+                    string name = otherId;
+                    string clubName = "無所属";
+                    ProfilePerson person;
+                    if (otherId != null && people.TryGetValue(otherId, out person))
+                    {
+                        name = person.Name;
+                        clubName = person.Club;
+                    }
+                    else if (rel.Stage == RelationStage.Married)
+                    {
+                        clubName = "引退";
+                    }
+
+                    sb.Append(StageLabel(rel.Stage)).Append("：").Append(name)
+                        .Append("（").Append(clubName).Append("）")
+                        .Append(" 親密度").Append(rel.Affinity).Append("\n");
+                }
+            }
+
+            // 親密度は 30 で友達、60 で恋人・親友、90 で結婚（恋人になって12か月以上）。
+            sb.Append("\n<size=18>友達30／恋人・親友60／夫婦90＋恋人12か月</size>");
+            return sb.ToString();
+        }
+
+        struct ProfilePerson
+        {
+            public string Name;
+            public string Club;
+        }
+
+        static Dictionary<string, ProfilePerson> ProfilePeople(GameSession session)
+        {
+            var result = new Dictionary<string, ProfilePerson>();
+            if (session == null) return result;
+            for (int c = 0; c < session.Clubs.Count; c++)
+            {
+                var club = session.Clubs[c];
+                if (club == null) continue;
+                AddProfilePeople(result, club.Squad, club.Name);
+                AddProfilePeople(result, club.Academy, club.Name + "・アカデミー");
+            }
+
+            var all = session.AllPlayers();
+            for (int i = 0; i < all.Count; i++)
+            {
+                var p = all[i];
+                if (p != null && !string.IsNullOrEmpty(p.Id) && !result.ContainsKey(p.Id))
+                    result[p.Id] = new ProfilePerson { Name = p.Name, Club = "無所属" };
+            }
+
+            return result;
+        }
+
+        static void AddProfilePeople(Dictionary<string, ProfilePerson> dest, List<Player> roster, string clubName)
+        {
+            if (roster == null) return;
+            for (int i = 0; i < roster.Count; i++)
+            {
+                var p = roster[i];
+                if (p != null && !string.IsNullOrEmpty(p.Id))
+                    dest[p.Id] = new ProfilePerson { Name = p.Name, Club = clubName };
+            }
+        }
+
+        static string StageLabel(RelationStage stage)
+        {
+            switch (stage)
+            {
+                case RelationStage.Friend: return "友達";
+                case RelationStage.BestFriend: return "親友";
+                case RelationStage.Lover: return "恋人";
+                case RelationStage.Married: return "夫婦";
+                default: return "知り合い";
+            }
+        }
+
+        void EnsureProfileStyles()
+        {
+            if (_profileBody != null && _profileToggle != null) return;
+            var font = _playerName != null ? _playerName.font : null;
+            _profileBody = new GUIStyle(GUI.skin.label)
+            {
+                font = font,
+                fontSize = 22,
+                wordWrap = true,
+                richText = true,
+                alignment = TextAnchor.UpperLeft,
+                normal = { textColor = Color.white }
+            };
+            _profileToggle = new GUIStyle(GUI.skin.box)
+            {
+                font = font,
+                fontSize = 20,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.white }
+            };
         }
 
         void CollectRoster(Club club)

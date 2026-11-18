@@ -1,0 +1,19 @@
+﻿# 会議イベントにした、情報の少ないお知らせの台詞。担当者が1人で、会議室で2つ話す。
+# role: winter.1 / winter.2（ウィンターブレイク・秘書）、camp.1 / camp.2（キャンプ・監督）、ticket.1 / ticket.2（チケット代・事業部）
+# condition: any / first_season（1年目）/ champion（前のシーズンに優勝）/ top3（いまリーグ3位以内）/ lower（いまリーグ下位半分）/ fallback
+# weight: 選ばれやすさ（1が標準。0で無効）
+# 使える差し込み: {speaker}（話す人）{club} {start} {end}（ウィンターブレイクの期間 MM/dd）{price}（チケット代）{rank}（いまの順位）
+# 台詞の中では半角カンマを使わない（読点「、」を使う）
+role,condition,weight,text
+winter.1,any,1,オーナー、ウィンターブレイクに入りました。
+winter.1,top3,1,オーナー、前半戦は{rank}位で折り返しです。ウィンターブレイクに入りました！
+winter.1,lower,1,オーナー、前半戦は{rank}位でした。ウィンターブレイクで立て直しましょう。
+winter.2,any,1,{start}から{end}までは試合がありません。選手たちもひと休みです。
+camp.1,any,1,オーナー、開幕に向けたキャンプが始まりました。
+camp.1,first_season,2,オーナー、いよいよ{club}の最初のシーズンです。キャンプが始まりました！
+camp.1,champion,1,オーナー、連覇に向けたキャンプが始まりました。
+camp.2,any,1,1週間、しっかり鍛えて開幕を迎えます。
+camp.2,any,1,選手たちの仕上がりは順調です。開幕を楽しみにしていてください。
+ticket.1,any,1,オーナー、今シーズンのチケット代を決めました。
+ticket.2,any,1,スタジアムがいっぱいになるように、{price}にしました。
+ticket.2,first_season,1,最初のシーズンなので、{price}で多くの方に来ていただきます。

@@ -44,6 +44,9 @@ namespace SoccerClub.Core
     /// ・スタジアムは、ホームの入場者が収容の 80% を超えているときだけ勧める。
     /// ・フロントは空き枠を先に勧める。空きがなければ、在籍 1 年以上の人より高レベルの候補との交代を勧める。
     /// ・キャンセルした内容は 1 か月出さない。提案は内容が違っても 1 日 1 回まで。
+    /// ・一度出した提案は、プレイヤーが「レベルアップ／契約する」か「キャンセル」を選ぶまで日をまたいでも出し続ける。
+    ///   施設のレベルが変わった、候補が市場からいなくなった、などで実行できなくなったときだけ取り下げる。
+    ///   週 1 回の間隔は、選んだ日から数える。
     /// </summary>
     public sealed partial class GameSession
     {
@@ -74,6 +77,11 @@ namespace SoccerClub.Core
         BigInteger _supportCacheCoins;
         bool _supportDirty = true;
 
+        /// <summary>選ぶまで出し続ける提案。</summary>
+        SupportSuggestion _supportPending;
+        /// <summary>ロード直後はキーだけ持っておき、最初の参照で提案に戻す。</summary>
+        string _supportPendingKey;
+
         /// <summary>今日のサポートの提案。今日すでに対応済み、または勧める内容がなければ null。</summary>
         public SupportSuggestion CurrentSupport
         {
@@ -83,6 +91,21 @@ namespace SoccerClub.Core
                 if (club == null || GameOver) return null;
                 long today = Time.CurrentDate.Date.Ticks;
                 if (_supportDoneTicks == today) return null;
+
+                // 選ぶまで出し続ける。実行できなくなっていたら取り下げて探し直す。
+                if (_supportPending == null && !string.IsNullOrEmpty(_supportPendingKey))
+                {
+                    _supportPending = RestoreSupport(_supportPendingKey);
+                    _supportPendingKey = null;
+                }
+
+                if (_supportPending != null)
+                {
+                    if (SupportStillValid(_supportPending)) return _supportPending;
+                    _supportPending = null;
+                    _supportDirty = true;
+                }
+
                 if (!_supportDirty && _supportCacheDay == today && _supportCacheCoins == club.Coins)
                     return _supportCache;
 
@@ -90,6 +113,7 @@ namespace SoccerClub.Core
                 _supportCacheDay = today;
                 _supportCacheCoins = club.Coins;
                 _supportCache = FindSupport(today);
+                _supportPending = _supportCache;
                 return _supportCache;
             }
         }
@@ -133,9 +157,90 @@ namespace SoccerClub.Core
 
         void MarkSupportDone()
         {
-            _supportDoneTicks = Time.CurrentDate.Date.Ticks;
+            long today = Time.CurrentDate.Date.Ticks;
+            // 週 1 回の間隔は、選んだ日から数える（何日も出し続けた翌日にすぐ次が出ないように）。
+            if (_supportPending != null)
+            {
+                if (_supportPending.Kind == SupportKind.Facility) _supportFacilityTicks = today;
+                else _supportFrontTicks = today;
+            }
+
+            _supportDoneTicks = today;
             _supportDirty = true;
             _supportCache = null;
+            _supportPending = null;
+            _supportPendingKey = null;
+        }
+
+        /// <summary>出し続けている提案が、まだ実行できる形か（お金の判定は「レベルアップ／契約する」のときに行う）。</summary>
+        bool SupportStillValid(SupportSuggestion suggestion)
+        {
+            var club = PlayerClub;
+            if (suggestion == null || club == null) return false;
+            if (suggestion.Kind == SupportKind.Facility)
+            {
+                var facility = club.Facilities != null ? club.Facilities.Get(suggestion.Facility) : null;
+                return facility != null && facility.Level == suggestion.CurrentLevel;
+            }
+
+            var front = club.Front;
+            return front != null
+                   && suggestion.Candidate != null
+                   && _frontMarket.Contains(suggestion.Candidate)
+                   && front.GetAt(suggestion.Slot) == suggestion.Current;
+        }
+
+        /// <summary>セーブしたキー（F:種類:目標Lv / S:枠:候補Id）から提案を作り直す。作れなければ null。</summary>
+        SupportSuggestion RestoreSupport(string key)
+        {
+            var club = PlayerClub;
+            if (club == null || string.IsNullOrEmpty(key)) return null;
+            var parts = key.Split(':');
+            if (parts.Length != 3) return null;
+
+            if (parts[0] == "F")
+            {
+                if (!int.TryParse(parts[1], out int kindValue) || !int.TryParse(parts[2], out int target)) return null;
+                var kind = (FacilityKind)kindValue;
+                var facility = club.Facilities != null ? club.Facilities.Get(kind) : null;
+                if (facility == null || facility.Level + 1 != target) return null;
+                return new SupportSuggestion
+                {
+                    Kind = SupportKind.Facility,
+                    Facility = kind,
+                    CurrentLevel = facility.Level,
+                    TargetLevel = target,
+                    Cost = facility.NextUpgradeCost(),
+                    Key = key
+                };
+            }
+
+            if (parts[0] == "S")
+            {
+                var front = club.Front;
+                if (front == null || !int.TryParse(parts[1], out int slot)) return null;
+                if (slot < 0 || slot >= FrontOffice.SlotCount) return null;
+                StaffMember candidate = null;
+                for (int i = 0; i < _frontMarket.Count; i++)
+                {
+                    var c = _frontMarket[i];
+                    if (c != null && c.Id.ToString() == parts[2]) { candidate = c; break; }
+                }
+
+                if (candidate == null) return null;
+                return new SupportSuggestion
+                {
+                    Kind = SupportKind.Front,
+                    Slot = slot,
+                    Role = FrontOffice.RoleAt(slot),
+                    Candidate = candidate,
+                    Current = front.GetAt(slot),
+                    Cost = FrontOfficeHiring.HireCost(candidate),
+                    Key = key
+                };
+            }
+
+            return null;
         }
 
         SupportSuggestion FindSupport(long today)
@@ -278,6 +383,7 @@ namespace SoccerClub.Core
             file.SupportDoneTicks = _supportDoneTicks;
             file.SupportFacilityTicks = _supportFacilityTicks;
             file.SupportFrontTicks = _supportFrontTicks;
+            file.SupportPendingKey = _supportPending != null ? _supportPending.Key : _supportPendingKey;
             file.SupportSnoozeKeys = new string[_supportSnooze.Count];
             file.SupportSnoozeUntil = new long[_supportSnooze.Count];
             int index = 0;
@@ -297,7 +403,10 @@ namespace SoccerClub.Core
             _supportFrontTicks = 0;
             _supportDirty = true;
             _supportCache = null;
+            _supportPending = null;
+            _supportPendingKey = null;
             if (file == null) return;
+            _supportPendingKey = file.SupportPendingKey;
             _supportDoneTicks = file.SupportDoneTicks;
             _supportFacilityTicks = file.SupportFacilityTicks;
             _supportFrontTicks = file.SupportFrontTicks;

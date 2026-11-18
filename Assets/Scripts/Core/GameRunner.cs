@@ -22,6 +22,8 @@ namespace SoccerClub.Core
         const float ClosedPeriodAdvanceSeconds = 1f;
         const float ReviewSeconds = 5f;
         const float FullAutoNextSeconds = 0.45f;
+        /// <summary>オート中にシーズンのお知らせ（優勝・リーグLV）を見せてから次の日へ進むまでの秒数。</summary>
+        const float SeasonNoticeAutoSeconds = 5f;
 
         enum DayPhase
         {
@@ -38,7 +40,16 @@ namespace SoccerClub.Core
         }
 
         static readonly Rect EmblemDesign = new Rect(31f, 32f, 293f, 220f);
-        static Rect EmblemRect => ShiftLeft(PinTop(EmblemDesign));
+        // 横長のスマホでは左端のインカメラに被るので、log と同じだけ右へずらす。
+        static Rect EmblemRect
+        {
+            get
+            {
+                var rect = ShiftLeft(PinTop(EmblemDesign));
+                rect.x += LeftCameraInset;
+                return rect;
+            }
+        }
         // main2 の frame_00。247 / 606 / 965 / 1324、高さ 100、幅 349、間隔 10。
         const float InfoFrameHeight = 100f;
         const float InfoFrameWidth = 349f;
@@ -79,9 +90,9 @@ namespace SoccerClub.Core
         // game2（試合中）の auto。ゲージ 1559,1017 / 212×30.7、AUTO はその右 1771,988。
         static Rect MatchGaugeRect => ShiftRight(PinBottom(new Rect(1559f, 1017f, 212f, 30.74f)));
         static Rect MatchAutoRect => ShiftRight(PinBottom(new Rect(1771f, 988f, 119f, 60f)));
-        // meeting_room の AUTO は従来どおりゲージの左 1422,988。
-        static Rect MeetingAutoRect => ShiftRight(PinBottom(new Rect(1422f, 988f, 119f, 60f)));
-        static Rect MeetingGaugeRect => ShiftRight(new Rect(1557f, 988f, 331f, 48f));
+        // meeting_event の auto（172:258）。ゲージ 1557,1017 / 212×30.7、AUTO はその右 1769,988（sponsor と同じ）。
+        static Rect MeetingAutoRect => ShiftRight(PinBottom(new Rect(1769f, 988f, 119f, 60f)));
+        static Rect MeetingGaugeRect => ShiftRight(PinBottom(new Rect(1557f, 1017f, 212f, 30.74f)));
         // sponsor の auto。ゲージ 1557,1017 / 212×30.7、AUTO はその右 1769,988。
         static Rect SponsorGaugeRect => ShiftRight(PinBottom(new Rect(1557f, 1017f, 212f, 30.74f)));
         static Rect SponsorAutoRect => ShiftRight(PinBottom(new Rect(1769f, 988f, 119f, 60f)));
@@ -176,6 +187,7 @@ namespace SoccerClub.Core
         Texture2D _autoOn;
         bool _autoPlay;
         bool _fullAuto;
+        float _seasonNoticeElapsed;
         System.Numerics.BigInteger _payrollBeforeGrowth;
         bool _holdPayroll;
         Texture2D _dayGaugeFrame;
@@ -476,9 +488,10 @@ namespace SoccerClub.Core
                     if (_dayElapsed >= MeetingResultAt())
                     {
                         Session.ApplyOpenStory();
-                        _meetingSuccess = IsTransferMeeting()
-                            ? Session.TransferDeparted()
-                            : Session.SigningJoined();
+                        _meetingSuccess = IsExpiryMeeting() || IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting()
+                            || (IsTransferMeeting()
+                                ? Session.TransferDeparted()
+                                : Session.SigningJoined());
                     }
 
                     if (_dayElapsed >= MeetingDuration())
@@ -526,7 +539,10 @@ namespace SoccerClub.Core
 
                 FlushGrowthLog(_dayElapsed);
 
-                if (_dayElapsed >= AdvanceSeconds())
+                // 関係イベントの再生中は日の終わりで待つ。日が終わるとスポンサー契約や収支報告などが開いて、イベントが途中で消えてしまうため。
+                if (_dayElapsed >= AdvanceSeconds() && _miniEvents.HoldsDay)
+                    _dayElapsed = AdvanceSeconds();
+                else if (_dayElapsed >= AdvanceSeconds())
                 {
                     _dayElapsed = AdvanceSeconds();
                     if (_growthCursor < 1f)
@@ -547,8 +563,12 @@ namespace SoccerClub.Core
 
             bool seasonNotice = Session != null && !string.IsNullOrEmpty(Session.SeasonNotice);
             bool holdDialog = _dialogs.IsOpen && !_fullAuto;
-            bool holdNotice = seasonNotice && !_fullAuto;
-            if (_phase == DayPhase.Idle && Session != null && Session.CurrentStory != null && !_dialogs.IsOpen)
+            // お知らせは手動なら次の日を押すまで出す。オート中は少し見せてから自動で進める（オートは止めない）。
+            if (!seasonNotice) _seasonNoticeElapsed = 0f;
+            else if (_autoPlay && _phase == DayPhase.Idle && !holdDialog) _seasonNoticeElapsed += UnityEngine.Time.deltaTime;
+            bool holdNotice = seasonNotice && !_fullAuto && (!_autoPlay || _seasonNoticeElapsed < SeasonNoticeAutoSeconds);
+            // 関係イベント（友達・親友・恋人・夫婦）の再生中は、ほかのイベントを割り込ませない。
+            if (_phase == DayPhase.Idle && Session != null && Session.CurrentStory != null && !_dialogs.IsOpen && !_miniEvents.HoldsDay)
                 OpenStoryPhase();
             else if (_autoPlay && _phase == DayPhase.Idle && _dayElapsed < 0f && !holdDialog && !holdNotice && !_miniEvents.HoldsDay)
                 BeginDayAdvance();
@@ -580,6 +600,8 @@ namespace SoccerClub.Core
             var story = Session != null ? Session.CurrentStory : null;
             if (story != null && (story.Kind == ClubStoryKind.Transfer
                 || story.Kind == ClubStoryKind.Signing
+                || story.Kind == ClubStoryKind.ContractExpiry
+                || story.Kind == ClubStoryKind.Seasonal
                 || story.Kind == ClubStoryKind.NewYear))
                 return ReviewSeconds;
             return DayAdvanceSeconds;
@@ -591,12 +613,14 @@ namespace SoccerClub.Core
             return story != null
                 && (story.Kind == ClubStoryKind.Transfer
                     || story.Kind == ClubStoryKind.Signing
+                    || story.Kind == ClubStoryKind.ContractExpiry
+                    || story.Kind == ClubStoryKind.Seasonal
                     || story.Kind == ClubStoryKind.NewYear);
         }
 
         bool NeedsManualNext()
         {
-            return Session != null && Session.CurrentStory != null && !CanAutoStory();
+            return Session != null && Session.CurrentStory != null && !CanAutoStory() && !IsMeetingRoom();
         }
 
         float NextSeconds(float normal)
@@ -736,9 +760,17 @@ namespace SoccerClub.Core
                     float elapsed = _dayElapsed < 0f ? 0f : _dayElapsed;
                     bool outcome = _meetingClock ? _meetingSuccess : PredictedMeetingOutcome();
                     _meeting.Draw(Session.CurrentStory, Session, _font, elapsed, outcome);
-                    float duration = IsTransferMeeting()
-                        ? MeetingRoomView.TransferDuration(outcome)
-                        : MeetingRoomView.Duration(outcome);
+                    float duration = IsNoticeMeeting()
+                        ? MeetingRoomView.NoticeDuration
+                        : IsSeasonalMeeting()
+                        ? MeetingRoomView.SeasonalDuration(Session.CurrentStory)
+                        : IsNewYearMeeting()
+                        ? MeetingRoomView.NewYearDuration
+                        : IsExpiryMeeting()
+                        ? MeetingRoomView.ExpiryDuration
+                        : IsTransferMeeting()
+                            ? MeetingRoomView.TransferDuration(outcome)
+                            : MeetingRoomView.Duration(outcome);
                     DrawDayGauge(MeetingGaugeRect, duration <= 0f ? 1f : Mathf.Clamp01(elapsed / duration));
                     DrawAutoButton(MeetingAutoRect);
                     DrawFullAutoButton(MeetingAutoRect);
@@ -1511,6 +1543,8 @@ namespace SoccerClub.Core
         void BeginDayAdvance()
         {
             if (Session == null || Session.GameOver || _phase != DayPhase.Idle || _dayElapsed >= 0f) return;
+            // 関係イベントの再生中は、朝のイベントやスタメン紹介を開かない（終わってから日を進める）。
+            if (_miniEvents.HoldsDay) return;
             if (Session.CurrentStory != null || Session.TryOpenMorningEvent())
             {
                 OpenStoryPhase();
@@ -1794,21 +1828,60 @@ namespace SoccerClub.Core
                 && !string.IsNullOrEmpty(story.PlayerId);
         }
 
-        bool IsMeetingRoom() => IsSigningMeeting() || IsTransferMeeting();
+        /// <summary>契約満了。GM が選手を会議室に呼んで伝える。</summary>
+        bool IsExpiryMeeting()
+        {
+            var story = Session != null ? Session.CurrentStory : null;
+            return story != null && story.Kind == ClubStoryKind.ContractExpiry;
+        }
+
+        /// <summary>新年あいさつ。秘書がいれば会議室で話す。いなければ従来のお知らせ。</summary>
+        bool IsNewYearMeeting()
+        {
+            var story = Session != null ? Session.CurrentStory : null;
+            if (story == null || story.Kind != ClubStoryKind.NewYear) return false;
+            var club = Session.PlayerClub;
+            return club != null && club.Front != null && club.Front.Secretary != null;
+        }
+
+        /// <summary>季節のイベント。秘書と選手が会議室で話す。</summary>
+        bool IsSeasonalMeeting()
+        {
+            var story = Session != null ? Session.CurrentStory : null;
+            return story != null && story.Kind == ClubStoryKind.Seasonal;
+        }
+
+        /// <summary>情報の少ないお知らせ（ウィンターブレイク・キャンプ・チケット代）。担当者がいれば会議室で話す。</summary>
+        bool IsNoticeMeeting()
+        {
+            var story = Session != null ? Session.CurrentStory : null;
+            if (story == null || !MeetingRoomView.IsNoticeKind(story.Kind)) return false;
+            string department;
+            return MeetingRoomView.NoticeSpeaker(Session, story.Kind, out department) != null;
+        }
+
+        bool IsMeetingRoom() => IsSigningMeeting() || IsTransferMeeting() || IsExpiryMeeting() || IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting();
 
         bool PredictedMeetingOutcome()
         {
             if (Session == null) return false;
+            if (IsExpiryMeeting() || IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting()) return true;
             return IsTransferMeeting() ? Session.WillTransferLeave() : Session.WillSigningSucceed();
         }
 
         float MeetingResultAt()
         {
+            if (IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting()) return 0f;
+            if (IsExpiryMeeting()) return MeetingRoomView.ExpiryResultAt;
             return IsTransferMeeting() ? MeetingRoomView.TransferResultAt : MeetingRoomView.ResultAt;
         }
 
         float MeetingDuration()
         {
+            if (IsNoticeMeeting()) return MeetingRoomView.NoticeDuration;
+            if (IsSeasonalMeeting()) return MeetingRoomView.SeasonalDuration(Session.CurrentStory);
+            if (IsNewYearMeeting()) return MeetingRoomView.NewYearDuration;
+            if (IsExpiryMeeting()) return MeetingRoomView.ExpiryDuration;
             return IsTransferMeeting()
                 ? MeetingRoomView.TransferDuration(_meetingSuccess)
                 : MeetingRoomView.Duration(_meetingSuccess);
@@ -1914,7 +1987,16 @@ namespace SoccerClub.Core
         }
 
         // main の support（184:39）は左下。画面の左端と下端に寄せる。
-        static Vector2 SupportCalloutOrigin => ShiftLeft(PinBottom(new Rect(0f, 0f, 1f, 1f))).position;
+        // 横長のスマホでは左端のインカメラに被るので、log と同じだけ右へずらす。
+        static Vector2 SupportCalloutOrigin
+        {
+            get
+            {
+                var origin = ShiftLeft(PinBottom(new Rect(0f, 0f, 1f, 1f))).position;
+                origin.x += LeftCameraInset;
+                return origin;
+            }
+        }
 
         /// <summary>
         /// サポートキャラを出すか。メイン画面で、日送り前か日送り中（試合画面を除く）。

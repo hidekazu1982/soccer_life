@@ -1,0 +1,21 @@
+﻿# 新年あいさつ（1月1日）。秘書が会議室でオーナーにあいさつする。1行=1パターン。
+# role（会話の順）: greet（新年のあいさつ）/ review（いまのチームの話）/ wish（今年の抱負）
+# condition: any（いつでも）/ first_season（1年目）/ top（リーグ1位）/ top3（3位以内）/ upper（上位半分）/ lower（下位半分）/ bottom3（下から3つ）/ champion（前のシーズンに優勝）/ fallback（ほかに合う行が無いときだけ）
+# weight: 選ばれやすさ（1が標準。0で無効）
+# 使える差し込み: {year}（西暦）{season}（何年目）{rank}（いまの順位）{club}（クラブ名）{secretary}（秘書の名前）{league}（リーグLV）
+# 台詞の中では半角カンマを使わない（読点「、」を使う）
+role,condition,weight,text
+greet,any,1,オーナー、あけましておめでとうございます！
+greet,any,1,オーナー、{year}年の始まりですね。あけましておめでとうございます！
+greet,first_season,2,オーナー、あけましておめでとうございます。{club}での初めてのお正月ですね！
+review,top,1,いまリーグは{rank}位。このまま首位で後半戦を迎えましょう！
+review,top3,1,いま{rank}位です。優勝争いができる位置にいますよ。
+review,upper,1,前半戦は{rank}位で折り返しました。後半戦でもうひと伸びです。
+review,lower,1,前半戦は{rank}位でした……。でも、まだ巻き返せます！
+review,bottom3,1,{rank}位と苦しい前半戦でしたね。後半戦で立て直しましょう。
+review,champion,1,昨シーズンの優勝の勢いのまま、今年も頑張りましょう！
+review,fallback,1,前半戦、選手たちはよく頑張っていました。
+wish,any,1,今年もよろしくお願いします！
+wish,any,1,今年も{club}を、一緒に盛り上げていきましょう！
+wish,first_season,1,わたしも精いっぱいお手伝いします。今年もよろしくお願いします！
+wish,top,1,今年こそ、みんなで優勝を祝いましょうね！

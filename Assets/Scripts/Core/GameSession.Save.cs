@@ -65,6 +65,7 @@ namespace SoccerClub.Core
             WriteSupport(file);
             file.Relationships = _relations.Write();
             file.LastFriendEventTicks = _lastRelationEvent == default ? 0 : _lastRelationEvent.Ticks;
+            WriteExtraPractice(file);
             return file;
         }
 
@@ -136,6 +137,7 @@ namespace SoccerClub.Core
             // 無所属のキャリアやり直し（ReadPersonnel 内）で関係を消せるよう、先に読む。
             session._relations.Read(file.Relationships);
             session._lastRelationEvent = file.LastFriendEventTicks > 0 ? new DateTime(file.LastFriendEventTicks) : default;
+            session.ReadExtraPractice(file);
             session.ReadPersonnel(file);
             session.ReadSupport(file);
             var market = ReadStaffList(file.FrontMarket);

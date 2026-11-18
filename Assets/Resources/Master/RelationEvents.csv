@@ -1,0 +1,27 @@
+﻿# 関係イベントの台詞。1行=1パターン。Aが話しかけ、Bが答える。3つ目の吹き出しが result（空欄なら「AとBが○○になった！」）。
+# stage: friend（友達）/ best_friend（親友・同性）/ lover（恋人・異性）/ married（夫婦）
+# condition: any（いつでも）/ food（好きな食べ物が同じ）/ hobby（趣味が同じ・映画以外）/ hobby_movie（趣味がどちらも映画）/ country（行きたい国が同じ）/ movie（好きな映画ジャンルが同じ）/ birth_month（誕生月が同じ）/ position（同じポジション系統）/ age_close（年齢差3以内）/ veteran（2人とも30歳以上）/ young（2人とも21歳以下）/ fallback（ほかに合う行が無いときだけ）
+# weight: 選ばれやすさ（1が標準。0で無効）
+# 使える差し込み: {nameA} {nameB} {meA} {meB}（一人称）{food} {hobby} {country} {activity} {movie} {month}（Aの値）
+# 台詞の中では半角カンマを使わない（読点「、」を使う）
+stage,condition,weight,line_a,line_b,result
+friend,food,1,え、{food}が好きなの？　{meA}も大好き！,本当？　今度一緒に食べに行こうよ。,
+friend,hobby,1,趣味が{hobby}なんだって？　{meA}も！,仲間がいてうれしい。今度一緒にやろう！,
+friend,hobby_movie,1,趣味が映画なんだって？　{meA}もよく観るよ。,うれしい！　今度おすすめを教えて。,
+friend,country,1,{country}が好きなの？　{meA}もずっと気になってた。,いつか一緒に{country}へ行けたらいいね！,
+friend,movie,1,{movie}映画、{meA}も好きなんだ。,話が合うね。次のオフに一緒に観に行こう！,
+friend,birth_month,1,誕生日、同じ{month}月なんだね！,本当だ！　今年は一緒にお祝いしよう。,
+friend,position,1,さっきの練習、息がぴったりだったね。,同じポジション同士、もっと話そうよ！,
+friend,age_close,1,同じ世代だと、話が合うね。,うん、これからもよろしく！,
+friend,veteran,1,この年になると、体のケアが大事だよな。,本当に。今度いい整体を教えるよ。,
+friend,young,1,寮のごはん、もう慣れた？,まだかな。今度こっそり外で食べようよ。,
+friend,fallback,1,今日の練習、最後まで一緒に走ったね。,ひとりじゃないから頑張れたよ。ありがとう。,
+best_friend,any,1,{nameB}とは、何でも話せるね。,うん、いちばんの親友だよ！,
+best_friend,any,1,調子が悪いとき、いつも声をかけてくれてありがとう。,おたがいさま。これからも助け合おう！,
+best_friend,any,1,引退しても、ずっと付き合っていこうな。,当たり前だよ。一生の親友だ！,
+lover,any,1,あのさ、ずっと言いたかったことがあるんだ。好きです。,……{meB}も、同じ気持ちだよ。,
+lover,any,1,試合のあと、いちばんに話したくなるのはきみなんだ。,うれしい。{meB}もそうだったよ。,
+lover,any,1,今度のオフ、二人で出かけない？　大事な話がしたい。,うん。……その話、たぶん{meB}も同じだと思う。,
+married,any,1,これからもずっと一緒にいてほしい。結婚しよう。,はい。よろしくお願いします！,
+married,any,1,引退したあとも、となりにいてくれる？,もちろん。ずっと一緒だよ。,
+married,any,1,このクラブで出会えてよかった。家族になってください。,……うん。喜んで！,
