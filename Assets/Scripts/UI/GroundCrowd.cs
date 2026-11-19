@@ -141,6 +141,7 @@ namespace SoccerClub.UI
         readonly List<Zone> _zones = new List<Zone>();
         readonly List<bool> _squadFlags = new List<bool>();
         readonly List<Color32> _hairColors = new List<Color32>();
+        readonly List<Gender> _genders = new List<Gender>();
         readonly List<string> _remove = new List<string>();
         readonly Dictionary<string, int> _growthDelta = new Dictionary<string, int>();
         readonly List<Walker> _growthRow = new List<Walker>();
@@ -486,6 +487,7 @@ namespace SoccerClub.UI
             _zones.Clear();
             _squadFlags.Clear();
             _hairColors.Clear();
+            _genders.Clear();
             if (club != null)
                 Collect(club);
 
@@ -524,7 +526,7 @@ namespace SoccerClub.UI
                     if (walker.Frames == null || !SameColor(walker.Hair, hair))
                     {
                         AvatarLibrary.Destroy(walker.Frames);
-                        walker.Frames = _library.Create(_ids[i], uniform, hair, 0, OutfitOf(_zones[i]));
+                        walker.Frames = _library.Create(_ids[i], uniform, hair, 0, OutfitOf(_zones[i]), _genders[i]);
                         walker.Hair = hair;
                     }
 
@@ -546,7 +548,7 @@ namespace SoccerClub.UI
                 {
                     Id = _ids[i],
                     Zone = _zones[i],
-                    Frames = _library.Create(_ids[i], uniform, hair, 0, OutfitOf(_zones[i])),
+                    Frames = _library.Create(_ids[i], uniform, hair, 0, OutfitOf(_zones[i]), _genders[i]),
                     Squad = _squadFlags[i],
                     Hair = hair,
                     Feet = RandomPoint(_zones[i]),
@@ -571,7 +573,7 @@ namespace SoccerClub.UI
                 var player = squad[i];
                 if (player == null) continue;
                 var group = PositionUtility.GroupOf(player.BestPosition());
-                Add(player.Id, Zone.Player, true, PositionUtility.GroupColor(group));
+                Add(player.Id, Zone.Player, true, PositionUtility.GroupColor(group), player.Gender);
             }
             var team = club.Team;
             if (team != null)
@@ -608,7 +610,8 @@ namespace SoccerClub.UI
 
         void Add(StaffMember staff, Zone zone, bool squad)
         {
-            Add(staff != null ? staff.Id : null, zone, squad, AvatarLibrary.NaturalHair(staff != null ? staff.Id : null));
+            if (staff == null) return;
+            Add(staff.Id, zone, squad, AvatarLibrary.NaturalHair(staff.Id), staff.Gender);
         }
 
         void AddSlots(StaffMember[] slots, Zone zone)
@@ -618,7 +621,7 @@ namespace SoccerClub.UI
                 Add(slots[i], zone, false);
         }
 
-        void Add(string id, Zone zone, bool squad, Color32 hair)
+        void Add(string id, Zone zone, bool squad, Color32 hair, Gender gender)
         {
             if (string.IsNullOrEmpty(id)) return;
             for (int i = 0; i < _ids.Count; i++)
@@ -630,6 +633,7 @@ namespace SoccerClub.UI
                         _zones[i] = zone;
                         _squadFlags[i] = true;
                         _hairColors[i] = hair;
+                        _genders[i] = gender;
                     }
 
                     return;
@@ -640,6 +644,7 @@ namespace SoccerClub.UI
             _zones.Add(zone);
             _squadFlags.Add(squad);
             _hairColors.Add(hair);
+            _genders.Add(gender);
         }
 
         void Step(Walker walker, float deltaTime)
@@ -997,6 +1002,9 @@ namespace SoccerClub.UI
             if (!walker.Walking || walker.Facing == 0)
             {
                 texture = walker.Walking ? FrameAt(frames.WalkFront, frame) : frames.Stand;
+                // 吹き出しを出して話しているあいだは、口を開いたコマと交互に出す（口パク）。
+                if (!walker.Walking && frames.StandTalk != null && walker.Id == talkingId && AvatarLibrary.MouthOpen)
+                    texture = frames.StandTalk;
             }
             else
             {

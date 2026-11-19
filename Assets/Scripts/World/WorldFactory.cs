@@ -470,6 +470,7 @@ namespace SoccerClub.World
             {
                 Id = id,
                 Name = NameCatalog.ForId(id),
+                Gender = PlayerTraits.GenderForId(id),
                 Age = age,
                 Level = level,
                 IsFrontOffice = front,
@@ -486,6 +487,7 @@ namespace SoccerClub.World
             {
                 Id = id,
                 Name = NameCatalog.ForId(id),
+                Gender = PlayerTraits.GenderForId(id),
                 Age = 26 + random.Next(39),
                 Level = min + random.Next(max - min + 1),
                 IsFrontOffice = front,

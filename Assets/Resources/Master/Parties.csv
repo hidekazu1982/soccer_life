@@ -1,0 +1,11 @@
+﻿# 季節のパーティ。その日の朝に秘書が知らせ、プレイヤーが招待する選手を選ぶ（1年に1回ずつ）。会話は SeasonTalk.csv の season 列に id を書く。
+# title: 見出し / banner: パーティの場面で上に出す文字 / background: 背景（Resources からのパス・拡張子なし・1920×1080。無ければ会議室）
+# slots: 招待できる人数 / cost_percent: 1人あたりの費用（その選手の年俸の%。資金から払う）
+# affinity: 招待した人同士の全ペアの親密度 / condition: 招待した人の調子 / stat: 練習1日分伸びる能力（none / offense / defense / stamina）
+# young_mult: 21歳以下への効果の倍率 / partner_bonus: 恋人・夫婦を2人とも招待したときの親密度 / friend_bonus: 友達・親友を2人とも招待したときの親密度
+# leave_percent: 招待した選手がそのシーズンの終わりまで移籍しにくくなる割合（%）
+id,month,day,title,banner,background,slots,cost_percent,affinity,condition,stat,young_mult,partner_bonus,friend_bonus,leave_percent
+hanami,4,5,お花見パーティー,お花見,Seasonal/bg_hanami,6,3,5,10,none,1,5,8,30
+bbq,8,28,バーベキュー,バーベキュー,Seasonal/bg_bbq,6,3,3,10,stamina,1,5,5,30
+halloween,10,31,ハロウィンパーティー,ハッピーハロウィン,Seasonal/bg_halloween,6,3,3,10,none,2,5,5,30
+christmas,12,24,クリスマスパーティー,メリークリスマス,Seasonal/bg_christmas,6,3,3,10,none,1,15,5,30

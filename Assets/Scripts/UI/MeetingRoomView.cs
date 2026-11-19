@@ -473,7 +473,9 @@ namespace SoccerClub.UI
             EnsureCast(story, session);
             // 背景は 16:9 の枠ではなく実際の画面全体まで広げ、比率を保ったまま覆う。
             var screen = FullScreenRect();
-            var background = story.Kind == ClubStoryKind.Seasonal ? SeasonBackground(story) ?? _background : _background;
+            var background = story.Kind == ClubStoryKind.Seasonal ? SeasonBackground(story) ?? _background
+                : story.Kind == ClubStoryKind.Party ? PartyBackground(story) ?? _background
+                : _background;
             if (background != null)
                 GUI.DrawTexture(screen, background, ScaleMode.ScaleAndCrop, false);
             else
@@ -504,6 +506,12 @@ namespace SoccerClub.UI
             if (story.Kind == ClubStoryKind.Seasonal)
             {
                 DrawSeasonal(story, session, time);
+                return;
+            }
+
+            if (story.Kind == ClubStoryKind.Party)
+            {
+                DrawParty(story, session, time);
                 return;
             }
 
@@ -568,7 +576,7 @@ namespace SoccerClub.UI
             // 実際の画面（背景を広げた範囲）の外にあるときは描かない。
             var visible = FullScreenRect();
             if (rect.xMin >= visible.xMax || rect.xMax <= visible.xMin) return;
-            GUI.DrawTexture(TalkMotion.Apply(rect, talking), portrait, ScaleMode.StretchToFill, true);
+            GUI.DrawTexture(TalkMotion.Apply(rect, talking), AvatarLibrary.Face(portrait, talking), ScaleMode.StretchToFill, true);
         }
 
         void DrawLines(ClubStory story, float time, Marks marks, bool success)
@@ -720,6 +728,90 @@ namespace SoccerClub.UI
                 DrawBubble(LeftBubble, PlayerDepartment, nameA, lines[2]);
             if (season != null && !string.IsNullOrEmpty(season.Banner))
                 DrawBanner(season.Banner);
+        }
+
+        // ---- 季節のパーティ（招待を決めたあとの場面）。会話は季節イベントと同じ形、最後に結果を出す ----
+
+        const float PartyResultSeconds = 4.0f;
+
+        public static float PartyDuration(ClubStory story)
+        {
+            int index;
+            var script = SeasonalScript(story, out index);
+            float talk = script != null ? SeasonalTimeline(script.LineCount).ResultEnd : SlideSeconds;
+            return talk + PartyResultSeconds + 0.4f;
+        }
+
+        void DrawParty(ClubStory story, GameSession session, float time)
+        {
+            int index;
+            var script = SeasonalScript(story, out index);
+            var party = PartyCatalog.Find(GameSession.PartyIdOf(story));
+            float resultStart;
+            if (script != null)
+            {
+                var marks = SeasonalTimeline(script.LineCount);
+                resultStart = marks.ResultEnd;
+                bool solo = _partner == null;
+                float leftX = time < marks.PlayerInEnd ? Move(OffX, LeftFrameX, 0f, time) : LeftFrameX;
+                DrawFigure(_playerPortrait, leftX, _leftTalking);
+                if (!solo)
+                {
+                    float rightX = time < marks.PlayerInEnd ? Move(OffRightX, RightFrameX, 0f, time) : RightFrameX;
+                    DrawFigure(_partnerPortrait, rightX, _rightTalking);
+                }
+
+                if (_seasonalLines == null)
+                {
+                    var club = session != null ? session.PlayerClub : null;
+                    int year = session != null ? session.Time.CurrentDate.Year : System.DateTime.Today.Year;
+                    _seasonalLines = SeasonalCatalog.Lines(script, new SeasonalCatalog.Cast { A = _focus, B = _partner }, club != null ? club.Name : "", year);
+                }
+
+                string nameA = _focus != null && !string.IsNullOrEmpty(_focus.Name) ? _focus.Name : "選手";
+                string nameB = _partner != null && !string.IsNullOrEmpty(_partner.Name) ? _partner.Name : nameA;
+                var lines = _seasonalLines;
+                if (lines.Length > 0 && time >= marks.PlayerInEnd && time < marks.GreetEnd)
+                    DrawBubble(LeftBubble, PlayerDepartment, nameA, lines[0]);
+                else if (lines.Length > 1 && time >= marks.GreetEnd && time < marks.GmGreetEnd)
+                    DrawBubble(solo ? LeftBubble : RightBubble, PlayerDepartment, solo ? nameA : nameB, lines[1]);
+                else if (lines.Length > 2 && time >= marks.GmGreetEnd && time < marks.ResultEnd)
+                    DrawBubble(LeftBubble, PlayerDepartment, nameA, lines[2]);
+            }
+            else
+            {
+                resultStart = SlideSeconds;
+                float leftX = time < SlideSeconds ? Move(OffX, LeftFrameX, 0f, time) : LeftFrameX;
+                DrawFigure(_playerPortrait, leftX, false);
+            }
+
+            if (time >= resultStart)
+            {
+                string title = party != null ? party.Title : "パーティー";
+                string result = story.Pages != null && story.Pages.Length > 1 ? story.Pages[1] : "";
+                DrawBubble(LeftBubble, "結果", title, result ?? "");
+            }
+
+            if (party != null && !string.IsNullOrEmpty(party.Banner))
+                DrawBanner(party.Banner);
+        }
+
+        Texture2D PartyBackground(ClubStory story)
+        {
+            var party = PartyCatalog.Find(GameSession.PartyIdOf(story));
+            return LoadBackground(party != null ? party.Background : null);
+        }
+
+        Texture2D LoadBackground(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            if (_seasonBackgroundPath != path)
+            {
+                _seasonBackgroundPath = path;
+                _seasonBackground = Resources.Load<Texture2D>(path);
+            }
+
+            return _seasonBackground;
         }
 
         /// <summary>季節の背景。Seasons.csv の background を Resources から読み、無ければ null（会議室の背景を使う）。</summary>
@@ -928,14 +1020,14 @@ namespace SoccerClub.UI
                 _noticePortrait = Portrait(_noticeSpeaker, uniform);
             }
 
-            if (story.Kind == ClubStoryKind.Seasonal)
+            if (story.Kind == ClubStoryKind.Seasonal || story.Kind == ClubStoryKind.Party)
             {
                 string partnerId = SeasonalPartnerId(story);
                 _partner = FindSquadPlayer(session, partnerId);
                 if (_partner != null)
                 {
                     var partnerHair = PositionUtility.GroupColor(PositionUtility.GroupOf(_partner.BestPosition()));
-                    _partnerPortrait = _avatars.CreateStand(_partner.Id, uniform, partnerHair, AvatarLibrary.SheetHeight);
+                    _partnerPortrait = _avatars.CreateStand(_partner.Id, uniform, partnerHair, AvatarLibrary.SheetHeight, talkFace: true, gender: _partner.Gender);
                 }
             }
 
@@ -950,7 +1042,7 @@ namespace SoccerClub.UI
                 var hair = player != null
                     ? PositionUtility.GroupColor(PositionUtility.GroupOf(position))
                     : AvatarLibrary.NaturalHair(id);
-                _playerPortrait = _avatars.CreateStand(id, uniform, hair, AvatarLibrary.SheetHeight);
+                _playerPortrait = _avatars.CreateStand(id, uniform, hair, AvatarLibrary.SheetHeight, talkFace: true, gender: player != null ? player.Gender : (Gender?)null);
             }
         }
 
@@ -987,7 +1079,7 @@ namespace SoccerClub.UI
         {
             if (staff == null || string.IsNullOrEmpty(staff.Id)) return null;
             return _avatars.CreateStand(
-                staff.Id, uniform, AvatarLibrary.NaturalHair(staff.Id), AvatarLibrary.SheetHeight, AvatarLibrary.OutfitOf(staff));
+                staff.Id, uniform, AvatarLibrary.NaturalHair(staff.Id), AvatarLibrary.SheetHeight, AvatarLibrary.OutfitOf(staff), talkFace: true, gender: staff.Gender);
         }
 
         static StaffMember FindScout(FrontOffice front, Position position)

@@ -1,5 +1,5 @@
 ﻿# 季節のイベントの会話。1行＝1つの会話。季節ごとに、出られる選手がいる行から weight の重みで1つ選ぶ。
-# season: Seasons.csv の id
+# season: Seasons.csv の id、またはパーティ（Parties.csv）の id。パーティでは招待した選手の中から選ぶ
 # cast: solo（1人）/ pair（友達か親友の2人）/ couple（恋人か夫婦の2人）
 # condition: any / young（全員21歳以下）/ veteran（Aがベテラン）/ married（夫婦。soloは結婚している人）/ lover（恋人同士）/ best_friend（親友同士）/ children（Aに子どもがいる）/ single（soloで結婚していない人）
 # weight: 選ばれやすさ（1が標準。0で無効）
@@ -34,3 +34,7 @@ newyearseve,pair,any,2,今年もお疲れ様。いろいろあったね。,来�
 newyearseve,couple,any,2,今年最後の日、一緒にいられてよかった。,来年も、その先も、よろしくね。,
 newyearseve,solo,veteran,1,今年も一年、無事に終えられてほっとしている。,来年も、まだまだ若手には負けないぞ。,
 newyearseve,solo,any,1,今年は{hobbyA}もサッカーも、たくさん頑張れたな。,来年はもっと上を目指そう。,
+bbq,pair,any,2,肉、焼けたよ！　ほら、{nameB}の分。,ありがとう！　外で食べると最高だね。,
+bbq,couple,any,2,はい、あーん。,ちょっと、みんな見てるって……！,
+bbq,pair,young,1,焼きそばは{meA}に任せて！,じゃあ{meB}は{foodB}を焼くよ。,
+bbq,solo,veteran,1,火の番はベテランの仕事だな。,若い連中がたくさん食べるのを見るのが楽しみだ。,

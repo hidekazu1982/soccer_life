@@ -488,7 +488,7 @@ namespace SoccerClub.Core
                     if (_dayElapsed >= MeetingResultAt())
                     {
                         Session.ApplyOpenStory();
-                        _meetingSuccess = IsExpiryMeeting() || IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting()
+                        _meetingSuccess = IsExpiryMeeting() || IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting() || IsPartyMeeting()
                             || (IsTransferMeeting()
                                 ? Session.TransferDeparted()
                                 : Session.SigningJoined());
@@ -760,7 +760,9 @@ namespace SoccerClub.Core
                     float elapsed = _dayElapsed < 0f ? 0f : _dayElapsed;
                     bool outcome = _meetingClock ? _meetingSuccess : PredictedMeetingOutcome();
                     _meeting.Draw(Session.CurrentStory, Session, _font, elapsed, outcome);
-                    float duration = IsNoticeMeeting()
+                    float duration = IsPartyMeeting()
+                        ? MeetingRoomView.PartyDuration(Session.CurrentStory)
+                        : IsNoticeMeeting()
                         ? MeetingRoomView.NoticeDuration
                         : IsSeasonalMeeting()
                         ? MeetingRoomView.SeasonalDuration(Session.CurrentStory)
@@ -1860,24 +1862,32 @@ namespace SoccerClub.Core
             return MeetingRoomView.NoticeSpeaker(Session, story.Kind, out department) != null;
         }
 
-        bool IsMeetingRoom() => IsSigningMeeting() || IsTransferMeeting() || IsExpiryMeeting() || IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting();
+        /// <summary>季節のパーティの場面（招待を決めたあと）。招待を選ぶあいだは ClubEventView。</summary>
+        bool IsPartyMeeting()
+        {
+            var story = Session != null ? Session.CurrentStory : null;
+            return story != null && story.Kind == ClubStoryKind.Party && story.FinalStep;
+        }
+
+        bool IsMeetingRoom() => IsSigningMeeting() || IsTransferMeeting() || IsExpiryMeeting() || IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting() || IsPartyMeeting();
 
         bool PredictedMeetingOutcome()
         {
             if (Session == null) return false;
-            if (IsExpiryMeeting() || IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting()) return true;
+            if (IsExpiryMeeting() || IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting() || IsPartyMeeting()) return true;
             return IsTransferMeeting() ? Session.WillTransferLeave() : Session.WillSigningSucceed();
         }
 
         float MeetingResultAt()
         {
-            if (IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting()) return 0f;
+            if (IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting() || IsPartyMeeting()) return 0f;
             if (IsExpiryMeeting()) return MeetingRoomView.ExpiryResultAt;
             return IsTransferMeeting() ? MeetingRoomView.TransferResultAt : MeetingRoomView.ResultAt;
         }
 
         float MeetingDuration()
         {
+            if (IsPartyMeeting()) return MeetingRoomView.PartyDuration(Session.CurrentStory);
             if (IsNoticeMeeting()) return MeetingRoomView.NoticeDuration;
             if (IsSeasonalMeeting()) return MeetingRoomView.SeasonalDuration(Session.CurrentStory);
             if (IsNewYearMeeting()) return MeetingRoomView.NewYearDuration;

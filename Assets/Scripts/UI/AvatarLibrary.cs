@@ -107,6 +107,11 @@ namespace SoccerClub.UI
         Head[] _heads = new Head[0];
         Part _mouth;
         Part _eyes;
+        // 目は男女で分ける。口パクの開いた口も男女別、閉じた口（mouth）は男女兼用。
+        Part _eyesMale;
+        Part _eyesFemale;
+        Part _mouthTalkMale;
+        Part _mouthTalkFemale;
         Pose _stand;
         Pose[] _front = new Pose[0];
         Pose[] _side = new Pose[0];
@@ -127,6 +132,10 @@ namespace SoccerClub.UI
             _heads = LoadHeads(layout);
             _mouth = LoadPart(layout, "mouth", false);
             _eyes = LoadPart(layout, "eyes", false);
+            _eyesMale = layout.ContainsKey("eyes_men") ? LoadPart(layout, "eyes_men", false) : null;
+            _eyesFemale = layout.ContainsKey("eyes_woman") ? LoadPart(layout, "eyes_woman", false) : null;
+            _mouthTalkMale = layout.ContainsKey("mouth_talk_men") ? LoadPart(layout, "mouth_talk_men", false) : null;
+            _mouthTalkFemale = layout.ContainsKey("mouth_talk_woman") ? LoadPart(layout, "mouth_talk_woman", false) : null;
             _stand = LoadPose(layout, "stand");
             _front = LoadSeries(layout, "front_");
             _side = LoadSeries(layout, "side_");
@@ -211,21 +220,25 @@ namespace SoccerClub.UI
 
         /// <summary>立ち、前歩き、横歩きのコマ。pixelHeight を省くとグラウンド用の高さ（DisplayHeight）。</summary>
         /// <summary>outfit が Suit なら、kit はネクタイの色（クラブの 1st）にだけ使う。</summary>
-        public AvatarFrames Create(string id, UniformKit kit, Color32 hairColor, int pixelHeight = 0, AvatarOutfit outfit = AvatarOutfit.Uniform)
+        public AvatarFrames Create(string id, UniformKit kit, Color32 hairColor, int pixelHeight = 0, AvatarOutfit outfit = AvatarOutfit.Uniform, SoccerClub.Core.Gender? gender = null)
         {
             if (!Ready || string.IsNullOrEmpty(id)) return null;
             var set = ScaledFor(pixelHeight > 0 ? pixelHeight : DisplayHeight);
             bool suit = UsesSuit(outfit);
             var colors = suit ? SuitColorsFor(id, kit, hairColor) : Colors(id, kit, hairColor);
             var head = set.Heads[HeadIndex(id)];
+            var sex = gender ?? PlayerTraits.GenderForId(id);
             var front = suit ? set.SuitFront : set.Front;
+            var standPose = suit ? set.SuitStand : set.Stand;
             var frames = new AvatarFrames
             {
-                Stand = Compose(set, head, suit ? set.SuitStand : set.Stand, colors, false),
+                Stand = Compose(set, head, standPose, colors, false, sex, false),
+                // 吹き出しを出して立ち止まっているあいだ、Stand と交互に出す口パクのコマ。
+                StandTalk = Compose(set, head, standPose, colors, false, sex, true),
                 WalkFront = new Texture2D[front.Length]
             };
             for (int i = 0; i < front.Length; i++)
-                frames.WalkFront[i] = Compose(set, head, front[i], colors, false);
+                frames.WalkFront[i] = Compose(set, head, front[i], colors, false, sex, false);
             var side = suit ? set.SuitSide : set.Side;
             if (side.Length == 0)
             {
@@ -236,18 +249,78 @@ namespace SoccerClub.UI
 
             frames.WalkSide = new Texture2D[side.Length];
             for (int i = 0; i < side.Length; i++)
-                frames.WalkSide[i] = Compose(set, head, side[i], colors, false);
+                frames.WalkSide[i] = Compose(set, head, side[i], colors, false, sex, false);
             return frames;
         }
 
         /// <summary>待機ポーズ 1 枚。読み取り可能なテクスチャで返す。pixelHeight が 0 なら DisplayHeight。</summary>
-        public Texture2D CreateStand(string id, UniformKit kit, Color32 hairColor, int pixelHeight = 0, AvatarOutfit outfit = AvatarOutfit.Uniform)
+        /// <summary>
+        /// talkFace が true なら、口を開いたコマも作って覚えておく。描くときに Face(texture, talking) で交互に出す。
+        /// 口を開いたコマは、元のテクスチャを Destroy したあと自動で捨てる。
+        /// </summary>
+        /// gender を省くと id から決める（選手・スタッフの性別と同じ決め方）。
+        public Texture2D CreateStand(string id, UniformKit kit, Color32 hairColor, int pixelHeight = 0, AvatarOutfit outfit = AvatarOutfit.Uniform, bool talkFace = false, SoccerClub.Core.Gender? gender = null)
         {
             if (!Ready || string.IsNullOrEmpty(id)) return null;
             var set = ScaledFor(pixelHeight > 0 ? pixelHeight : DisplayHeight);
-            if (UsesSuit(outfit))
-                return Compose(set, set.Heads[HeadIndex(id)], set.SuitStand, SuitColorsFor(id, kit, hairColor), true);
-            return Compose(set, set.Heads[HeadIndex(id)], set.Stand, Colors(id, kit, hairColor), true);
+            bool suit = UsesSuit(outfit);
+            var head = set.Heads[HeadIndex(id)];
+            var pose = suit ? set.SuitStand : set.Stand;
+            var colors = suit ? SuitColorsFor(id, kit, hairColor) : Colors(id, kit, hairColor);
+            var sex = gender ?? PlayerTraits.GenderForId(id);
+            var stand = Compose(set, head, pose, colors, true, sex, false);
+            if (talkFace && stand != null)
+                RegisterTalkFace(stand, Compose(set, head, pose, colors, false, sex, true));
+            return stand;
+        }
+
+        // ---- 口パク。閉じた口（いつもの絵）と開いた口を 0.15 秒ごとに入れ替える。
+
+        const float MouthFlapSeconds = 0.15f;
+        static readonly Dictionary<Texture2D, Texture2D> TalkFaces = new Dictionary<Texture2D, Texture2D>();
+        static readonly List<Texture2D> DeadFaces = new List<Texture2D>();
+        static int _faceCalls;
+
+        /// <summary>いま口を開いているか。話している人はみんな同じ間合いで口パクする。</summary>
+        public static bool MouthOpen => ((int)(UnityEngine.Time.unscaledTime / MouthFlapSeconds) & 1) == 1;
+
+        /// <summary>話しているあいだは、口を開いたコマと交互に返す。登録が無ければそのまま返す。</summary>
+        public static Texture2D Face(Texture2D stand, bool talking)
+        {
+            if (++_faceCalls >= 600)
+            {
+                _faceCalls = 0;
+                PruneTalkFaces();
+            }
+
+            if (!talking || stand == null || !MouthOpen) return stand;
+            Texture2D open;
+            return TalkFaces.TryGetValue(stand, out open) && open != null ? open : stand;
+        }
+
+        static void RegisterTalkFace(Texture2D stand, Texture2D open)
+        {
+            PruneTalkFaces();
+            if (open == null) return;
+            TalkFaces[stand] = open;
+        }
+
+        /// <summary>元の立ち絵が Destroy されたものを探して、口を開いたコマも捨てる。</summary>
+        static void PruneTalkFaces()
+        {
+            DeadFaces.Clear();
+            foreach (var pair in TalkFaces)
+            {
+                if (pair.Key == null) DeadFaces.Add(pair.Key);
+            }
+
+            for (int i = 0; i < DeadFaces.Count; i++)
+            {
+                Texture2D open;
+                if (TalkFaces.TryGetValue(DeadFaces[i], out open) && open != null)
+                    UnityEngine.Object.Destroy(open);
+                TalkFaces.Remove(DeadFaces[i]);
+            }
         }
 
         /// <summary>スタッフの服装。フロント（秘書、GM、各部）はスーツ、監督やコーチはユニフォーム。</summary>
@@ -265,6 +338,7 @@ namespace SoccerClub.UI
         {
             if (frames == null) return;
             DestroyTexture(frames.Stand);
+            DestroyTexture(frames.StandTalk);
             DestroyAll(frames.WalkFront);
             // スーツは横歩きに前歩きのコマを共有しているので、二重に消さない。
             if (frames.WalkSide != frames.WalkFront) DestroyAll(frames.WalkSide);
@@ -290,7 +364,7 @@ namespace SoccerClub.UI
             return new[] { SkinColor(id), SpikeColor(id), kit.Third, kit.Second, kit.First, hair };
         }
 
-        Texture2D Compose(Scaled set, ScaledHead head, ScaledPose pose, Color32[] colors, bool readable)
+        Texture2D Compose(Scaled set, ScaledHead head, ScaledPose pose, Color32[] colors, bool readable, SoccerClub.Core.Gender gender, bool talking)
         {
             if (pose == null) return null;
             int dw = set.Width;
@@ -306,8 +380,11 @@ namespace SoccerClub.UI
             for (int i = 0; i < pose.Fills.Length; i++)
                 BlitMask(pose.Fills[i], colors[i], buf, dw);
             BlitLine(pose.Line, buf, dw);
-            BlitLine(set.Mouth, buf, dw);
-            BlitLine(set.Eyes, buf, dw);
+            bool female = gender == SoccerClub.Core.Gender.Female;
+            var talkMouth = female ? set.MouthTalkFemale : set.MouthTalkMale;
+            BlitLine(talking && talkMouth != null ? talkMouth : set.Mouth, buf, dw);
+            var eyes = female ? set.EyesFemale : set.EyesMale;
+            BlitLine(eyes ?? set.Eyes, buf, dw);
 
             var raw = new Color32[buf.Length];
             for (int y = 0; y < dh; y++)
@@ -395,6 +472,10 @@ namespace SoccerClub.UI
                 Heads = map.Scale(_heads),
                 Mouth = map.Scale(_mouth),
                 Eyes = map.Scale(_eyes),
+                EyesMale = map.Scale(_eyesMale),
+                EyesFemale = map.Scale(_eyesFemale),
+                MouthTalkMale = map.Scale(_mouthTalkMale),
+                MouthTalkFemale = map.Scale(_mouthTalkFemale),
                 Stand = map.Scale(_stand),
                 Front = map.Scale(_front),
                 Side = map.Scale(_side),
@@ -723,6 +804,10 @@ namespace SoccerClub.UI
             public ScaledHead[] Heads;
             public ScaledPart Mouth;
             public ScaledPart Eyes;
+            public ScaledPart EyesMale;
+            public ScaledPart EyesFemale;
+            public ScaledPart MouthTalkMale;
+            public ScaledPart MouthTalkFemale;
             public ScaledPose Stand;
             public ScaledPose[] Front;
             public ScaledPose[] Side;
@@ -735,6 +820,8 @@ namespace SoccerClub.UI
     public sealed class AvatarFrames
     {
         public Texture2D Stand;
+        /// <summary>Stand の口を開いたコマ。立ち止まって話しているあいだ交互に出す。</summary>
+        public Texture2D StandTalk;
         public Texture2D[] WalkFront;
         public Texture2D[] WalkSide;
     }

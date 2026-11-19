@@ -105,7 +105,7 @@ namespace SoccerClub.UI
             // 立ち絵は元の解像度（999px）で作り、CharacterRect（1188px）へ引き伸ばす。
             // この画面では担当者がずっと話しているので、常にふわふわさせる。
             if (_portrait != null)
-                GUI.DrawTexture(TalkMotion.Apply(CharacterRect, true), _portrait, ScaleMode.StretchToFill, true);
+                GUI.DrawTexture(TalkMotion.Apply(CharacterRect, true), AvatarLibrary.Face(_portrait, true), ScaleMode.StretchToFill, true);
 
             string speakerName = speaker != null && !string.IsNullOrEmpty(speaker.Name)
                 ? speaker.Name
@@ -273,7 +273,9 @@ namespace SoccerClub.UI
                 AvatarLibrary.Kit(club.EmblemIndex),
                 AvatarLibrary.NaturalHair(id),
                 AvatarLibrary.SheetHeight,
-                AvatarLibrary.OutfitOf(speaker));
+                AvatarLibrary.OutfitOf(speaker),
+                talkFace: true,
+                gender: speaker.Gender);
         }
 
         void EnsureTextures()

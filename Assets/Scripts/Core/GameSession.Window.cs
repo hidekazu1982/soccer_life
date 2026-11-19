@@ -27,7 +27,9 @@ namespace SoccerClub.Core
         /// <summary>契約満了。GM が会議室に選手を呼んで伝える（MeetingRoomView）。</summary>
         ContractExpiry,
         /// <summary>季節のイベント（Seasons.csv）。秘書と選手1人が会議室で話す。WindowKey に季節の id。</summary>
-        Seasonal
+        Seasonal,
+        /// <summary>季節のパーティ（Parties.csv）。Step 0 で招待を選び、Step 1 でパーティの場面。</summary>
+        Party
     }
 
     /// <summary>休日と移籍期間に出す、クリックで進むイベント。</summary>
@@ -56,6 +58,9 @@ namespace SoccerClub.Core
         internal Player Incoming;
         internal string[] Titles = new string[4];
         internal string[] Pages = new string[4];
+
+        /// <summary>パーティに招待する選手の id。</summary>
+        public readonly List<string> Invited = new List<string>();
     }
 
     public sealed partial class GameSession
@@ -174,6 +179,9 @@ namespace SoccerClub.Core
                 return true;
             }
 
+            if (TryOpenParty(today))
+                return true;
+
             if (TryOpenSeasonal(today))
                 return true;
 
@@ -219,6 +227,13 @@ namespace SoccerClub.Core
         public bool ContinueStory()
         {
             if (_story == null) return false;
+            if (_story.Kind == ClubStoryKind.Party && _story.Step == 0)
+            {
+                if (ConfirmParty(_story)) return true;
+                _story = null;
+                return false;
+            }
+
             if (_story.Budget)
             {
                 AllocateReinforcement(_story.BudgetPercent);
@@ -1195,6 +1210,7 @@ namespace SoccerClub.Core
             {
                 Id = id,
                 Name = string.IsNullOrEmpty(_staffOfferName) ? NameCatalog.ForId(id) : _staffOfferName,
+                Gender = PlayerTraits.GenderForId(id),
                 Age = 26 + _random.Next(39),
                 Level = level,
                 IsFrontOffice = false,
@@ -1317,6 +1333,8 @@ namespace SoccerClub.Core
             // 出場機会の少ないベテラン（GMが承認する場合）は、配偶者がいても移籍しやすさを変えない。
             var spouse = approve ? null : _relations.SpouseIn(club, player);
             if (spouse != null) leave *= RelationshipService.SpouseLeaveFactor;
+            // パーティに招待した選手は、そのシーズンの終わりまで移籍しにくい。
+            leave *= PartyLeaveMultiplier(player.Id, Time.CurrentDate.Date);
             bool leaves = _random.NextDouble() < leave;
             var story = new ClubStory
             {
@@ -1979,7 +1997,8 @@ namespace SoccerClub.Core
                 Page1 = At(story.Pages, 1),
                 Page2 = At(story.Pages, 2),
                 Page3 = At(story.Pages, 3),
-                Incoming = WriteOnePlayer(story.Incoming)
+                Incoming = WriteOnePlayer(story.Incoming),
+                Invited = story.Invited.Count > 0 ? story.Invited.ToArray() : null
             };
         }
 
@@ -2007,6 +2026,14 @@ namespace SoccerClub.Core
                 Salary = ReadMoney(save.Salary),
                 Incoming = ReadOnePlayer(save.Incoming)
             };
+            if (save.Invited != null)
+            {
+                for (int i = 0; i < save.Invited.Length; i++)
+                {
+                    if (!string.IsNullOrEmpty(save.Invited[i])) story.Invited.Add(save.Invited[i]);
+                }
+            }
+
             story.Titles[0] = save.Title0;
             story.Titles[1] = save.Title1;
             story.Titles[2] = save.Title2;

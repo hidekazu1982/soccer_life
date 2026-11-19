@@ -9,6 +9,10 @@ namespace SoccerClub.Data
     {
         public string Id;
         public string Name;
+
+        /// <summary>性別。選手と同じく id から 5:5 で決まる（PlayerTraits.GenderForId）。目や口の絵に使う。</summary>
+        public Gender Gender;
+
         public int Age = 30;
         public int Level = 1;
 

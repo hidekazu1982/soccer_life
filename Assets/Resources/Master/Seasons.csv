@@ -5,9 +5,6 @@
 id,month,day,banner,title,background
 setsubun,2,3,鬼は外！,節分,Seasonal/bg_setsubun
 valentine,2,14,ハッピーバレンタイン,バレンタインデー,Seasonal/bg_valentine
-hanami,4,5,お花見,お花見,Seasonal/bg_hanami
 tanabata,7,7,七夕,七夕,Seasonal/bg_tanabata
 summer,8,15,夏祭り,夏祭り,Seasonal/bg_summer
-halloween,10,31,ハッピーハロウィン,ハロウィン,Seasonal/bg_halloween
-christmas,12,24,メリークリスマス,クリスマスイブ,Seasonal/bg_christmas
 newyearseve,12,31,大みそか,大みそか,Seasonal/bg_newyearseve

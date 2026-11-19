@@ -107,7 +107,7 @@ namespace SoccerClub.UI
 
             GUI.color = Color.white;
             if (_callout != null)
-                GUI.DrawTexture(TalkMotion.Apply(Offset(CalloutCharacter, origin), true), _callout, ScaleMode.StretchToFill, true);
+                GUI.DrawTexture(TalkMotion.Apply(Offset(CalloutCharacter, origin), true), AvatarLibrary.Face(_callout, true), ScaleMode.StretchToFill, true);
 
             var bubble = Offset(CalloutBubble, origin);
             DrawShadow(bubble, 4f, 0f, 4f, bubble.height * 0.5f);
@@ -136,7 +136,7 @@ namespace SoccerClub.UI
             else
                 Fill(screen, new Color(0.12f, 0.14f, 0.16f, 1f), 0f);
             if (_portrait != null)
-                GUI.DrawTexture(TalkMotion.Apply(CharacterRect, true), _portrait, ScaleMode.StretchToFill, true);
+                GUI.DrawTexture(TalkMotion.Apply(CharacterRect, true), AvatarLibrary.Face(_portrait, true), ScaleMode.StretchToFill, true);
 
             DrawMessage(suggestion, speaker);
             return suggestion.Kind == SupportKind.Facility
@@ -380,7 +380,7 @@ namespace SoccerClub.UI
             }
 
             if (!_avatars.Ready) return null;
-            return _avatars.CreateStand(id, AvatarLibrary.Kit(club.EmblemIndex), AvatarLibrary.NaturalHair(id), height, AvatarLibrary.OutfitOf(speaker));
+            return _avatars.CreateStand(id, AvatarLibrary.Kit(club.EmblemIndex), AvatarLibrary.NaturalHair(id), height, AvatarLibrary.OutfitOf(speaker), talkFace: true, gender: speaker.Gender);
         }
 
         void EnsureTextures()

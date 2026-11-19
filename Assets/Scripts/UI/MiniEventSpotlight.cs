@@ -77,9 +77,9 @@ namespace SoccerClub.UI
             GUI.color = Color.white;
             bool result = cue.Beat >= 2;
             if (_left != null)
-                GUI.DrawTexture(TalkMotion.Apply(LeftCharacter, cue.Beat == 0 || result), _left, ScaleMode.StretchToFill, true);
+                GUI.DrawTexture(TalkMotion.Apply(LeftCharacter, cue.Beat == 0 || result), AvatarLibrary.Face(_left, cue.Beat == 0 || result), ScaleMode.StretchToFill, true);
             if (_right != null)
-                GUI.DrawTexture(TalkMotion.Apply(RightCharacter, cue.Beat == 1 || result), _right, ScaleMode.StretchToFill, true);
+                GUI.DrawTexture(TalkMotion.Apply(RightCharacter, cue.Beat == 1 || result), AvatarLibrary.Face(_right, cue.Beat == 1 || result), ScaleMode.StretchToFill, true);
 
             if (result)
             {
@@ -137,7 +137,7 @@ namespace SoccerClub.UI
             var hair = player != null
                 ? PositionUtility.GroupColor(PositionUtility.GroupOf(player.BestPosition()))
                 : AvatarLibrary.NaturalHair(id);
-            texture = _avatars.CreateStand(id, AvatarLibrary.Kit(club.EmblemIndex), hair, AvatarLibrary.SheetHeight);
+            texture = _avatars.CreateStand(id, AvatarLibrary.Kit(club.EmblemIndex), hair, AvatarLibrary.SheetHeight, talkFace: true, gender: player != null ? player.Gender : (Gender?)null);
         }
 
         static void Release(ref Texture2D texture, ref string key)

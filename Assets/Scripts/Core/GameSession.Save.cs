@@ -66,6 +66,7 @@ namespace SoccerClub.Core
             file.Relationships = _relations.Write();
             file.LastFriendEventTicks = _lastRelationEvent == default ? 0 : _lastRelationEvent.Ticks;
             WriteExtraPractice(file);
+            WriteParty(file);
             return file;
         }
 
@@ -138,6 +139,7 @@ namespace SoccerClub.Core
             session._relations.Read(file.Relationships);
             session._lastRelationEvent = file.LastFriendEventTicks > 0 ? new DateTime(file.LastFriendEventTicks) : default;
             session.ReadExtraPractice(file);
+            session.ReadParty(file);
             session.ReadPersonnel(file);
             session.ReadSupport(file);
             var market = ReadStaffList(file.FrontMarket);
@@ -582,7 +584,8 @@ namespace SoccerClub.Core
                 ScoutedGroup = (int)staff.ScoutedGroup,
                 Married = staff.Married,
                 Children = staff.Children,
-                JoinedTicks = staff.JoinedTicks
+                JoinedTicks = staff.JoinedTicks,
+                Gender = (int)staff.Gender + 1
             };
         }
 
@@ -593,6 +596,7 @@ namespace SoccerClub.Core
             {
                 Id = save.Id,
                 Name = NameCatalog.Contains(save.Name) ? save.Name : NameCatalog.ForId(save.Id),
+                Gender = save.Gender == 1 || save.Gender == 2 ? (Gender)(save.Gender - 1) : PlayerTraits.GenderForId(save.Id),
                 Age = save.Age,
                 Married = save.Married,
                 Children = save.Children,

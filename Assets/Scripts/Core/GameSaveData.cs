@@ -75,6 +75,14 @@ namespace SoccerClub.Core
 
         /// <summary>その週に居残り練習をする日。0 はその週は無し。</summary>
         public long ExtraPracticeDayTicks;
+
+        /// <summary>最後に開いたパーティ（年:id）。</summary>
+        public string PartyKey;
+
+        /// <summary>パーティに招待されて移籍しにくくなっている選手（id・期限・割合は同じ順）。</summary>
+        public string[] PartyLoyalIds;
+        public long[] PartyLoyalUntil;
+        public int[] PartyLoyalPercent;
     }
 
     [Serializable]
@@ -123,6 +131,9 @@ namespace SoccerClub.Core
         public string Page2;
         public string Page3;
         public PlayerSave Incoming;
+
+        /// <summary>パーティに招待する選手。</summary>
+        public string[] Invited;
     }
 
     [Serializable]
@@ -279,6 +290,8 @@ namespace SoccerClub.Core
         public bool Married;
         public int Children;
         public long JoinedTicks;
+        /// <summary>0 は古いセーブ（id から決め直す）、1 は男、2 は女。</summary>
+        public int Gender;
     }
 
     [Serializable]

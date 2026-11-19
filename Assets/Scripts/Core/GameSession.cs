@@ -863,7 +863,7 @@ namespace SoccerClub.Core
             else if (reason == "gate") _month.Gate += amount;
             else if (reason == "broadcast") _month.Broadcast += amount;
             else if (reason == "prize") _month.Prize += amount;
-            else if (reason == "operating") _month.Operating -= amount;
+            else if (reason == "operating" || reason == "party") _month.Operating -= amount;
             else if (reason == "advertising") _month.Advertising -= amount;
             else if (reason == "development") _month.Development -= amount;
             else if (reason.StartsWith("facility-")) _month.Facilities -= amount;

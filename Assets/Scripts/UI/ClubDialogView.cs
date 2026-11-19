@@ -1422,7 +1422,7 @@ namespace SoccerClub.UI
             if (!_avatars.Ready) _avatars.Load();
             if (!_avatars.Ready) return null;
             var hair = PositionUtility.GroupColor((PositionGroup)group);
-            var stand = _avatars.CreateStand(player.Id, AvatarLibrary.Kit(club.EmblemIndex), hair);
+            var stand = _avatars.CreateStand(player.Id, AvatarLibrary.Kit(club.EmblemIndex), hair, gender: player.Gender);
             if (stand == null) return null;
 
             _portrait = stand;
@@ -2069,7 +2069,7 @@ namespace SoccerClub.UI
             ReleasePortrait();
             if (!_avatars.Ready) _avatars.Load();
             if (!_avatars.Ready) return null;
-            var stand = _avatars.CreateStand(staff.Id, AvatarLibrary.Kit(club.EmblemIndex), AvatarLibrary.NaturalHair(staff.Id), 0, AvatarLibrary.OutfitOf(staff));
+            var stand = _avatars.CreateStand(staff.Id, AvatarLibrary.Kit(club.EmblemIndex), AvatarLibrary.NaturalHair(staff.Id), 0, AvatarLibrary.OutfitOf(staff), gender: staff.Gender);
             var circle = CircleBust(stand);
             if (stand != null) UnityEngine.Object.Destroy(stand);
             if (circle == null) return null;
