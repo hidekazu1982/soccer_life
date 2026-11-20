@@ -1374,6 +1374,15 @@ namespace SoccerClub.Core
             _debugMenu.Add("補強・移籍", "補強交渉（仮選手）", signing, DebugOpenSigning);
             _debugMenu.Add("補強・移籍", "移籍オファー（所属選手）", transfer, DebugOpenTransfer);
             _debugMenu.Add("スポンサー", "スポンサー契約", sponsor, DebugOpenSponsorOffer);
+
+            // パーティは Parties.csv に並んでいる分だけ出す（行を足せばメニューにも増える）。
+            var party = new Color(0.70f, 0.30f, 0.42f, 1f);
+            var parties = SoccerClub.Data.PartyCatalog.All;
+            for (int i = 0; i < parties.Count; i++)
+            {
+                string id = parties[i].Id;
+                _debugMenu.Add("パーティ", parties[i].Title, party, () => DebugOpenParty(id));
+            }
         }
 
         bool DebugMenuUsable => _phase == DayPhase.Idle && _dayElapsed < 0f && !_dialogs.IsOpen;
@@ -1400,6 +1409,14 @@ namespace SoccerClub.Core
         bool DebugOpenTransfer()
         {
             if (!Session.DebugBeginTransfer()) return false;
+            if (_crowd != null) _crowd.ClearSelection();
+            OpenStoryPhase();
+            return true;
+        }
+
+        bool DebugOpenParty(string partyId)
+        {
+            if (!Session.DebugOpenParty(partyId)) return false;
             if (_crowd != null) _crowd.ClearSelection();
             OpenStoryPhase();
             return true;

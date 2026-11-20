@@ -49,6 +49,16 @@ namespace SoccerClub.Data
         static readonly List<Party> _parties = new List<Party>();
         static bool _loaded;
 
+        /// <summary>読み込んだパーティ（CSV の並び順）。デバッグメニューなどで使う。</summary>
+        public static IReadOnlyList<Party> All
+        {
+            get
+            {
+                Ensure();
+                return _parties;
+            }
+        }
+
         public static Party Find(string id)
         {
             Ensure();

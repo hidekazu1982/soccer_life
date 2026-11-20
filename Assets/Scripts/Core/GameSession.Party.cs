@@ -53,7 +53,25 @@ namespace SoccerClub.Core
             string key = today.Year.ToString(CultureInfo.InvariantCulture) + ":" + party.Id;
             if (_partyKey == key) return false;
             _partyKey = key;
+            OpenPartyStory(party);
+            return true;
+        }
 
+        /// <summary>
+        /// デバッグ用。日付と「その年にもう開いたか」を無視して、指定したパーティを今すぐ開く。
+        /// _partyKey は変えないので、本来の日のパーティもそのまま開く。費用と効果は通常どおり入る。
+        /// </summary>
+        public bool DebugOpenParty(string partyId)
+        {
+            if (_story != null || GameOver || PlayerClub == null || PlayerClub.Squad == null || PlayerClub.Squad.Count == 0) return false;
+            var party = PartyCatalog.Find(partyId);
+            if (party == null) return false;
+            OpenPartyStory(party);
+            return true;
+        }
+
+        void OpenPartyStory(PartyCatalog.Party party)
+        {
             var story = new ClubStory
             {
                 Kind = ClubStoryKind.Party,
@@ -68,7 +86,6 @@ namespace SoccerClub.Core
             RecommendPartyGuests(story);
             ShowStoryStep(story);
             _story = story;
-            return true;
         }
 
         /// <summary>秘書のおすすめ。出場の少ない順に、払える範囲で枠いっぱいまで。</summary>
