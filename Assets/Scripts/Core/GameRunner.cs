@@ -937,14 +937,41 @@ namespace SoccerClub.Core
         }
 
         /// <summary>
-        /// 横幅 1920 を画面の左右端に合わせる。16:9 より横長のときは上下が隠れる。
-        /// UI は <see cref="UiFitMatrix"/> で、隠れる割合に合わせて均一に縮小する。
+        /// メイン画面の地面（1920×1080）を画面いっぱいに敷く倍率。隙間が出ないよう、縦横の大きいほうに合わせる。
+        /// 16:9 より横長（スマホ）は横幅に合わせて上下が少し隠れ、
+        /// 16:9 より縦長（3:2 や 4:3 のタブレット）は高さに合わせて左右が少し隠れる。
+        /// </summary>
+        internal static float WorldScale
+        {
+            get
+            {
+                if (Screen.width <= 0 || Screen.height <= 0) return 1f;
+                return Mathf.Max(Screen.width / (float)ReferenceWidth, Screen.height / (float)ReferenceHeight);
+            }
+        }
+
+        /// <summary>縦長の画面で、地面の左右がそれぞれ何 px（基準座標）隠れているか。16:9 以上の横長では 0。</summary>
+        internal static float WorldSideInset
+        {
+            get
+            {
+                float scale = WorldScale;
+                if (scale <= 0f) return 0f;
+                float visible = Screen.width / scale;
+                return Mathf.Max(0f, (ReferenceWidth - visible) * 0.5f);
+            }
+        }
+
+        /// <summary>
+        /// 地面を画面いっぱいに敷き、中央に置く（<see cref="WorldScale"/>）。
+        /// UI は <see cref="UiFitMatrix"/> で画面の中に収め、上下・左右の端に寄せるものは Pin / Shift で寄せる。
         /// </summary>
         internal static Matrix4x4 GuiScaleMatrix()
         {
-            float scale = Screen.width / (float)ReferenceWidth;
+            float scale = WorldScale;
+            float ox = (Screen.width - ReferenceWidth * scale) * 0.5f;
             float oy = (Screen.height - ReferenceHeight * scale) * 0.5f;
-            return Matrix4x4.TRS(new Vector3(0f, oy, 0f), Quaternion.identity, new Vector3(scale, scale, 1f));
+            return Matrix4x4.TRS(new Vector3(ox, oy, 0f), Quaternion.identity, new Vector3(scale, scale, 1f));
         }
 
         /// <summary>
@@ -977,11 +1004,12 @@ namespace SoccerClub.Core
             float zoom = Mathf.Max(1f, _viewZoom);
             float wx = (world.x - _viewOrigin.x) * zoom;
             float wy = (world.y - _viewOrigin.y) * zoom;
-            float worldScale = Screen.width / (float)ReferenceWidth;
+            float worldScale = WorldScale;
+            float worldOffsetX = (Screen.width - ReferenceWidth * worldScale) * 0.5f;
             float worldOffsetY = (Screen.height - ReferenceHeight * worldScale) * 0.5f;
-            float screenX = wx * worldScale;
+            float screenX = worldOffsetX + wx * worldScale;
             float screenY = worldOffsetY + wy * worldScale;
-            float uiScale = Mathf.Min(worldScale, Screen.height / (float)ReferenceHeight);
+            float uiScale = Mathf.Min(Screen.width / (float)ReferenceWidth, Screen.height / (float)ReferenceHeight);
             if (uiScale <= 0f) return world;
             float offsetX = (Screen.width - ReferenceWidth * uiScale) * 0.5f;
             float offsetY = (Screen.height - ReferenceHeight * uiScale) * 0.5f;
@@ -1019,7 +1047,7 @@ namespace SoccerClub.Core
             get
             {
                 if (Screen.width <= 0) return 0f;
-                float scale = Screen.width / (float)ReferenceWidth;
+                float scale = WorldScale;
                 float visible = Screen.height / scale;
                 return Mathf.Max(0f, (ReferenceHeight - visible) * 0.5f);
             }
@@ -1084,16 +1112,33 @@ namespace SoccerClub.Core
             return inset <= 0f ? rect : new Rect(rect.x + inset, rect.y, rect.width, rect.height);
         }
 
+        /// <summary>
+        /// 上端に寄せる。地面の上（_pinChrome）では隠れた分だけ下げ、
+        /// UI ではタブレットなど縦長の画面で空いた分だけ上げて、画面の上端に付ける。
+        /// </summary>
         internal static Rect PinTop(Rect rect)
         {
-            float inset = _pinChrome ? VerticalInset : 0f;
-            return inset <= 0f ? rect : new Rect(rect.x, rect.y + inset, rect.width, rect.height);
+            if (_pinChrome)
+            {
+                float hidden = VerticalInset;
+                return hidden <= 0f ? rect : new Rect(rect.x, rect.y + hidden, rect.width, rect.height);
+            }
+
+            float spare = VerticalEdgeInset;
+            return spare <= 0f ? rect : new Rect(rect.x, rect.y - spare, rect.width, rect.height);
         }
 
+        /// <summary>下端に寄せる。考え方は <see cref="PinTop"/> と同じ。</summary>
         internal static Rect PinBottom(Rect rect)
         {
-            float inset = _pinChrome ? VerticalInset : 0f;
-            return inset <= 0f ? rect : new Rect(rect.x, rect.y - inset, rect.width, rect.height);
+            if (_pinChrome)
+            {
+                float hidden = VerticalInset;
+                return hidden <= 0f ? rect : new Rect(rect.x, rect.y - hidden, rect.width, rect.height);
+            }
+
+            float spare = VerticalEdgeInset;
+            return spare <= 0f ? rect : new Rect(rect.x, rect.y + spare, rect.width, rect.height);
         }
 
         static Rect KeepOnScreen(Rect rect)

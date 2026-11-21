@@ -69,7 +69,10 @@ namespace SoccerClub.UI
             return GateInside(ZoneRect(zone, a), ZoneRect(zone, b), preferred);
         }
 
-        /// <summary>上下が隠れているとき、体が画面内に収まる足元の範囲へ歩行エリアを狭める。</summary>
+        /// <summary>
+        /// 画面の端が隠れているとき、体が画面内に収まる足元の範囲へ歩行エリアを狭める。
+        /// スマホ（横長）は上下、タブレット（縦長）は左右が隠れる。
+        /// </summary>
         static Rect ClipFeet(Rect area)
         {
             float top = GameRunner.VerticalInset + BodyHeight;
@@ -77,8 +80,27 @@ namespace SoccerClub.UI
             if (bottom - top < 24f) return area;
             float yMin = Mathf.Clamp(area.yMin, top, bottom - 16f);
             float yMax = Mathf.Clamp(area.yMax, yMin + 16f, bottom);
-            return new Rect(area.xMin, yMin, area.width, Mathf.Max(16f, yMax - yMin));
+
+            float side = GameRunner.WorldSideInset;
+            float xMin = area.xMin;
+            float xMax = area.xMax;
+            if (side > 0f)
+            {
+                float left = side + SideMargin;
+                float right = GameRunner.ReferenceWidth - side - SideMargin;
+                // 狭めると歩く場所が無くなるときは、元の範囲のままにする。
+                if (Mathf.Min(xMax, right) - Mathf.Max(xMin, left) >= 24f)
+                {
+                    xMin = Mathf.Max(xMin, left);
+                    xMax = Mathf.Min(xMax, right);
+                }
+            }
+
+            return new Rect(xMin, yMin, Mathf.Max(16f, xMax - xMin), Mathf.Max(16f, yMax - yMin));
         }
+
+        /// <summary>左右が隠れているとき、体の半分ほど内側までを歩く範囲にする。</summary>
+        const float SideMargin = 40f;
 
         static Vector2 GateInside(Rect a, Rect b, Vector2 preferred)
         {
