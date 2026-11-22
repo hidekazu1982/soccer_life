@@ -36,7 +36,8 @@ namespace SoccerClub.Core
     }
 
     /// <summary>
-    /// サポートキャラ（Figma main の support と support_event）。
+    /// サポートキャラ（Figma main の support と support_event）。施設は事業部、フロント人事は GM が持ってくる。
+    /// ・メイン画面で事業部をタップすると、間隔とキャンセルを無視して、いま上げられる施設を勧める（RequestFacilitySupport）。
     /// ・施設のレベルアップは週に 1 回まで（前回施設を勧めた日から 7 日後以降。勧めた日のうちは出し続ける）。
     ///   条件を満たす施設のうち、費用が最も安いものを勧める。施設を勧めない日はフロント人事を探す。
     /// ・フロント人事も週に 1 回まで（前回人事を勧めた日から 7 日後以降。勧めた日のうちは出し続ける）。
@@ -275,16 +276,53 @@ namespace SoccerClub.Core
                 && today < new DateTime(_supportFacilityTicks).AddDays(SupportFacilityIntervalDays).Ticks)
                 return null;
 
+            var best = BestFacilitySupport(today, true);
+            if (best != null) _supportFacilityTicks = today;
+            return best;
+        }
+
+        /// <summary>
+        /// 事業部に相談したとき（メイン画面で事業部をタップ）。週 1 回の間隔とキャンセルは無視し、
+        /// スタジアムも入場者に関係なく候補に入れる。お金の判定はいつもと同じ。勧められる施設がなければ null。
+        /// 出し続けている施設の提案があれば、それをそのまま返す。
+        /// </summary>
+        public SupportSuggestion RequestFacilitySupport()
+        {
+            var club = PlayerClub;
+            if (club == null || club.Facilities == null || GameOver) return null;
+            if (_supportPending == null && !string.IsNullOrEmpty(_supportPendingKey))
+            {
+                _supportPending = RestoreSupport(_supportPendingKey);
+                _supportPendingKey = null;
+            }
+
+            if (_supportPending != null && _supportPending.Kind == SupportKind.Facility && SupportStillValid(_supportPending))
+                return _supportPending;
+
+            var found = BestFacilitySupport(Time.CurrentDate.Date.Ticks, false);
+            if (found == null) return null;
+            // 出していたフロントの提案は取り下げる（7 日たてばまた探す）。
+            _supportPending = found;
+            _supportPendingKey = null;
+            return found;
+        }
+
+        /// <summary>
+        /// 条件を満たす施設のうち費用が最も安いもの。automatic が true のときだけ、
+        /// スタジアムの入場者の条件とキャンセル（1 か月）を見る。
+        /// </summary>
+        SupportSuggestion BestFacilitySupport(long today, bool automatic)
+        {
             SupportSuggestion best = null;
             for (int i = 0; i < SupportFacilityOrder.Length; i++)
             {
                 var kind = SupportFacilityOrder[i];
-                if (kind == FacilityKind.Stadium && !HomeAttendanceExceedsCapacity()) continue;
+                if (automatic && kind == FacilityKind.Stadium && !HomeAttendanceExceedsCapacity()) continue;
                 if (!SimulationCanUpgrade(kind)) continue;
                 var facility = PlayerClub.Facilities.Get(kind);
                 var cost = facility.NextUpgradeCost();
                 string key = "F:" + (int)kind + ":" + (facility.Level + 1);
-                if (IsSnoozed(key, today)) continue;
+                if (automatic && IsSnoozed(key, today)) continue;
                 if (best != null && cost >= best.Cost) continue;
                 best = new SupportSuggestion
                 {
@@ -297,7 +335,6 @@ namespace SoccerClub.Core
                 };
             }
 
-            if (best != null) _supportFacilityTicks = today;
             return best;
         }
 

@@ -331,14 +331,22 @@ namespace SoccerClub.UI
             return GUI.Button(rect, GUIContent.none, _hit);
         }
 
-        /// <summary>施設は秘書、フロント人事は GM が話す。いなければもう一方。</summary>
+        /// <summary>施設は事業部、フロント人事は GM が話す。いなければ秘書、GM の順に代わりに話す。</summary>
         static StaffMember FindSpeaker(Club club, SupportSuggestion suggestion)
         {
             var front = club != null ? club.Front : null;
             if (front == null) return null;
             if (suggestion.Kind == SupportKind.Front)
                 return front.GeneralManager ?? front.Secretary;
-            return front.Secretary ?? front.GeneralManager;
+            return FirstOf(front.Business) ?? front.Secretary ?? front.GeneralManager;
+        }
+
+        static StaffMember FirstOf(StaffMember[] staff)
+        {
+            if (staff == null) return null;
+            for (int i = 0; i < staff.Length; i++)
+                if (staff[i] != null) return staff[i];
+            return null;
         }
 
         void EnsurePortrait(StaffMember speaker, Club club)

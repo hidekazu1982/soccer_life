@@ -14,6 +14,9 @@ namespace SoccerClub.Data
         /// <summary>性別。id から 5:5 で決まる（PlayerTraits.GenderForId）。</summary>
         public Gender Gender;
 
+        /// <summary>背番号。1〜99、0 は未設定。所属クラブの中で重ならないように Club.EnsureShirtNumbers で決める。</summary>
+        public int ShirtNumber;
+
         public int Age;
         public GrowthPhase Phase;
         public Rarity Rarity;

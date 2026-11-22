@@ -134,12 +134,15 @@ namespace SoccerClub.Competition
             int b = tie.FirstAwayGoals + tie.SecondHomeGoals;
             if (a != b) return a > b ? tie.FirstHome : tie.FirstAway;
 
-            // 同点は即PK。第2戦の得点を 1 足し、そのカードの勝者にする。
+            // 2 試合の合計が同点なら、第 2 戦のあとに PK 戦で決める。得点には足さない。
+            // 第 2 戦はホームが FirstAway なので、PK 戦のホーム・アウェイも第 2 戦と同じ。
             var pk = _match.PenaltyShootout(tie.FirstAway, tie.FirstHome, b, a);
-            var winner = pk.Winner ?? tie.FirstHome;
-            if (winner == tie.FirstAway) second.HomeGoals++;
-            else second.AwayGoals++;
+            var winner = pk.PenaltyWinner ?? tie.FirstHome;
             second.DecidedByPenalty = true;
+            second.HomePk = pk.HomePk;
+            second.AwayPk = pk.AwayPk;
+            second.PenaltyWinner = winner;
+            second.PenaltyKicks = pk.PenaltyKicks;
             return winner;
         }
 

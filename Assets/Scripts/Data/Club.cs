@@ -107,6 +107,55 @@ namespace SoccerClub.Data
             }
         }
 
+        static readonly bool[] UsedNumbers = new bool[100];
+
+        /// <summary>
+        /// トップチームの背番号を決める。今の番号はそのまま残し、無い人と重なった人（後ろにいる人）だけ空き番号を付ける。
+        /// GK は 1、12、21… を優先し、それ以外は 2 から空いている小さい番号を付ける。
+        /// </summary>
+        public void EnsureShirtNumbers()
+        {
+            if (Squad == null) return;
+            Array.Clear(UsedNumbers, 0, UsedNumbers.Length);
+            bool missing = false;
+            for (int i = 0; i < Squad.Count; i++)
+            {
+                var p = Squad[i];
+                if (p == null) continue;
+                int n = p.ShirtNumber;
+                if (n >= 1 && n <= 99 && !UsedNumbers[n])
+                    UsedNumbers[n] = true;
+                else
+                {
+                    p.ShirtNumber = 0;
+                    missing = true;
+                }
+            }
+
+            if (!missing) return;
+            for (int i = 0; i < Squad.Count; i++)
+            {
+                var p = Squad[i];
+                if (p == null || p.ShirtNumber != 0) continue;
+                int n = 0;
+                if (PositionUtility.GroupOf(p.BestPosition()) == PositionGroup.GK)
+                {
+                    if (!UsedNumbers[1]) n = 1;
+                    else
+                    {
+                        for (int k = 12; k <= 99 && n == 0; k += 9)
+                            if (!UsedNumbers[k]) n = k;
+                    }
+                }
+
+                for (int k = 2; k <= 99 && n == 0; k++)
+                    if (!UsedNumbers[k]) n = k;
+                if (n == 0) continue;
+                UsedNumbers[n] = true;
+                p.ShirtNumber = n;
+            }
+        }
+
         public void ResetSeasonStats()
         {
             LeaguePoints = 0;

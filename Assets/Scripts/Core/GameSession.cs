@@ -926,6 +926,8 @@ namespace SoccerClub.Core
             if (PlayerClub == null || PlayerClub.Front == null) return false;
             var staff = PlayerClub.Front.GetAt(slot);
             if (staff == null) return false;
+            // 各部署に最低 1 人は残す。
+            if (!CanDismissFront(slot)) return false;
             PlayerClub.Front.SetAt(slot, null);
             if (!_frontMarket.Contains(staff))
                 _frontMarket.Add(staff);
@@ -1685,6 +1687,7 @@ namespace SoccerClub.Core
                 RenewContracts(club.Squad);
                 AcademyService.AgeAndRetire(club);
                 RetireAged(club.Front);
+                EnsureFrontStaffed(club);
                 RetireAged(club.Team);
             }
 

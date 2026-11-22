@@ -1725,12 +1725,12 @@ namespace SoccerClub.Core
             var club = Session != null ? Session.PlayerClub : null;
             if (fixture == null || club == null || fixture.Result == null) return;
             bool home = fixture.Home == club;
-            int mine = home ? fixture.Result.HomeGoals : fixture.Result.AwayGoals;
-            int theirs = home ? fixture.Result.AwayGoals : fixture.Result.HomeGoals;
+            // PK 戦で決めた試合は PK 戦の勝ち負け（ApplyMatchConsequences と同じ Winner）。
+            int outcome = fixture.Result.OutcomeFor(club);
             ClubMath.PreviewMatchSupporters(
                 club,
-                mine > theirs,
-                mine < theirs,
+                outcome > 0,
+                outcome < 0,
                 home,
                 fixture.OperatingPaid,
                 fixture.OperatingRequired,
@@ -2422,6 +2422,36 @@ namespace SoccerClub.Core
             GUI.Label(new Rect(x, y, w, 32f), "年俸  " + MoneyText.Format(staff.AnnualSalary), _bodyStyle);
             y += 40f;
             GUI.Label(new Rect(x, y, w, 220f), StaffNote(staff), _smallStyle);
+
+            // 事業部には、いつでも施設のレベルアップを相談できる。
+            if (CanConsultBusiness(staff)
+                && GUI.Button(new Rect(x, DetailRect.yMax - 70f, w, 52f), "施設のレベルアップを相談する", _buttonStyle))
+                ConsultBusiness();
+        }
+
+        bool CanConsultBusiness(StaffMember staff)
+        {
+            return staff != null
+                   && staff.IsFrontOffice
+                   && staff.FrontRole == FrontRole.Business
+                   && Session != null
+                   && !Session.GameOver
+                   && !_supportOpen
+                   && !_fullAuto
+                   && (_phase == DayPhase.Idle || (_phase == DayPhase.Advancing && !_matchScreen));
+        }
+
+        void ConsultBusiness()
+        {
+            var suggestion = Session.RequestFacilitySupport();
+            if (suggestion == null)
+            {
+                _status = "いまレベルアップを勧められる施設はありません（資金が総年俸を下回らない範囲で勧めます）。";
+                return;
+            }
+
+            if (_crowd != null) _crowd.ClearSelection();
+            OpenSupport(suggestion);
         }
 
         static string StaffNote(StaffMember staff)
@@ -2431,7 +2461,7 @@ namespace SoccerClub.Core
                 switch (staff.FrontRole)
                 {
                     case FrontRole.Secretary:
-                        return "施設のレベルアップを提案する";
+                        return "オーナーを補佐する。事業部やGMがいないときは代わりに提案を持ってくる";
                     case FrontRole.GeneralManager:
                         return "方針  " + PolicyLabel(staff.Policy)
                                + "\nリストから選手とスタッフを獲得し、契約を満了させる";
@@ -2443,7 +2473,7 @@ namespace SoccerClub.Core
                     case FrontRole.PublicRelations:
                         return "レベルに応じて、ホームの試合の広告費が決まる";
                     case FrontRole.Business:
-                        return "開幕の1週間前にチケット価格を決める";
+                        return "開幕の1週間前にチケット価格を決める\n施設のレベルアップを提案する";
                     default:
                         return "育成費でアカデミー選手を育てる";
                 }
@@ -2588,8 +2618,9 @@ namespace SoccerClub.Core
         {
             if (fixture.Result == null) return fixture.Home.Name + " vs " + fixture.Away.Name;
             var kind = fixture.IsLeague ? "リーグ" : "カップ";
+            string pk = fixture.Result.DecidedByPenalty ? "（" + fixture.Result.PenaltyText(fixture.Home) + "）" : "";
             return kind + " " + fixture.Home.Name + " " + fixture.Result.HomeGoals
-                   + " - " + fixture.Result.AwayGoals + " " + fixture.Away.Name;
+                   + " - " + fixture.Result.AwayGoals + pk + " " + fixture.Away.Name;
         }
 
         static string RoleLabel(FrontRole role)

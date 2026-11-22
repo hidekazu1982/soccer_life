@@ -45,7 +45,15 @@ namespace SoccerClub.Match
         public Club Away;
         public int HomeGoals;
         public int AwayGoals;
+        /// <summary>PK 戦で勝敗を決めたか。得点（HomeGoals / AwayGoals）には PK を足さない。</summary>
         public bool DecidedByPenalty;
+        /// <summary>PK 戦の成功数。古いセーブは 0-0（得点に 1 足してある）。</summary>
+        public int HomePk;
+        public int AwayPk;
+        /// <summary>PK 戦の勝者。古いセーブは null。</summary>
+        public Club PenaltyWinner;
+        /// <summary>PK 戦の 1 本ずつ（蹴った順）。セーブしない。</summary>
+        public System.Collections.Generic.List<PenaltyKick> PenaltyKicks = new System.Collections.Generic.List<PenaltyKick>();
         public System.Collections.Generic.List<DuelEvent> Events = new System.Collections.Generic.List<DuelEvent>();
         public System.Collections.Generic.List<Player> HomeAppeared = new System.Collections.Generic.List<Player>();
         public System.Collections.Generic.List<Player> AwayAppeared = new System.Collections.Generic.List<Player>();
@@ -55,8 +63,39 @@ namespace SoccerClub.Match
         public LineupSlot[] AwayXi = new LineupSlot[11];
         public System.Collections.Generic.List<Substitution> Substitutions = new System.Collections.Generic.List<Substitution>();
 
+        /// <summary>この試合の勝者。PK 戦で決めた試合は PK 戦の勝者。引き分けは null。</summary>
         public Club Winner =>
-            HomeGoals == AwayGoals ? null : (HomeGoals > AwayGoals ? Home : Away);
+            DecidedByPenalty && PenaltyWinner != null
+                ? PenaltyWinner
+                : HomeGoals == AwayGoals ? null : (HomeGoals > AwayGoals ? Home : Away);
+
+        /// <summary>club から見た勝敗。1 勝ち、-1 負け、0 引き分け。</summary>
+        public int OutcomeFor(Club club)
+        {
+            var winner = Winner;
+            if (winner == null) return 0;
+            return winner == club ? 1 : -1;
+        }
+
+        /// <summary>「PK 5-4」（club 側を先に）。PK 戦でない試合は空。古いセーブは数を持たないので「PK」だけ。</summary>
+        public string PenaltyText(Club club)
+        {
+            if (!DecidedByPenalty) return "";
+            if (HomePk == 0 && AwayPk == 0) return "PK";
+            bool home = club == null || club == Home;
+            int mine = home ? HomePk : AwayPk;
+            int theirs = home ? AwayPk : HomePk;
+            return "PK " + mine + "-" + theirs;
+        }
+    }
+
+    /// <summary>PK 戦の 1 本。キッカーと GK の 1 対 1。</summary>
+    public sealed class PenaltyKick
+    {
+        public bool Home;
+        public Player Kicker;
+        public Player Keeper;
+        public bool Scored;
     }
 
     public sealed class DuelEvent

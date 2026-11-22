@@ -15,7 +15,7 @@ namespace SoccerClub.UI
     /// 左から 1〜3 が攻撃側（3 がシュートを打つ）、4〜6 が守備側（6 が GK）。
     /// 上端には自クラブのピッチ上の 11 人を並べ、交代があったらその回から入った選手に切り替える（Figma game の eleven）。
     /// </summary>
-    public sealed class MatchScreenView
+    public sealed partial class MatchScreenView
     {
         // 攻撃側が左のときの 1〜6 の位置（character3 の 244 角の左上）。
         static readonly Vector2[] SlotOrigins =
@@ -105,6 +105,8 @@ namespace SoccerClub.UI
             float weight = 0f;
             for (int i = 0; i < events.Count; i++)
                 weight += RoundWeight(events[i]);
+            // PK 戦があれば、その長さ（回の単位）を足す。
+            weight += PenaltyWeight(fixture.Result);
             return daySeconds * MatchLengthScale * (weight / Mathf.Max(1, events.Count));
         }
 
@@ -123,6 +125,25 @@ namespace SoccerClub.UI
                 DrawHeader(fixture, 0, 0, false, false, 0f);
                 DrawEleven(result, viewer, 0, false);
                 return;
+            }
+
+            // PK 戦があれば、試合の 10 回のあとに続けて見せる。
+            float penaltyWeight = PenaltyWeight(result);
+            if (penaltyWeight > 0f)
+            {
+                float matchWeight = 0f;
+                for (int i = 0; i < events.Count; i++)
+                    matchWeight += RoundWeight(events[i]);
+                float share = matchWeight / (matchWeight + penaltyWeight);
+                if (progress >= share)
+                {
+                    float units = share >= 1f ? penaltyWeight : (progress - share) / (1f - share) * penaltyWeight;
+                    DrawPenalty(fixture, result, viewer, units);
+                    GUI.color = Color.white;
+                    return;
+                }
+
+                progress = share <= 0f ? 1f : progress / share;
             }
 
             int round;
@@ -815,16 +836,15 @@ namespace SoccerClub.UI
             GUI.Label(new Rect(120f, 78f, 800f, 36f), kind + "  " + fixture.Date.ToString("M月d日"), _body);
             int homeGoals = result != null ? result.HomeGoals : 0;
             int awayGoals = result != null ? result.AwayGoals : 0;
-            string pk = result != null && result.DecidedByPenalty ? "   PK" : "";
+            string pk = result != null && result.DecidedByPenalty ? "   " + result.PenaltyText(fixture.Home) : "";
             GUI.Label(
                 new Rect(120f, 150f, 1680f, 64f),
                 fixture.Home.Name + "   " + homeGoals + "  -  " + awayGoals + "   " + fixture.Away.Name + pk,
                 _score);
             if (player == null || result == null) return;
-            bool home = fixture.Home == player;
-            int mine = home ? homeGoals : awayGoals;
-            int theirs = home ? awayGoals : homeGoals;
-            string outcome = mine > theirs ? "勝ち" : mine < theirs ? "負け" : "引き分け";
+            int sign = result.OutcomeFor(player);
+            string outcome = sign > 0 ? "勝ち" : sign < 0 ? "負け" : "引き分け";
+            if (result.DecidedByPenalty && sign != 0) outcome = "PK" + outcome;
             GUI.Label(new Rect(120f, 214f, 400f, 36f), outcome, _title);
         }
 

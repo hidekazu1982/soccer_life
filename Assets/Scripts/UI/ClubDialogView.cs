@@ -14,7 +14,7 @@ namespace SoccerClub.UI
     /// <summary>
     /// スタジアム、練習場、クラブハウス、MENU の詳細ダイアログ。
     /// </summary>
-    public sealed class ClubDialogView
+    public sealed partial class ClubDialogView
     {
         public enum Kind
         {
@@ -51,13 +51,15 @@ namespace SoccerClub.UI
         static readonly Rect ClubhouseTitleRect = new Rect(821f, 174f, 262f, 53f);
         static readonly Rect ClubhouseCloseRect = new Rect(1564f, 134f, 123f, 125f);
         static readonly Rect ClubhousePageRect = new Rect(356f, 372f, 1210f, 500f);
-        static readonly float[] ClubhouseTabX = { 342f, 548f, 754f, 960f };
+        // 強化タブはなくした（施設のレベルアップは事業部の提案に任せる）。タブ i はページ i + 1。
+        static readonly float[] ClubhouseTabX = { 342f, 548f, 754f };
         const float ClubhouseTabWidth = 202f;
         const float ClubhouseTabOnY = 265f;
         const float ClubhouseTabOnHeight = 99f;
         const float ClubhouseTabOffY = 272f;
         const float ClubhouseTabOffHeight = 90f;
-        static readonly string[] ClubhouseTabLabels = { "強化", "選手", "スタッフ", "フロント" };
+        static readonly string[] ClubhouseTabLabels = { "選手", "スタッフ", "フロント" };
+        const int ClubhouseTabFirstPage = (int)ClubPage.Players;
         static readonly Rect ClubhouseCardLeft = new Rect(360f, 384f, 592f, 500f);
         static readonly Rect ClubhouseCardRight = new Rect(968f, 384f, 592f, 500f);
         static readonly Rect ClubhouseButtonLeft = new Rect(536f, 699f, 240f, 93f);
@@ -174,7 +176,8 @@ namespace SoccerClub.UI
             Name,
             Age,
             Overall,
-            Condition
+            Condition,
+            Salary
         }
 
         readonly List<Player> _roster = new List<Player>();
@@ -224,7 +227,7 @@ namespace SoccerClub.UI
 
         public Kind Current => _kind;
         public bool IsOpen => _kind != Kind.None;
-        public Rect ActiveBounds => _kind == Kind.Clubhouse ? ClubhouseHitBounds : Bounds;
+        public Rect ActiveBounds => _kind != Kind.Clubhouse ? Bounds : UsesNewClubhouse ? NcDialog : ClubhouseHitBounds;
 
         public void Load()
         {
@@ -259,7 +262,7 @@ namespace SoccerClub.UI
         {
             _kind = kind;
             _scroll = Vector2.zero;
-            _page = ClubPage.Strengthen;
+            _page = ClubPage.Players;
             _stadiumPage = StadiumPage.Schedule;
             _notice = "";
             _confirmReset = false;
@@ -299,6 +302,12 @@ namespace SoccerClub.UI
         {
             if (_kind == Kind.None || session == null) return;
             EnsureStyles(font);
+            if (UsesNewClubhouse)
+            {
+                DrawNewClubhouse(session, session.PlayerClub, focusCharacter);
+                return;
+            }
+
             if (_kind == Kind.Clubhouse)
             {
                 DrawClubhouseDialog(session, session.PlayerClub, setStatus, focusCharacter);
@@ -579,7 +588,7 @@ namespace SoccerClub.UI
             }
 
             float leftW = 460f;
-            DrawUpgrade(session, club, FacilityKind.Stadium, body.x, body.y, leftW, StadiumEffect(club), setStatus);
+            DrawUpgrade(session, club, FacilityKind.Stadium, body.x, body.y, leftW, StadiumEffect(club), setStatus, upgradable: false);
             var schedule = new Rect(body.x + leftW + 28f, body.y, body.width - leftW - 28f, body.height);
             DrawSchedule(session, club, schedule);
         }
@@ -721,7 +730,7 @@ namespace SoccerClub.UI
         void DrawTraining(GameSession session, Club club, Rect area, Action<string> setStatus)
         {
             float width = Mathf.Min(640f, area.width);
-            DrawUpgrade(session, club, FacilityKind.TrainingGround, area.x, area.y, width, TrainingGroundEffect(club), setStatus);
+            DrawUpgrade(session, club, FacilityKind.TrainingGround, area.x, area.y, width, TrainingGroundEffect(club), setStatus, upgradable: false);
         }
 
         void DrawClubhouseDialog(GameSession session, Club club, Action<string> setStatus, Action<string> focusCharacter)
@@ -735,11 +744,11 @@ namespace SoccerClub.UI
 
             for (int i = 0; i < ClubhouseTabX.Length; i++)
             {
-                if ((ClubPage)i == _page) continue;
+                if ((ClubPage)(i + ClubhouseTabFirstPage) == _page) continue;
                 DrawTex(new Rect(ClubhouseTabX[i], ClubhouseTabOffY, ClubhouseTabWidth, ClubhouseTabOffHeight), _tabOff);
             }
 
-            int selected = (int)_page;
+            int selected = Mathf.Clamp((int)_page - ClubhouseTabFirstPage, 0, ClubhouseTabX.Length - 1);
             DrawTex(new Rect(ClubhouseTabX[selected], ClubhouseTabOnY, ClubhouseTabWidth, ClubhouseTabOnHeight), _tabOn);
 
             for (int i = 0; i < ClubhouseTabLabels.Length; i++)
@@ -793,7 +802,7 @@ namespace SoccerClub.UI
                 {
                     var tab = new Rect(ClubhouseTabX[i], ClubhouseTabOffY, ClubhouseTabWidth, ClubhouseTabOnY + ClubhouseTabOnHeight - ClubhouseTabOffY);
                     if (GUI.Button(tab, GUIContent.none, _hit))
-                        SetPage((ClubPage)i);
+                        SetPage((ClubPage)(i + ClubhouseTabFirstPage));
                 }
 
                 if (GUI.Button(ClubhouseCloseRect, GUIContent.none, _hit))
@@ -888,7 +897,8 @@ namespace SoccerClub.UI
             _frontThumbDrag = false;
         }
 
-        float DrawUpgrade(GameSession session, Club club, FacilityKind kind, float x, float y, float width, string effect, Action<string> setStatus, bool light = false)
+        /// <summary>upgradable が false なら費用だけ見せて、レベルアップは事業部への相談に案内する。</summary>
+        float DrawUpgrade(GameSession session, Club club, FacilityKind kind, float x, float y, float width, string effect, Action<string> setStatus, bool light = false, bool upgradable = true)
         {
             var facility = club.Facilities.Get(kind);
             var card = new Rect(x, y, width, 196f);
@@ -907,7 +917,12 @@ namespace SoccerClub.UI
             if (facility.CanUpgrade())
             {
                 GUI.Label(new Rect(tx, ty, tw - 150f, 28f), "次の費用  " + MoneyText.Format(facility.NextUpgradeCost()), _small);
-                if (GUI.Button(new Rect(tx + tw - 140f, ty - 4f, 140f, 40f), "Lvアップ", _button))
+                if (!upgradable)
+                {
+                    ty += 30f;
+                    GUI.Label(new Rect(tx, ty, tw, 28f), "レベルアップは事業部に相談してください。", _small);
+                }
+                else if (GUI.Button(new Rect(tx + tw - 140f, ty - 4f, 140f, 40f), "Lvアップ", _button))
                     TryUpgrade(session, kind, setStatus);
             }
             else
@@ -1236,6 +1251,9 @@ namespace SoccerClub.UI
                     break;
                 case PlayerSort.Condition:
                     compared = a.Condition.CompareTo(b.Condition);
+                    break;
+                case PlayerSort.Salary:
+                    compared = a.AnnualSalary.CompareTo(b.AnnualSalary);
                     break;
             }
 
@@ -1643,7 +1661,9 @@ namespace SoccerClub.UI
             else if (selected != null && YellowButton(FrontContractButton, "契約解除"))
             {
                 int slot = FrontSlotOf(selected);
-                if (slot >= 0 && session.OwnerDismissesFront(slot))
+                if (slot >= 0 && !session.CanDismissFront(slot))
+                    setStatus("部署の最後の1人なので解雇できません。交代は市場から契約してください。");
+                else if (slot >= 0 && session.OwnerDismissesFront(slot))
                 {
                     setStatus(selected.Name + "を無償で解雇しました。");
                     if (_frontSelectedId == selected.Id) _frontSelectedId = null;
@@ -2311,7 +2331,7 @@ namespace SoccerClub.UI
                     int mine = home ? fixture.Result.HomeGoals : fixture.Result.AwayGoals;
                     int theirs = home ? fixture.Result.AwayGoals : fixture.Result.HomeGoals;
                     score = "  " + mine + " - " + theirs;
-                    if (fixture.Result.DecidedByPenalty) score += " PK";
+                    if (fixture.Result.DecidedByPenalty) score += " " + fixture.Result.PenaltyText(club);
                 }
 
                 return new ScheduleRow

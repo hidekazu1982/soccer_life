@@ -147,6 +147,7 @@ namespace SoccerClub.UI
                     ? "リーグ第" + (++leagueRound).ToString(CultureInfo.InvariantCulture) + "節"
                     : CupTitle(fixture.CupRound, fixture.Leg);
                 if (fixture == today) _currentCard = _cards.Count;
+                int outcome = OutcomeOf(fixture, home, fixtures);
                 _cards.Add(new Card
                 {
                     Date = fixture.Date,
@@ -154,8 +155,8 @@ namespace SoccerClub.UI
                     Home = home,
                     Title = title,
                     Played = fixture.Result != null,
-                    Result = ResultText(fixture, home),
-                    Outcome = OutcomeOf(fixture, home)
+                    Result = ResultText(fixture, home, outcome),
+                    Outcome = outcome
                 });
             }
 
@@ -219,14 +220,44 @@ namespace SoccerClub.UI
             return "カップ" + round.ToString(CultureInfo.InvariantCulture) + "回戦 第" + leg.ToString(CultureInfo.InvariantCulture) + "戦";
         }
 
-        /// <summary>自クラブから見た勝敗と「自分-相手」。PK 決着は数字のあとに PK を付ける。</summary>
-        static int OutcomeOf(Fixture fixture, bool home)
+        /// <summary>
+        /// 自クラブから見た勝敗（1 勝ち、-1 負け、0 分け）。PK 戦で決めた試合は PK 戦の勝ち負け。
+        /// 古いセーブの PK 戦は勝者を持たず、第 2 戦の得点に 1 足してあるので、第 1 戦と合わせた合計で決める。
+        /// </summary>
+        static int OutcomeOf(Fixture fixture, bool home, List<Fixture> fixtures)
         {
             var result = fixture.Result;
             if (result == null) return 0;
+            if (result.DecidedByPenalty && result.PenaltyWinner != null)
+                return result.OutcomeFor(home ? fixture.Home : fixture.Away);
             int mine = home ? result.HomeGoals : result.AwayGoals;
             int theirs = home ? result.AwayGoals : result.HomeGoals;
+            if (result.DecidedByPenalty)
+            {
+                var first = FirstLegOf(fixture, fixtures);
+                if (first != null && first.Result != null)
+                {
+                    // 第 1 戦はホームとアウェイが逆。
+                    mine += home ? first.Result.AwayGoals : first.Result.HomeGoals;
+                    theirs += home ? first.Result.HomeGoals : first.Result.AwayGoals;
+                }
+            }
+
             return mine > theirs ? 1 : mine < theirs ? -1 : 0;
+        }
+
+        static Fixture FirstLegOf(Fixture second, List<Fixture> fixtures)
+        {
+            if (second == null || !second.IsCup || second.Leg != 2 || fixtures == null) return null;
+            for (int i = 0; i < fixtures.Count; i++)
+            {
+                var f = fixtures[i];
+                if (f != null && f.IsCup && f.Leg == 1 && f.CupRound == second.CupRound
+                    && f.Home == second.Away && f.Away == second.Home)
+                    return f;
+            }
+
+            return null;
         }
 
         static Color CardColor(Card card)
@@ -237,15 +268,16 @@ namespace SoccerClub.UI
             return card.Result != null ? DrawCardColor : PlayedCardColor;
         }
 
-        static string ResultText(Fixture fixture, bool home)
+        static string ResultText(Fixture fixture, bool home, int outcomeSign)
         {
             var result = fixture.Result;
             if (result == null) return null;
             int mine = home ? result.HomeGoals : result.AwayGoals;
             int theirs = home ? result.AwayGoals : result.HomeGoals;
-            string outcome = mine > theirs ? "Win" : mine < theirs ? "Defeat" : "Draw";
+            // 勝ち負けは色と同じ判定（PK は PK の勝ち負け）。
+            string outcome = outcomeSign > 0 ? "Win" : outcomeSign < 0 ? "Defeat" : "Draw";
             string text = outcome + " " + mine.ToString(CultureInfo.InvariantCulture) + "-" + theirs.ToString(CultureInfo.InvariantCulture);
-            if (result.DecidedByPenalty) text += " PK";
+            if (result.DecidedByPenalty) text += " " + result.PenaltyText(home ? fixture.Home : fixture.Away);
             return text;
         }
 

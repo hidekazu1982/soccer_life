@@ -152,6 +152,8 @@ namespace SoccerClub.Core
             // 古いセーブで同性の恋人・夫婦になっている組は親友に直してから、夫婦の印を揃える。
             session._relations.ApplyGenderRules(session.AllPlayers());
             session._relations.SyncMarried(session.AllPlayers());
+            // 古いセーブで空いている部署を埋める（各部署に最低 1 人）。
+            session.EnsureAllFrontStaffed();
             return session;
         }
 
@@ -473,7 +475,8 @@ namespace SoccerClub.Core
                     Children = player.Children,
                     Suitabilities = suits,
                     ContractSalary = Money(player.ContractSalary),
-                    Gender = (int)player.Gender + 1
+                    Gender = (int)player.Gender + 1,
+                    ShirtNumber = player.ShirtNumber
                 });
             }
 
@@ -517,7 +520,8 @@ namespace SoccerClub.Core
                     Married = save.Married,
                     Children = save.Children,
                     Suitabilities = suits,
-                    ContractSalary = ReadMoney(save.ContractSalary)
+                    ContractSalary = ReadMoney(save.ContractSalary),
+                    ShirtNumber = save.ShirtNumber
                 });
             }
 
@@ -681,6 +685,8 @@ namespace SoccerClub.Core
                 save.HomeGoals = fixture.Result.HomeGoals;
                 save.AwayGoals = fixture.Result.AwayGoals;
                 save.DecidedByPenalty = fixture.Result.DecidedByPenalty;
+                save.HomePk = fixture.Result.HomePk;
+                save.AwayPk = fixture.Result.AwayPk;
             }
 
             return save;
@@ -728,8 +734,13 @@ namespace SoccerClub.Core
                         Away = away,
                         HomeGoals = save.HomeGoals,
                         AwayGoals = save.AwayGoals,
-                        DecidedByPenalty = save.DecidedByPenalty
+                        DecidedByPenalty = save.DecidedByPenalty,
+                        HomePk = save.HomePk,
+                        AwayPk = save.AwayPk
                     };
+                    var r = fixture.Result;
+                    if (r.DecidedByPenalty && r.HomePk != r.AwayPk)
+                        r.PenaltyWinner = r.HomePk > r.AwayPk ? home : away;
                 }
 
                 fixtures.Add(fixture);

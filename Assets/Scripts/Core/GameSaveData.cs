@@ -269,6 +269,8 @@ namespace SoccerClub.Core
         public string ContractSalary;
         // 0 = 未設定（古いセーブ。id から決める）、1 = 男性、2 = 女性。
         public int Gender;
+        // 背番号。0 = 未設定（古いセーブ。クラブハウスを開いたときに付ける）。
+        public int ShirtNumber;
     }
 
     [Serializable]
@@ -316,6 +318,9 @@ namespace SoccerClub.Core
         public int HomeGoals;
         public int AwayGoals;
         public bool DecidedByPenalty;
+        // PK 戦の成功数。古いセーブは 0-0（得点に 1 足してある）。
+        public int HomePk;
+        public int AwayPk;
         public bool ConsequencesApplied;
         public string GateIncome;
         public string AdvertisingSpent;

@@ -507,7 +507,7 @@ namespace SoccerClub.Core
             min = lowest == int.MaxValue ? 0 : lowest;
         }
 
-        /// <summary>最終ラウンドの2クラブを合計得点で比べる。PK はゲーム側で第2戦の得点に1足してある。</summary>
+        /// <summary>最終ラウンドの2クラブを合計得点で比べる。同点なら第2戦の PK 戦の勝者（古いセーブは得点に1足してある）。</summary>
         static Club CupWinner(IReadOnlyList<Fixture> fixtures)
         {
             if (fixtures == null || fixtures.Count == 0) return null;
@@ -521,11 +521,14 @@ namespace SoccerClub.Core
             Club b = null;
             int goalsA = 0;
             int goalsB = 0;
+            Club penaltyWinner = null;
             for (int i = 0; i < fixtures.Count; i++)
             {
                 var fixture = fixtures[i];
                 if (fixture == null || fixture.CupRound != finalRound) continue;
                 if (fixture.Result == null) return null;
+                if (fixture.Result.DecidedByPenalty && fixture.Result.PenaltyWinner != null)
+                    penaltyWinner = fixture.Result.PenaltyWinner;
                 if (a == null)
                 {
                     a = fixture.Home;
@@ -538,7 +541,8 @@ namespace SoccerClub.Core
                 goalsB += fixture.Home == b ? fixture.Result.HomeGoals : fixture.Result.AwayGoals;
             }
 
-            if (a == null || goalsA == goalsB) return null;
+            if (a == null) return null;
+            if (goalsA == goalsB) return penaltyWinner;
             return goalsA > goalsB ? a : b;
         }
 

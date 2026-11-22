@@ -602,27 +602,88 @@ namespace SoccerClub.Match
             return true;
         }
 
+        /// <summary>
+        /// PK 戦。キッカーと相手 GK の 1 対 1 を、ホーム、アウェイの順に 5 本ずつ蹴る。
+        /// 5 本で成功が多いほうの勝ち。同じならサドンデス（1 本ずつ蹴り、片方だけ決めたら終わり）。
+        /// 1 本の成功は、キッカーの攻撃と GK の守備 × PenaltyKeeperWeight の割合抽選。
+        /// キッカーは先発の攻撃の高い順で、GK は最後。11 人が蹴ったら最初に戻る。得点には足さない。
+        /// </summary>
         void ResolvePenalty(MatchResult result, MatchTeamState home, MatchTeamState away)
         {
+            var homeKickers = KickOrder(home.Sheet);
+            var awayKickers = KickOrder(away.Sheet);
+            var homeKeeper = home.Sheet != null ? home.Sheet.Goalkeeper : null;
+            var awayKeeper = away.Sheet != null ? away.Sheet.Goalkeeper : null;
+            result.PenaltyKicks.Clear();
             int homePk = 0;
             int awayPk = 0;
-            for (int i = 0; i < 5; i++)
+            int homeNext = 0;
+            int awayNext = 0;
+            for (int i = 0; i < PenaltyKicksEach; i++)
             {
-                if (Roll(TeamPower(home), TeamPower(away) * 0.35d)) homePk++;
-                if (Roll(TeamPower(away), TeamPower(home) * 0.35d)) awayPk++;
+                if (Kick(result, true, homeKickers, ref homeNext, awayKeeper)) homePk++;
+                if (Kick(result, false, awayKickers, ref awayNext, homeKeeper)) awayPk++;
             }
 
-            while (homePk == awayPk)
+            for (int guard = 0; homePk == awayPk && guard < 200; guard++)
             {
-                bool h = Roll(TeamPower(home), TeamPower(away) * 0.35d);
-                bool a = Roll(TeamPower(away), TeamPower(home) * 0.35d);
-                if (h) homePk++;
-                if (a) awayPk++;
+                if (Kick(result, true, homeKickers, ref homeNext, awayKeeper)) homePk++;
+                if (Kick(result, false, awayKickers, ref awayNext, homeKeeper)) awayPk++;
+            }
+
+            // 決まらないことはまず無いが、念のため。
+            if (homePk == awayPk)
+            {
+                if (_random.NextDouble() < 0.5d) homePk++;
+                else awayPk++;
             }
 
             result.DecidedByPenalty = true;
-            if (homePk > awayPk) result.HomeGoals++;
-            else result.AwayGoals++;
+            result.HomePk = homePk;
+            result.AwayPk = awayPk;
+            result.PenaltyWinner = homePk > awayPk ? result.Home : result.Away;
+        }
+
+        const int PenaltyKicksEach = 5;
+        /// <summary>同じくらいの能力なら成功率は約 74%（1 / 1.35）。</summary>
+        const double PenaltyKeeperWeight = 0.35d;
+
+        bool Kick(MatchResult result, bool home, List<LineupSlot> kickers, ref int next, Player keeper)
+        {
+            LineupSlot kicker = kickers.Count > 0 ? kickers[next % kickers.Count] : null;
+            next++;
+            double off = kicker != null && kicker.Player != null ? Offense(kicker.Player, kicker.Slot) : 1d;
+            double def = keeper != null ? Defense(keeper, Position.GK) : 0d;
+            bool scored = Roll(off, def * PenaltyKeeperWeight);
+            result.PenaltyKicks.Add(new PenaltyKick
+            {
+                Home = home,
+                Kicker = kicker != null ? kicker.Player : null,
+                Keeper = keeper,
+                Scored = scored
+            });
+            return scored;
+        }
+
+        List<LineupSlot> KickOrder(TeamSheet sheet)
+        {
+            var field = new List<LineupSlot>();
+            LineupSlot gk = null;
+            var xi = sheet != null ? sheet.StartingXi : null;
+            if (xi != null)
+            {
+                for (int i = 0; i < xi.Length; i++)
+                {
+                    var slot = xi[i];
+                    if (slot == null || slot.Player == null) continue;
+                    if (slot.Slot == Position.GK && gk == null) gk = slot;
+                    else field.Add(slot);
+                }
+            }
+
+            field.Sort((x, y) => Offense(y.Player, y.Slot).CompareTo(Offense(x.Player, x.Slot)));
+            if (gk != null) field.Add(gk);
+            return field;
         }
     }
 }
