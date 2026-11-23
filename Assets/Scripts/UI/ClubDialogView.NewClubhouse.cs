@@ -10,8 +10,9 @@ using UnityEngine;
 namespace SoccerClub.UI
 {
     /// <summary>
-    /// 新しいクラブハウス（Figma の main の new_clubhouse）。いまは選手タブだけ新しいデザインで描く。
-    /// 左が選んだ選手の詳細、右が選手一覧。スタッフ・フロントのタブは今までの画面を使う。
+    /// 新しいクラブハウス（Figma の main の new_clubhouse）。選手タブとスタッフタブを新しいデザインで描く。
+    /// 左が選んだ人の詳細（選手詳細 206:3 / スタッフ詳細 211:75）、右が一覧（選手リスト 206:618 / スタッフリスト 211:3）。
+    /// フロントのタブは今までの画面を使う。
     /// </summary>
     public sealed partial class ClubDialogView
     {
@@ -28,7 +29,7 @@ namespace SoccerClub.UI
         static readonly string[] NcTabLabels = { "選手", "スタッフ", "フロント" };
         static readonly ClubPage[] NcTabPages = { ClubPage.Players, ClubPage.Staff, ClubPage.Front };
 
-        // ---- 一覧（player_list 207:664）。見出し 656,329 / 高さ 56、行 100（間 8）、見える範囲 393〜925。
+        // ---- 一覧。見出し 656,329 / 高さ 56、行 100（間 8）、見える範囲 393〜925。
         const float NcListX = 656f;
         const float NcListWidth = 1044f;
         const float NcHeadY = 329f;
@@ -38,27 +39,37 @@ namespace SoccerClub.UI
         const float NcRowStride = 108f;
         static readonly Rect NcScrollTrack = new Rect(1708f, 393f, 10f, 532f);
 
-        // 見出しの列。x、幅、文字、並べ替え。
+        // 見出しの列（選手とスタッフで同じ位置）。
         static readonly float[] NcHeadX = { 656f, 756f, 828f, 1124f, 1208f, 1332f, 1636f };
         static readonly float[] NcHeadW = { 100f, 72f, 296f, 84f, 124f, 304f, 64f };
-        static readonly string[] NcHeadLabels = { "POS", "M/F", "name", "age", "param", "annual salary", "" };
-        static readonly PlayerSort[] NcHeadSort =
+        static readonly string[] NcPlayerHeadLabels = { "POS", "M/F", "名前", "AGE", "総合力", "年俸", "" };
+        static readonly PlayerSort[] NcPlayerHeadSort =
         {
             PlayerSort.Position, PlayerSort.None, PlayerSort.Name, PlayerSort.Age, PlayerSort.Overall, PlayerSort.Salary, PlayerSort.Condition
         };
+        static readonly string[] NcStaffHeadLabels = { "POS", "M/F", "名前", "AGE", "LV", "年俸", "" };
+        static readonly NcStaffSort[] NcStaffHeadSort =
+        {
+            NcStaffSort.Role, NcStaffSort.None, NcStaffSort.Name, NcStaffSort.Age, NcStaffSort.Level, NcStaffSort.Salary, NcStaffSort.None
+        };
 
-        // ---- 選手の詳細（player 208:32 と player01 206:3）。
+        // ---- 詳細（詳細枠 208:32、中身は 236〜597）。
         static readonly Rect NcDetailPanel = new Rect(192f, 329f, 448f, 596f);
-        const float NcDetailX = 252f;
-        const float NcDetailWidth = 328f;
-        static readonly Rect NcPortraitBox = new Rect(252f, 451f, 160f, 160f);
-        // character3（244 角を 211,451 に置く）。シートは 2048 角の 212,46 / 1622×1998 を 244/2048 倍。
+        const float NcDetailX = 236f;
+        const float NcDetailWidth = 361f;
+        const float NcPillX = 241f;
+        const float NcRightX = 588f;
+        static readonly Rect NcPortraitBox = new Rect(236f, 451f, 160f, 160f);
+        // character3（244 角を 195,451 に置く）。シートは 2048 角の 212,46 / 1622×1998 を 244/2048 倍。
         const float NcPortraitScale = 244f / 2048f;
         static readonly Rect NcPortraitSheet = new Rect(
-            211f + 212f * NcPortraitScale, 451f + 46f * NcPortraitScale, 1622f * NcPortraitScale, 1998f * NcPortraitScale);
-        // 関係と個人データ（667〜899）は、多いときにスクロールする。
-        static readonly Rect NcInfoArea = new Rect(252f, 667f, 336f, 232f);
-        static readonly Rect NcInfoTrack = new Rect(590f, 667f, 6f, 232f);
+            195f + 212f * NcPortraitScale, 451f + 46f * NcPortraitScale, 1622f * NcPortraitScale, 1998f * NcPortraitScale);
+        // 顔の右の箱（404〜597）。
+        const float NcBoxX = 404f;
+        const float NcBoxWidth = 193f;
+        // 関係とパーソナルデータ（667〜899）は、多いときにスクロールする。
+        static readonly Rect NcInfoArea = new Rect(236f, 667f, 361f, 232f);
+        static readonly Rect NcInfoTrack = new Rect(605f, 667f, 10f, 232f);
         const float NcInfoStride = 48f;
 
         static readonly Color NcGray = Hex(0x8E8E93);
@@ -69,6 +80,23 @@ namespace SoccerClub.UI
         static readonly Color NcGray6 = Hex(0xF2F2F7);
         // Figma に無い。選んでいる行は白くして分かるようにする。
         static readonly Color NcSelected = Color.white;
+
+        enum NcStaffSort
+        {
+            None,
+            Role,
+            Name,
+            Age,
+            Level,
+            Salary
+        }
+
+        sealed class NcStaffEntry
+        {
+            public StaffMember Staff;
+            public TeamStaffRole Role;
+            public int Order;
+        }
 
         GUIStyle _ncTitle;
         GUIStyle _ncClose;
@@ -87,8 +115,14 @@ namespace SoccerClub.UI
         string _ncInfoKey;
         readonly List<KeyValuePair<string, string>> _ncRelations = new List<KeyValuePair<string, string>>();
 
-        /// <summary>新しいクラブハウスで描くか。選手タブだけ。</summary>
-        bool UsesNewClubhouse => _kind == Kind.Clubhouse && _page == ClubPage.Players;
+        readonly List<NcStaffEntry> _ncStaff = new List<NcStaffEntry>();
+        float _ncStaffScroll;
+        string _ncStaffSelectedId;
+        NcStaffSort _ncStaffSort = NcStaffSort.Role;
+        bool _ncStaffAsc = true;
+
+        /// <summary>新しいクラブハウスで描くか。選手とスタッフのタブ。</summary>
+        bool UsesNewClubhouse => _kind == Kind.Clubhouse && (_page == ClubPage.Players || _page == ClubPage.Staff);
 
         void DrawNewClubhouse(GameSession session, Club club, System.Action<string> focusCharacter)
         {
@@ -104,11 +138,19 @@ namespace SoccerClub.UI
             if (session.GameOver)
                 GUI.Label(new Rect(NcDialog.x, 240f, NcDialog.width, 28f), "資金ショートのためゲームオーバーです。", _ncSmallCenter);
 
-            if (club != null) club.EnsureShirtNumbers();
-            CollectRoster(club);
-            DrawNcPlayerList();
-            var selected = SelectedPlayer();
-            DrawNcDetail(session, club, selected);
+            if (_page == ClubPage.Staff)
+            {
+                CollectNcStaff(club);
+                DrawNcStaffList();
+                DrawNcStaffDetail(session, club, SelectedNcStaff());
+            }
+            else
+            {
+                if (club != null) club.EnsureShirtNumbers();
+                CollectRoster(club);
+                DrawNcPlayerList();
+                DrawNcDetail(session, club, SelectedPlayer());
+            }
 
             // タブと閉じるボタンは最後に置いて、一覧のドラッグより先に押せるようにする。
             for (int i = 0; i < NcTabLabels.Length; i++)
@@ -129,25 +171,24 @@ namespace SoccerClub.UI
             GUI.color = previous;
         }
 
-        // ---- 一覧
+        // ---- 選手の一覧
 
         void DrawNcPlayerList()
         {
             for (int i = 0; i < NcHeadX.Length; i++)
             {
-                var cell = new Rect(NcHeadX[i], NcHeadY, NcHeadW[i], NcHeadHeight);
-                NcFill(cell, NcGray4);
-                string label = NcHeadLabels[i];
-                var sort = NcHeadSort[i];
+                var sort = NcPlayerHeadSort[i];
+                string label = NcPlayerHeadLabels[i];
                 if (sort != PlayerSort.None && _playerSort == sort)
                     label += _playerSortAsc ? "▲" : "▼";
-                FitNcLabel(cell, label, _ncCell, 36);
-                if (sort != PlayerSort.None && GUI.Button(cell, GUIContent.none, _hit))
+                if (DrawNcHead(i, label, sort != PlayerSort.None))
                     TogglePlayerSort(sort);
             }
 
-            float content = _roster.Count == 0 ? 0f : _roster.Count * NcRowStride - (NcRowStride - NcRowHeight);
-            UpdateNcScroll(content);
+            float content = NcContent(_roster.Count);
+            int clicked = UpdateNcScroll(content, _roster.Count, ref _playerScroll);
+            if (clicked >= 0 && _roster[clicked] != null)
+                _selectedPlayerId = _roster[clicked].Id;
 
             if (_roster.Count == 0)
             {
@@ -160,37 +201,60 @@ namespace SoccerClub.UI
                 {
                     float y = i * NcRowStride - _playerScroll;
                     if (y + NcRowHeight < 0f || y > NcRows.height) continue;
-                    DrawNcRow(_roster[i], y);
+                    DrawNcPlayerRow(_roster[i], y);
                 }
 
                 GUI.EndGroup();
             }
 
-            DrawNcScrollbar(content);
+            DrawNcScrollbar(content, _playerScroll);
         }
 
         /// <summary>BeginGroup の中。x は NcListX を 0 にした座標。</summary>
-        void DrawNcRow(Player player, float y)
+        void DrawNcPlayerRow(Player player, float y)
         {
-            bool selected = player.Id == _selectedPlayerId;
-            NcFill(new Rect(0f, y, NcListWidth, NcRowHeight), selected ? NcSelected : NcGray5);
-            NcFill(new Rect(0f, y, 100f, 100f), NcGray4);
-            GUI.Label(new Rect(15f, y, 85f, NcRowHeight), player.BestPosition().ToString(), _ncCellLeft);
-            NcFill(new Rect(112f, y + 10f, 48f, 80f), NcGray4);
-            GUI.Label(new Rect(112f, y, 48f, NcRowHeight), player.Gender == Gender.Female ? "F" : "M", _ncCell);
-            FitNcLabel(new Rect(177f, y, 288f, NcRowHeight), player.Name ?? "", _ncCellLeft, 36);
-            GUI.Label(new Rect(1124f - NcListX, y, 84f, NcRowHeight), player.Age.ToString(CultureInfo.InvariantCulture), _ncCell);
+            DrawNcRowBase(y, player.Id == _selectedPlayerId, player.BestPosition().ToString(), player.Gender, player.Name, player.Age);
             FitNcLabel(new Rect(1208f - NcListX, y, 124f, NcRowHeight), player.DisplayOverall.ToString(CultureInfo.InvariantCulture), _ncCell, 36);
             FitNcLabel(new Rect(1340f - NcListX, y, 288f, NcRowHeight), MoneyText.Format(player.AnnualSalary), _ncCellRight, 36);
             DrawTex(new Rect(1644f - NcListX, y + 26f, 48f, 49f), ConditionIcon(player));
         }
 
-        void UpdateNcScroll(float content)
+        /// <summary>行の地、POS、M/F、名前、年齢（選手とスタッフで共通）。</summary>
+        void DrawNcRowBase(float y, bool selected, string pos, Gender gender, string name, int age)
+        {
+            NcFill(new Rect(0f, y, NcListWidth, NcRowHeight), selected ? NcSelected : NcGray5);
+            NcFill(new Rect(0f, y, 100f, 100f), NcGray4);
+            FitNcLabel(new Rect(0f, y, 100f, NcRowHeight), pos, _ncCell, 36);
+            NcFill(new Rect(112f, y + 10f, 48f, 80f), NcGray4);
+            GUI.Label(new Rect(112f, y, 48f, NcRowHeight), gender == Gender.Female ? "F" : "M", _ncCell);
+            FitNcLabel(new Rect(177f, y, 288f, NcRowHeight), name ?? "", _ncCellLeft, 36);
+            GUI.Label(new Rect(1124f - NcListX, y, 84f, NcRowHeight), age.ToString(CultureInfo.InvariantCulture), _ncCell);
+        }
+
+        /// <summary>見出し 1 列。並べ替えできる列なら、押されたら true。</summary>
+        bool DrawNcHead(int column, string label, bool sortable)
+        {
+            var cell = new Rect(NcHeadX[column], NcHeadY, NcHeadW[column], NcHeadHeight);
+            NcFill(cell, NcGray4);
+            FitNcLabel(cell, label, _ncCell, 36);
+            return sortable && GUI.Button(cell, GUIContent.none, _hit);
+        }
+
+        static float NcContent(int count)
+        {
+            return count == 0 ? 0f : count * NcRowStride - (NcRowStride - NcRowHeight);
+        }
+
+        /// <summary>
+        /// 一覧のスクロールと行のタップ。ドラッグ、ホイール、つまみで動かす。
+        /// ドラッグしないで離したら、その行の番号を返す（なければ -1）。
+        /// </summary>
+        int UpdateNcScroll(float content, int count, ref float scroll)
         {
             float maxScroll = Mathf.Max(0f, content - NcRows.height);
-            _playerScroll = Mathf.Clamp(_playerScroll, 0f, maxScroll);
+            scroll = Mathf.Clamp(scroll, 0f, maxScroll);
             var e = Event.current;
-            if (e == null) return;
+            if (e == null) return -1;
 
             bool overRows = NcRows.Contains(e.mousePosition);
             if (e.type == EventType.MouseDown && e.button == 0 && overRows)
@@ -206,7 +270,7 @@ namespace SoccerClub.UI
                     _playerDragging = true;
                 if (_playerDragging && maxScroll > 0.5f)
                 {
-                    _playerScroll = Mathf.Clamp(_playerScroll - (e.mousePosition.y - _playerDragLastY), 0f, maxScroll);
+                    scroll = Mathf.Clamp(scroll - (e.mousePosition.y - _playerDragLastY), 0f, maxScroll);
                     _playerDragLastY = e.mousePosition.y;
                     e.Use();
                 }
@@ -216,17 +280,17 @@ namespace SoccerClub.UI
                 bool dragged = _playerDragging;
                 _playerPress = false;
                 _playerDragging = false;
+                int clicked = -1;
                 if (!dragged && overRows)
                 {
-                    float local = e.mousePosition.y - NcRows.y + _playerScroll;
+                    float local = e.mousePosition.y - NcRows.y + scroll;
                     int index = (int)(local / NcRowStride);
-                    if (index >= 0 && index < _roster.Count && _roster[index] != null
-                        && local - index * NcRowStride <= NcRowHeight)
-                        _selectedPlayerId = _roster[index].Id;
+                    if (index >= 0 && index < count && local - index * NcRowStride <= NcRowHeight)
+                        clicked = index;
                 }
 
                 e.Use();
-                return;
+                return clicked;
             }
 
             if (e.type == EventType.MouseUp)
@@ -235,17 +299,17 @@ namespace SoccerClub.UI
                 _playerThumbDrag = false;
             }
 
-            if (maxScroll <= 0.5f) return;
+            if (maxScroll <= 0.5f) return -1;
 
             var track = NcScrollTrack;
             float thumbH = NcThumbHeight(content);
             float span = Mathf.Max(1f, track.height - thumbH);
-            float thumbY = track.y + span * (_playerScroll / maxScroll);
+            float thumbY = track.y + span * (scroll / maxScroll);
             // 細いバーなので、つかむ範囲は左右に広げる。
             var grab = new Rect(track.x - 12f, thumbY, track.width + 24f, thumbH);
             if (e.type == EventType.ScrollWheel && (overRows || grab.Contains(e.mousePosition)))
             {
-                _playerScroll = Mathf.Clamp(_playerScroll + e.delta.y * 40f, 0f, maxScroll);
+                scroll = Mathf.Clamp(scroll + e.delta.y * 40f, 0f, maxScroll);
                 e.Use();
             }
             else if (e.type == EventType.MouseDown && e.button == 0 && grab.Contains(e.mousePosition))
@@ -257,9 +321,11 @@ namespace SoccerClub.UI
             else if (_playerThumbDrag && e.type == EventType.MouseDrag)
             {
                 float y = e.mousePosition.y - _playerThumbGrab;
-                _playerScroll = Mathf.Clamp01((y - track.y) / span) * maxScroll;
+                scroll = Mathf.Clamp01((y - track.y) / span) * maxScroll;
                 e.Use();
             }
+
+            return -1;
         }
 
         float NcThumbHeight(float content)
@@ -268,15 +334,203 @@ namespace SoccerClub.UI
             return Mathf.Clamp(NcScrollTrack.height * NcRows.height / content, 48f, NcScrollTrack.height);
         }
 
-        void DrawNcScrollbar(float content)
+        void DrawNcScrollbar(float content, float scroll)
         {
             var track = NcScrollTrack;
             NcFill(track, NcGray);
             float maxScroll = Mathf.Max(0f, content - NcRows.height);
             float thumbH = NcThumbHeight(content);
             float span = Mathf.Max(1f, track.height - thumbH);
-            float t = maxScroll <= 0.5f ? 0f : _playerScroll / maxScroll;
+            float t = maxScroll <= 0.5f ? 0f : scroll / maxScroll;
             NcFill(new Rect(track.x, track.y + span * t, track.width, thumbH), NcGray4);
+        }
+
+        // ---- スタッフの一覧
+
+        /// <summary>チームスタッフを役職の順（監督、ヘッドコーチ、コーチ、フィジカルコーチ、トレーナー、ドクター）に集める。空き枠も行にする。</summary>
+        void CollectNcStaff(Club club)
+        {
+            _ncStaff.Clear();
+            var team = club != null ? club.Team : null;
+            if (team == null) return;
+            AddNcStaff(team.Manager, TeamStaffRole.Manager);
+            AddNcStaff(team.HeadCoach, TeamStaffRole.HeadCoach);
+            AddNcStaffSlots(team.Coaches, TeamStaffRole.Coach);
+            AddNcStaff(team.PhysicalCoach, TeamStaffRole.PhysicalCoach);
+            AddNcStaffSlots(team.Trainers, TeamStaffRole.Trainer);
+            AddNcStaff(team.Doctor, TeamStaffRole.Doctor);
+            _ncStaff.Sort(CompareNcStaff);
+        }
+
+        void AddNcStaffSlots(StaffMember[] slots, TeamStaffRole role)
+        {
+            if (slots == null) return;
+            for (int i = 0; i < slots.Length; i++)
+                AddNcStaff(slots[i], role);
+        }
+
+        void AddNcStaff(StaffMember staff, TeamStaffRole role)
+        {
+            _ncStaff.Add(new NcStaffEntry { Staff = staff, Role = role, Order = _ncStaff.Count });
+        }
+
+        /// <summary>空き枠はいつも最後。同じ値なら役職の順。</summary>
+        int CompareNcStaff(NcStaffEntry a, NcStaffEntry b)
+        {
+            if ((a.Staff == null) != (b.Staff == null)) return a.Staff == null ? 1 : -1;
+            int compared = 0;
+            if (a.Staff != null && b.Staff != null)
+            {
+                switch (_ncStaffSort)
+                {
+                    case NcStaffSort.Name:
+                        compared = string.CompareOrdinal(a.Staff.Name ?? "", b.Staff.Name ?? "");
+                        break;
+                    case NcStaffSort.Age:
+                        compared = a.Staff.Age.CompareTo(b.Staff.Age);
+                        break;
+                    case NcStaffSort.Level:
+                        compared = a.Staff.Level.CompareTo(b.Staff.Level);
+                        break;
+                    case NcStaffSort.Salary:
+                        compared = a.Staff.AnnualSalary.CompareTo(b.Staff.AnnualSalary);
+                        break;
+                }
+            }
+
+            if (compared == 0) compared = a.Order.CompareTo(b.Order);
+            return _ncStaffAsc || _ncStaffSort == NcStaffSort.None ? compared : -compared;
+        }
+
+        void ToggleNcStaffSort(NcStaffSort sort)
+        {
+            if (_ncStaffSort == sort) _ncStaffAsc = !_ncStaffAsc;
+            else
+            {
+                _ncStaffSort = sort;
+                // 名前と役職は昇順、数値は高い順から。
+                _ncStaffAsc = sort == NcStaffSort.Role || sort == NcStaffSort.Name;
+            }
+
+            _ncStaffScroll = 0f;
+        }
+
+        StaffMember SelectedNcStaff()
+        {
+            StaffMember first = null;
+            for (int i = 0; i < _ncStaff.Count; i++)
+            {
+                var staff = _ncStaff[i].Staff;
+                if (staff == null) continue;
+                if (first == null) first = staff;
+                if (staff.Id == _ncStaffSelectedId) return staff;
+            }
+
+            _ncStaffSelectedId = first != null ? first.Id : null;
+            return first;
+        }
+
+        void DrawNcStaffList()
+        {
+            for (int i = 0; i < NcHeadX.Length; i++)
+            {
+                var sort = NcStaffHeadSort[i];
+                string label = NcStaffHeadLabels[i];
+                if (sort != NcStaffSort.None && _ncStaffSort == sort)
+                    label += _ncStaffAsc ? "▲" : "▼";
+                if (DrawNcHead(i, label, sort != NcStaffSort.None))
+                    ToggleNcStaffSort(sort);
+            }
+
+            float content = NcContent(_ncStaff.Count);
+            int clicked = UpdateNcScroll(content, _ncStaff.Count, ref _ncStaffScroll);
+            if (clicked >= 0 && _ncStaff[clicked].Staff != null)
+                _ncStaffSelectedId = _ncStaff[clicked].Staff.Id;
+
+            if (_ncStaff.Count == 0)
+            {
+                GUI.Label(NcRows, "スタッフはいません。", _ncCell);
+            }
+            else
+            {
+                GUI.BeginGroup(NcRows);
+                for (int i = 0; i < _ncStaff.Count; i++)
+                {
+                    float y = i * NcRowStride - _ncStaffScroll;
+                    if (y + NcRowHeight < 0f || y > NcRows.height) continue;
+                    DrawNcStaffRow(_ncStaff[i], y);
+                }
+
+                GUI.EndGroup();
+            }
+
+            DrawNcScrollbar(content, _ncStaffScroll);
+        }
+
+        void DrawNcStaffRow(NcStaffEntry entry, float y)
+        {
+            var staff = entry.Staff;
+            if (staff == null)
+            {
+                NcFill(new Rect(0f, y, NcListWidth, NcRowHeight), NcGray5);
+                NcFill(new Rect(0f, y, 100f, 100f), NcGray4);
+                FitNcLabel(new Rect(0f, y, 100f, NcRowHeight), NcRoleCode(entry.Role), _ncCell, 36);
+                GUI.Label(new Rect(177f, y, 288f, NcRowHeight), "（空き）", _ncCellLeft);
+                return;
+            }
+
+            DrawNcRowBase(y, staff.Id == _ncStaffSelectedId, NcRoleCode(entry.Role), staff.Gender, staff.Name, staff.Age);
+            FitNcLabel(new Rect(1208f - NcListX, y, 124f, NcRowHeight), staff.Level.ToString(CultureInfo.InvariantCulture), _ncCell, 36);
+            FitNcLabel(new Rect(1340f - NcListX, y, 288f, NcRowHeight), MoneyText.Format(staff.AnnualSalary), _ncCellRight, 36);
+        }
+
+        /// <summary>POS の欄の略号。</summary>
+        static string NcRoleCode(TeamStaffRole role)
+        {
+            switch (role)
+            {
+                case TeamStaffRole.Manager: return "MGR";
+                case TeamStaffRole.HeadCoach: return "HC";
+                case TeamStaffRole.Coach: return "CO";
+                case TeamStaffRole.PhysicalCoach: return "PHY";
+                case TeamStaffRole.Trainer: return "TR";
+                default: return "DR";
+            }
+        }
+
+        // ---- 詳細（選手とスタッフで共通の部分）
+
+        /// <summary>1 行目（略号・名前・背番号）、2 行目（性別・誕生日・年齢）、顔、年俸。</summary>
+        void DrawNcDetailCommon(string id, string pos, string name, string number, Gender gender, int age, Texture2D portrait, string salary)
+        {
+            NcFill(new Rect(NcDetailX, 355f, NcDetailWidth, 40f), NcGray4);
+            NcPill(new Rect(NcPillX, 359f, 63f, 32f), pos);
+            FitNcLabel(new Rect(320f, 355f, 168f, 40f), name ?? "", _ncSmall, 20);
+            if (!string.IsNullOrEmpty(number))
+                GUI.Label(new Rect(496f, 355f, 60f, 40f), number, _ncSmall);
+
+            NcFill(new Rect(NcDetailX, 403f, NcDetailWidth, 40f), NcGray4);
+            NcPill(new Rect(NcPillX, 407f, 63f, 32f), gender == Gender.Female ? "Female" : "Male");
+            int month;
+            int day;
+            CharacterLife.Birthday(id, out month, out day);
+            GUI.Label(new Rect(320f, 403f, 70f, 40f), "誕生日", _ncSmall);
+            GUI.Label(new Rect(396f, 403f, 90f, 40f), month.ToString(CultureInfo.InvariantCulture) + "/" + day.ToString(CultureInfo.InvariantCulture), _ncSmall);
+            GUI.Label(new Rect(496f, 403f, 80f, 40f), age.ToString(CultureInfo.InvariantCulture) + "歳", _ncSmall);
+
+            // 顔（160 角に切り抜く）。
+            NcFill(NcPortraitBox, NcGray4);
+            if (portrait != null)
+            {
+                GUI.BeginGroup(NcPortraitBox);
+                var sheet = new Rect(NcPortraitSheet.x - NcPortraitBox.x, NcPortraitSheet.y - NcPortraitBox.y, NcPortraitSheet.width, NcPortraitSheet.height);
+                GUI.DrawTexture(sheet, portrait, ScaleMode.StretchToFill, true);
+                GUI.EndGroup();
+            }
+
+            NcFill(new Rect(NcDetailX, 619f, NcDetailWidth, 40f), NcGray4);
+            GUI.Label(new Rect(244f, 619f, 80f, 40f), "年俸", _ncSmall);
+            FitNcLabel(new Rect(330f, 619f, NcRightX - 330f, 40f), salary, _ncSmallRight, 20);
         }
 
         // ---- 選手の詳細
@@ -286,72 +540,184 @@ namespace SoccerClub.UI
             NcFill(NcDetailPanel, NcGray5);
             if (player == null) return;
 
-            // 1行目：ポジション・名前・背番号。
-            var row = new Rect(NcDetailX, 355f, NcDetailWidth, 40f);
-            NcFill(row, NcGray4);
-            NcPill(new Rect(257f, 359f, 63f, 32f), player.BestPosition().ToString());
-            FitNcLabel(new Rect(336f, 355f, 168f, 40f), player.Name ?? "", _ncSmall, 20);
-            if (player.ShirtNumber > 0)
-                GUI.Label(new Rect(512f, 355f, 60f, 40f), player.ShirtNumber.ToString(CultureInfo.InvariantCulture), _ncSmall);
-
-            // 2行目：性別・誕生日・年齢。
-            row = new Rect(NcDetailX, 403f, NcDetailWidth, 40f);
-            NcFill(row, NcGray4);
-            NcPill(new Rect(257f, 407f, 63f, 32f), player.Gender == Gender.Female ? "Female" : "Male");
-            int month;
-            int day;
-            CharacterLife.Birthday(player.Id, out month, out day);
-            GUI.Label(new Rect(336f, 403f, 70f, 40f), "誕生日", _ncSmall);
-            GUI.Label(new Rect(412f, 403f, 90f, 40f), month.ToString(CultureInfo.InvariantCulture) + "/" + day.ToString(CultureInfo.InvariantCulture), _ncSmall);
-            GUI.Label(new Rect(512f, 403f, 64f, 40f), player.Age.ToString(CultureInfo.InvariantCulture) + "歳", _ncSmall);
-
-            // 顔（160 角に切り抜く）。
-            NcFill(NcPortraitBox, NcGray4);
-            var portrait = PortraitOf(player, club);
-            if (portrait != null)
-            {
-                GUI.BeginGroup(NcPortraitBox);
-                var sheet = new Rect(NcPortraitSheet.x - NcPortraitBox.x, NcPortraitSheet.y - NcPortraitBox.y, NcPortraitSheet.width, NcPortraitSheet.height);
-                GUI.DrawTexture(sheet, portrait, ScaleMode.StretchToFill, true);
-                GUI.EndGroup();
-            }
+            DrawNcDetailCommon(
+                player.Id,
+                player.BestPosition().ToString(),
+                player.Name,
+                player.ShirtNumber > 0 ? player.ShirtNumber.ToString(CultureInfo.InvariantCulture) : null,
+                player.Gender,
+                player.Age,
+                PortraitOf(player, club),
+                MoneyText.Format(player.AnnualSalary));
 
             // 総合力と OFF・DEF・STA。
-            NcFill(new Rect(420f, 451f, 160f, 40f), NcGray4);
-            GUI.Label(new Rect(420f, 451f, 160f, 40f), player.DisplayOverall.ToString(CultureInfo.InvariantCulture), _ncOverall);
+            NcFill(new Rect(NcBoxX, 451f, NcBoxWidth, 40f), NcGray4);
+            GUI.Label(new Rect(NcBoxX, 451f, NcBoxWidth, 40f), player.DisplayOverall.ToString(CultureInfo.InvariantCulture), _ncOverall);
             NcStat(491f, "OFF", player.DisplayOffense, NcGray3);
             NcStat(531f, "DEF", player.DisplayDefense, NcGray4);
             NcStat(571f, "STA", player.DisplayStaminaMax, NcGray3);
 
-            // 年俸。
-            NcFill(new Rect(NcDetailX, 619f, NcDetailWidth, 40f), NcGray4);
-            GUI.Label(new Rect(260f, 619f, 80f, 40f), "年俸", _ncSmall);
-            FitNcLabel(new Rect(340f, 619f, 232f, 40f), MoneyText.Format(player.AnnualSalary), _ncSmallRight, 20);
-
-            DrawNcInfo(session, player);
+            DrawNcInfo(session, player.Id, player.Children);
         }
 
         void NcStat(float y, string label, int value, Color color)
         {
-            NcFill(new Rect(420f, y, 160f, 40f), color);
-            GUI.Label(new Rect(429f, y, 60f, 40f), label, _ncSmall);
-            GUI.Label(new Rect(480f, y, 92f, 40f), value.ToString(CultureInfo.InvariantCulture), _ncSmallRight);
+            NcFill(new Rect(NcBoxX, y, NcBoxWidth, 40f), color);
+            GUI.Label(new Rect(413f, y, 60f, 40f), label, _ncSmall);
+            GUI.Label(new Rect(480f, y, NcRightX - 480f, 40f), value.ToString(CultureInfo.InvariantCulture), _ncSmallRight);
         }
 
-        /// <summary>関係（夫婦・恋人・親友・友達）と、パーソナルデータ（趣味・好きな食べ物・苦手な食べ物・子ども）。多いときはスクロールする。</summary>
-        void DrawNcInfo(GameSession session, Player player)
+        // ---- スタッフの詳細
+
+        void DrawNcStaffDetail(GameSession session, Club club, StaffMember staff)
         {
-            string key = player.Id + "|" + (session != null ? session.Time.CurrentDate.Ticks : 0L);
+            NcFill(NcDetailPanel, NcGray5);
+            if (staff == null) return;
+
+            DrawNcDetailCommon(
+                staff.Id,
+                NcRoleCode(staff.TeamRole),
+                staff.Name,
+                null,
+                staff.Gender,
+                staff.Age,
+                NcStaffStand(staff, club),
+                MoneyText.Format(staff.AnnualSalary));
+
+            // LV と、役職ごとの 3 行（監督はシステム・タイプ・起用方針）。
+            NcFill(new Rect(NcBoxX, 451f, NcBoxWidth, 40f), NcGray4);
+            GUI.Label(new Rect(NcBoxX, 451f, NcBoxWidth, 40f), "LV " + staff.Level.ToString(CultureInfo.InvariantCulture), _ncOverall);
+            string l1, v1, l2, v2, l3, v3;
+            NcStaffTraits(staff, out l1, out v1, out l2, out v2, out l3, out v3);
+            NcTrait(491f, l1, v1);
+            NcTrait(531f, l2, v2);
+            NcTrait(571f, l3, v3);
+
+            DrawNcInfo(session, staff.Id, staff.Children);
+        }
+
+        /// <summary>左にラベル（97 幅）、右に値（96 幅）。</summary>
+        void NcTrait(float y, string label, string value)
+        {
+            NcFill(new Rect(NcBoxX, y, 97f, 40f), NcGray3);
+            NcFill(new Rect(NcBoxX + 97f, y, 96f, 40f), NcGray4);
+            if (!string.IsNullOrEmpty(label))
+                FitNcLabel(new Rect(413f, y, 84f, 40f), label, _ncSmall, 20);
+            if (!string.IsNullOrEmpty(value))
+                FitNcLabel(new Rect(508f, y, 84f, 40f), value, _ncSmall, 20);
+        }
+
+        static void NcStaffTraits(StaffMember staff, out string l1, out string v1, out string l2, out string v2, out string l3, out string v3)
+        {
+            l1 = v1 = l2 = v2 = l3 = v3 = null;
+            switch (staff.TeamRole)
+            {
+                case TeamStaffRole.Manager:
+                    l1 = "システム";
+                    v1 = FormationCatalog.Get(staff.FavoriteFormation).DisplayName;
+                    l2 = "タイプ";
+                    v2 = NcStyleLabel(staff.FavoriteStyle);
+                    l3 = "起用方針";
+                    v3 = staff.LineupPriority == LineupPriority.Condition ? "調子重視" : "能力重視";
+                    break;
+                case TeamStaffRole.HeadCoach:
+                    l1 = "担当";
+                    v1 = "全員";
+                    l2 = "練習";
+                    v2 = "攻守・スタミナ";
+                    break;
+                case TeamStaffRole.Coach:
+                    l1 = "担当";
+                    v1 = NcGroupLabel(staff.ScoutedGroup);
+                    l2 = "全員";
+                    v2 = NcPercent(ClubMath.CoachBonusPercent(staff.Level, false));
+                    l3 = "担当の選手";
+                    v3 = NcPercent(ClubMath.CoachBonusPercent(staff.Level, true));
+                    break;
+                case TeamStaffRole.PhysicalCoach:
+                    l1 = "担当";
+                    v1 = "全員";
+                    l2 = "練習";
+                    v2 = "スタミナ";
+                    break;
+                case TeamStaffRole.Trainer:
+                    l1 = "回復量";
+                    v1 = staff.Level.ToString(CultureInfo.InvariantCulture);
+                    l2 = "回復";
+                    v2 = "練習・試合後";
+                    break;
+                default:
+                    l1 = "担当";
+                    v1 = "全員";
+                    l2 = "効果";
+                    v2 = "怪我を減らす";
+                    break;
+            }
+        }
+
+        static string NcStyleLabel(PlayingStyle style)
+        {
+            switch (style)
+            {
+                case PlayingStyle.Possession: return "ポゼッション";
+                case PlayingStyle.Counter: return "カウンター";
+                case PlayingStyle.HighPress: return "ハイプレス";
+                case PlayingStyle.Direct: return "ダイレクト";
+                default: return "バランス";
+            }
+        }
+
+        static string NcGroupLabel(PositionGroup group)
+        {
+            switch (group)
+            {
+                case PositionGroup.GK: return "GK";
+                case PositionGroup.DF: return "DF";
+                case PositionGroup.MF: return "MF";
+                default: return "FW";
+            }
+        }
+
+        static string NcPercent(double percent)
+        {
+            return "+" + percent.ToString("0.0", CultureInfo.InvariantCulture) + "%";
+        }
+
+        /// <summary>スタッフの立ち絵（選手と同じ切り抜き）。服は役職どおり（チームスタッフはユニフォーム）。</summary>
+        Texture2D NcStaffStand(StaffMember staff, Club club)
+        {
+            if (staff == null || club == null) return null;
+            const int StandGroup = -3;
+            if (_portrait != null && _portraitId == staff.Id && _portraitEmblem == club.EmblemIndex && _portraitGroup == StandGroup)
+                return _portrait;
+            ReleasePortrait();
+            if (!_avatars.Ready) _avatars.Load();
+            if (!_avatars.Ready) return null;
+            var stand = _avatars.CreateStand(staff.Id, AvatarLibrary.Kit(club.EmblemIndex), AvatarLibrary.NaturalHair(staff.Id), 0, AvatarLibrary.OutfitOf(staff), gender: staff.Gender);
+            if (stand == null) return null;
+            _portrait = stand;
+            _portraitId = staff.Id;
+            _portraitEmblem = club.EmblemIndex;
+            _portraitGroup = StandGroup;
+            return _portrait;
+        }
+
+        // ---- 関係とパーソナルデータ
+
+        /// <summary>関係（夫婦・恋人・親友・友達）と、パーソナルデータ（趣味・好きな食べ物・苦手な食べ物・子ども）。多いときはスクロールする。</summary>
+        void DrawNcInfo(GameSession session, string id, int childCount)
+        {
+            string key = id + "|" + (session != null ? session.Time.CurrentDate.Ticks : 0L);
             if (_ncInfoKey != key)
             {
                 _ncInfoKey = key;
                 _ncInfoScroll = 0f;
-                BuildNcRelations(session, player);
+                BuildNcRelations(session, id);
             }
 
-            string hobby = CharacterLife.Hobby(player.Id);
-            if (CharacterLife.IsMovie(hobby)) hobby = "映画（" + CharacterLife.Movie(player.Id) + "）";
-            bool children = player.Children > 0;
+            string hobby = CharacterLife.Hobby(id);
+            if (CharacterLife.IsMovie(hobby)) hobby = "映画（" + CharacterLife.Movie(id) + "）";
+            bool children = childCount > 0;
             int rows = _ncRelations.Count + 3 + (children ? 1 : 0);
             float content = rows * NcInfoStride - (NcInfoStride - 40f);
             float maxScroll = Mathf.Max(0f, content - NcInfoArea.height);
@@ -363,18 +729,18 @@ namespace SoccerClub.UI
             {
                 NcFill(new Rect(0f, y, NcDetailWidth, 40f), NcGray4);
                 NcPill(new Rect(5f, y + 4f, 63f, 32f), _ncRelations[i].Key);
-                FitNcLabel(new Rect(84f, y, 236f, 40f), _ncRelations[i].Value, _ncSmall, 20);
+                FitNcLabel(new Rect(84f, y, 260f, 40f), _ncRelations[i].Value, _ncSmall, 20);
             }
 
             NcPersonal(y, "趣味", hobby);
             y += NcInfoStride;
-            NcPersonal(y, "好きな食べ物", CharacterLife.FavoriteFood(player.Id));
+            NcPersonal(y, "好きな食べ物", CharacterLife.FavoriteFood(id));
             y += NcInfoStride;
-            NcPersonal(y, "苦手な食べ物", CharacterLife.DislikedFood(player.Id));
+            NcPersonal(y, "苦手な食べ物", CharacterLife.DislikedFood(id));
             if (children)
             {
                 y += NcInfoStride;
-                NcPersonal(y, "子ども", player.Children.ToString(CultureInfo.InvariantCulture) + "人");
+                NcPersonal(y, "子ども", childCount.ToString(CultureInfo.InvariantCulture) + "人");
             }
 
             GUI.EndGroup();
@@ -393,7 +759,7 @@ namespace SoccerClub.UI
             NcFill(new Rect(0f, y, NcDetailWidth, 40f), NcGray4);
             NcFill(new Rect(5f, y + 4f, 139f, 32f), NcGray2);
             GUI.Label(new Rect(5f, y + 4f, 139f, 32f), label, _ncSmallCenter);
-            FitNcLabel(new Rect(152f, y, 168f, 40f), value ?? "", _ncSmall, 20);
+            FitNcLabel(new Rect(152f, y, 200f, 40f), value ?? "", _ncSmall, 20);
         }
 
         void UpdateNcInfoScroll(float maxScroll)
@@ -401,7 +767,7 @@ namespace SoccerClub.UI
             _ncInfoScroll = Mathf.Clamp(_ncInfoScroll, 0f, maxScroll);
             var e = Event.current;
             if (e == null) return;
-            var area = new Rect(NcInfoArea.x, NcInfoArea.y, NcInfoArea.width + 12f, NcInfoArea.height);
+            var area = new Rect(NcInfoArea.x, NcInfoArea.y, NcInfoTrack.xMax - NcInfoArea.x, NcInfoArea.height);
             bool over = area.Contains(e.mousePosition);
             if (e.type == EventType.ScrollWheel && over && maxScroll > 0.5f)
             {
@@ -428,10 +794,10 @@ namespace SoccerClub.UI
         }
 
         /// <summary>関係の一覧を作る。夫婦・恋人・親友・友達の順。名前は所属クラブを問わず探す。</summary>
-        void BuildNcRelations(GameSession session, Player player)
+        void BuildNcRelations(GameSession session, string id)
         {
             _ncRelations.Clear();
-            var relations = session != null && session.Relations != null ? session.Relations.For(player.Id) : null;
+            var relations = session != null && session.Relations != null ? session.Relations.For(id) : null;
             if (relations == null || relations.Count == 0) return;
             var people = ProfilePeople(session);
             var sorted = new List<Relationship>(relations);
@@ -440,7 +806,7 @@ namespace SoccerClub.UI
             {
                 var rel = sorted[i];
                 if (NcStageOrder(rel.Stage) >= 4) continue;
-                string otherId = rel.Other(player.Id);
+                string otherId = rel.Other(id);
                 ProfilePerson person;
                 string name = otherId != null && people.TryGetValue(otherId, out person) ? person.Name : (otherId ?? "");
                 _ncRelations.Add(new KeyValuePair<string, string>(StageLabel(rel.Stage), name));

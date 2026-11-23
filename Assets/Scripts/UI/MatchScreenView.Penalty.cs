@@ -1,3 +1,4 @@
+using SoccerClub.Competition;
 using SoccerClub.Core;
 using SoccerClub.Data;
 using SoccerClub.Match;

@@ -137,8 +137,8 @@ namespace SoccerClub.UI
                 float share = matchWeight / (matchWeight + penaltyWeight);
                 if (progress >= share)
                 {
-                    float units = share >= 1f ? penaltyWeight : (progress - share) / (1f - share) * penaltyWeight;
-                    DrawPenalty(fixture, result, viewer, units);
+                    float penaltyUnits = share >= 1f ? penaltyWeight : (progress - share) / (1f - share) * penaltyWeight;
+                    DrawPenalty(fixture, result, viewer, penaltyUnits);
                     GUI.color = Color.white;
                     return;
                 }
