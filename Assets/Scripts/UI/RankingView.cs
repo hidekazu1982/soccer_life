@@ -26,6 +26,7 @@ namespace SoccerClub.UI
         static readonly Color DefeatCardColor = Hex(0xFFA8A8);
         static readonly Color DrawCardColor = Hex(0xFFE27A);
         static readonly Color FutureCardColor = Hex(0xF2F2F7);
+        static readonly Color BackdropOverlay = new Color(1f, 1f, 1f, 0.8f);
         static readonly Rect ScheduleHit = new Rect(CardX, -2000f, CardSize, 5080f);
 
         // ranking（186:239）。見出し 441,80 / 1300×100、行は 100 ずつ。
@@ -106,7 +107,8 @@ namespace SoccerClub.UI
             if (!_prepared) Prepare(session, today);
 
             var screen = FullScreenRect();
-            Fill(screen, Color.white);
+            // 試合後の背景（ロッカールーム）。表が読みやすいよう白を重ねる。
+            MatchBackdrop.Draw(BackdropOverlay);
             HandleInput(screen);
             DrawSchedule(screen, emblemOf);
             DrawTable(emblemOf);

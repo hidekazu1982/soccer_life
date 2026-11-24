@@ -65,6 +65,8 @@ namespace SoccerClub.UI
         const int ElevenWalkFrame = 5;
         static readonly Color ElevenCardColor = new Color(0xD9 / 255f, 0xD9 / 255f, 0xD9 / 255f, 1f);
         const float ScoreHeight = 155f;
+        // 試合後の画面で、背景の絵に重ねる色の濃さ。
+        const float BoardOverlayAlpha = 0.78f;
 
         const float WalkFrameSeconds = 0.1f;
         const float MatchLengthScale = 2f;
@@ -819,10 +821,11 @@ namespace SoccerClub.UI
             GUI.Label(new Rect(160f, y, 1400f, 40f), SupporterLine("ライト", light, lightDelta), _body);
         }
 
+        /// <summary>試合後の画面の地。ロッカールームの絵に、画面ごとの色を重ねて白い文字を読みやすくする。</summary>
         void DrawBoard(Color color)
         {
-            GUI.color = color;
-            GUI.DrawTexture(new Rect(0f, 0f, GameRunner.ReferenceWidth, GameRunner.ReferenceHeight), Texture2D.whiteTexture);
+            color.a = BoardOverlayAlpha;
+            MatchBackdrop.Draw(color);
             GUI.color = new Color(1f, 1f, 1f, 0.06f);
             GUI.DrawTexture(new Rect(80f, 150f, 1760f, 740f), Texture2D.whiteTexture);
             GUI.color = Color.white;

@@ -218,7 +218,8 @@ namespace SoccerClub.Core
                 Months = offer.Months,
                 ActiveContracts = offer.ActiveContracts,
                 CutRank = offer.CutRank,
-                CutLosses = offer.CutLosses
+                CutLosses = offer.CutLosses,
+                OfferedTicks = offer.OfferedTicks
             };
         }
 
@@ -271,7 +272,8 @@ namespace SoccerClub.Core
                 Months = save.Months,
                 ActiveContracts = save.ActiveContracts,
                 CutRank = save.CutRank,
-                CutLosses = save.CutLosses
+                CutLosses = save.CutLosses,
+                OfferedTicks = save.OfferedTicks
             };
         }
 

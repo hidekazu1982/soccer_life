@@ -37,8 +37,8 @@ namespace SoccerClub.Personnel
 
             // 狙う強さ。呼び出し側が「強化部Lvの施設で育った選手」の目安を渡す。無ければ旧式。
             double target = targetOverall > 0d ? targetOverall : 80d + level * 12d;
-            int floor = club.Facilities.MarketLevelFloor();
-            int cap = club.Facilities.MarketLevelCap();
+            int floor = FrontLevelCap.MarketFloor(club);
+            int cap = FrontLevelCap.MarketCap(club);
             int active = 0;
             for (int i = 0; i < scouts.Length; i++)
             {
@@ -343,7 +343,7 @@ namespace SoccerClub.Personnel
         public bool TryHire(Club club, StaffMember staff)
         {
             if (staff == null || !staff.IsFrontOffice) return false;
-            if (!ClubMath.StaffMarketAllows(club, staff.Level)) return false;
+            if (!FrontLevelCap.MarketAllows(club, staff.Level)) return false;
             if (!_economy.TrySpend(club, HireCost(staff), "front-hire-" + staff.Id)) return false;
             Assign(club.Front, staff);
             return true;
@@ -355,7 +355,7 @@ namespace SoccerClub.Personnel
             if (staff == null || club == null || club.Front == null || !staff.IsFrontOffice) return false;
             if (slot < 0 || slot >= FrontOffice.SlotCount) return false;
             if (staff.FrontRole != FrontOffice.RoleAt(slot)) return false;
-            if (!ClubMath.StaffMarketAllows(club, staff.Level)) return false;
+            if (!FrontLevelCap.MarketAllows(club, staff.Level)) return false;
             if (!_economy.TrySpend(club, HireCost(staff), "front-hire-" + staff.Id)) return false;
             dismissed = club.Front.GetAt(slot);
             club.Front.SetAt(slot, staff);

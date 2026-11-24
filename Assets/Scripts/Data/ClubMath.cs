@@ -661,8 +661,29 @@ namespace SoccerClub.Data
         public static BigInteger MatchAdvertising(Club club)
         {
             int pr = club != null && club.Front != null ? club.Front.PublicRelationsLevel() : 0;
-            if (pr <= 0) return BigInteger.Zero;
-            return new BigInteger(220_000L * pr);
+            return AdvertisingAtLevel(pr);
+        }
+
+        /// <summary>広報部レベルごとのホーム1試合の広告費。</summary>
+        public static BigInteger AdvertisingAtLevel(int level)
+        {
+            if (level <= 0) return BigInteger.Zero;
+            return new BigInteger(220_000L * level);
+        }
+
+        /// <summary>広告で 1 人呼ぶのにかかる円。広報部レベルが高いほど安い。</summary>
+        static int AdvertisingYenPerFan(int level)
+        {
+            return Math.Max(200, RoundInt(856d * 80d / (80d + level)));
+        }
+
+        /// <summary>広報部レベル L の人が 1 試合で呼べる広告の客（収容の頭打ち前）。フロント詳細の効果の欄に使う。</summary>
+        public static int AdvertisingFansAtLevel(int level)
+        {
+            if (level <= 0) return 0;
+            double fans = Math.Floor(ToDouble(AdvertisingAtLevel(level)) / AdvertisingYenPerFan(level));
+            if (fans > int.MaxValue) return int.MaxValue;
+            return fans < 0 ? 0 : (int)fans;
         }
 
         public static int GoodsYen(Club club)
@@ -691,7 +712,7 @@ namespace SoccerClub.Data
         {
             if (club == null || advertising <= 0) return 0;
             int pr = club.Front != null ? club.Front.PublicRelationsLevel() : 0;
-            int yenPer = Math.Max(200, RoundInt(856d * 80d / (80d + pr)));
+            int yenPer = AdvertisingYenPerFan(pr);
             double fans = Math.Floor(ToDouble(advertising) / yenPer);
             if (fans > int.MaxValue) return int.MaxValue;
             return fans < 0 ? 0 : (int)fans;
@@ -870,10 +891,10 @@ namespace SoccerClub.Data
             return sum;
         }
 
+        /// <summary>採用できるレベルか。クラブハウスLvとリーグLV＋10の低いほうまで、その 5 下から。</summary>
         public static bool StaffMarketAllows(Club club, int level)
         {
-            if (club == null || club.Facilities == null) return false;
-            return level >= club.Facilities.MarketLevelFloor() && level <= club.Facilities.MarketLevelCap();
+            return FrontLevelCap.MarketAllows(club, level);
         }
 
         static double Factor(StaffMember staff, int? forcedLevel = null)

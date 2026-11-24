@@ -540,8 +540,8 @@ namespace SoccerClub.Core
                 staff.AddRange(WorldFactory.CreateTeamStaffMarket(
                     _random,
                     "staff-" + stamp + "-" + i,
-                    club.Facilities.MarketLevelFloor(),
-                    club.Facilities.MarketLevelCap()));
+                    FrontLevelCap.MarketFloor(club),
+                    FrontLevelCap.MarketCap(club)));
             }
 
             order.Sort((a, b) => ScoutLevel(b).CompareTo(ScoutLevel(a)));
@@ -907,6 +907,15 @@ namespace SoccerClub.Core
             RaiseFrontSlots(club, front.PublicRelations, report, ref raised, ref held);
             RaiseFrontSlots(club, front.Business, report, ref raised, ref held);
             RaiseFrontSlots(club, front.Academy, report, ref raised, ref held);
+            // チームスタッフもフロントと同じく、年 1 回（契約更新）レベルが上がる。
+            var team = club.Team;
+            if (team == null) return;
+            RaiseFrontOne(club, team.Manager, report, ref raised, ref held);
+            RaiseFrontOne(club, team.HeadCoach, report, ref raised, ref held);
+            RaiseFrontSlots(club, team.Coaches, report, ref raised, ref held);
+            RaiseFrontOne(club, team.PhysicalCoach, report, ref raised, ref held);
+            RaiseFrontSlots(club, team.Trainers, report, ref raised, ref held);
+            RaiseFrontOne(club, team.Doctor, report, ref raised, ref held);
         }
 
         void RaiseFrontSlots(Club club, StaffMember[] slots, bool report, ref int raised, ref int held)
@@ -921,7 +930,8 @@ namespace SoccerClub.Core
             if (staff == null || staff.Age >= ClubMath.RetirementAge) return;
             var currentPay = ClubMath.StaffAnnual(staff);
             int next = staff.Level + 1;
-            if (next <= ClubMath.MaxStaffLevel)
+            // フロントとチームスタッフは「リーグLV＋10」まで。上限の人は今のレベルのまま更新する。
+            if (next <= ClubMath.MaxStaffLevel && FrontLevelCap.CanRaise(staff))
             {
                 var nextPay = ClubMath.StaffAnnual(ClubMath.StaffBase(staff), next);
                 if (nextPay > 0 && Economy.TrySpend(club, nextPay, "front-renew-" + staff.Id))
@@ -975,11 +985,11 @@ namespace SoccerClub.Core
             var lines = new List<string>();
             lines.Add("オフシーズンに入り、契約を更新しました。");
             if (raised > 0 && held == 0)
-                lines.Add("フロントは昇給し、契約を更新しました。");
+                lines.Add("フロントとチームスタッフは昇給し、契約を更新しました。");
             else if (raised > 0)
-                lines.Add("フロントは契約を更新しました。資金の範囲で昇給しています。");
+                lines.Add("フロントとチームスタッフは契約を更新しました。資金の範囲で昇給しています。");
             else
-                lines.Add("フロントは契約を更新しました。");
+                lines.Add("フロントとチームスタッフは契約を更新しました。");
             lines.Add("チームスタッフの交代は、月に1人の候補で判断します。");
 
             if (expired != null && expired.Count > 0)
@@ -1008,7 +1018,8 @@ namespace SoccerClub.Core
             return text;
         }
 
-        int DaysEmployed(StaffMember staff)
+        /// <summary>契約した日からの在籍日数。初期所属は 2026-08-01 から。</summary>
+        public int DaysEmployed(StaffMember staff)
         {
             if (staff == null) return 0;
             var joined = staff.JoinedTicks > 0 ? new DateTime(staff.JoinedTicks).Date : SeasonStart;
@@ -1042,7 +1053,7 @@ namespace SoccerClub.Core
             int pick = _random.Next(StaffOfferRoles.Length);
             _staffOfferRole = (int)StaffOfferRoles[pick];
             int cap = club.Facilities != null ? club.Facilities.MarketLevelCap() : 1;
-            int high = cap + 2;
+            int high = Math.Min(cap + 2, FrontLevelCap.Max());
             if (high < 1) high = 1;
             if (high > ClubMath.MaxStaffLevel) high = ClubMath.MaxStaffLevel;
             _staffOfferLevel = 1 + _random.Next(high);

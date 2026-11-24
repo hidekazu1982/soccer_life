@@ -38,7 +38,7 @@ namespace SoccerClub.Core
             if (club == null) return 0;
             if (club.Front == null) club.Front = new FrontOffice();
             var front = club.Front;
-            int floor = club.Facilities != null ? club.Facilities.MarketLevelFloor() : 1;
+            int floor = FrontLevelCap.MarketFloor(club);
             int added = 0;
             for (int slot = 0; slot < FrontOffice.SlotCount; slot++)
             {

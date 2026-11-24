@@ -199,6 +199,8 @@ namespace SoccerClub.EditorTools
                 + (s.FollowSupport ? "_support" : "")
                 + (Math.Abs(s.FirstSeasonRivalScale - SoccerClub.Core.GameSession.DefaultFirstSeasonRivalScale) > 1e-9
                     ? "_first" + s.FirstSeasonRivalScale.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "")
+                + (s.FrontAllowance != SoccerClub.Data.FrontLevelCap.DefaultLeagueLevelAllowance
+                    ? "_front" + s.FrontAllowance.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")
                 + ".csv";
             var path = Path.Combine(dir, name);
             // Excel で文字化けしないよう BOM 付き UTF-8。

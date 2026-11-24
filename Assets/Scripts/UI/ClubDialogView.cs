@@ -304,7 +304,7 @@ namespace SoccerClub.UI
             EnsureStyles(font);
             if (UsesNewClubhouse)
             {
-                DrawNewClubhouse(session, session.PlayerClub, focusCharacter);
+                DrawNewClubhouse(session, session.PlayerClub, focusCharacter, setStatus);
                 return;
             }
 
@@ -855,7 +855,7 @@ namespace SoccerClub.UI
                 title + "  <size=32>LV </size><size=40>" + level + "</size>",
                 _facilityName);
             GUI.Label(new Rect(card.x, 580f, card.width, 42f), effect, _facilityEffect);
-            GUI.Label(new Rect(card.x, 649f, card.width, 44f), CostLine(facility), _facilityCost);
+            GUI.Label(new Rect(card.x, 649f, card.width, 44f), CostLine(club, facility), _facilityCost);
 
             DrawTex(button, _levelButtonImage);
             GUI.Label(new Rect(button.x, button.y - 6f, button.width, button.height), "レベルアップ", _levelButton);
@@ -863,9 +863,9 @@ namespace SoccerClub.UI
                 TryUpgradeNamed(session, kind, title, setStatus);
         }
 
-        static string CostLine(Facility facility)
+        static string CostLine(Club club, Facility facility)
         {
-            if (!facility.CanUpgrade()) return "レベル上限";
+            if (!FrontLevelCap.CanUpgradeFacility(club, facility)) return "レベル上限";
             return "費用 " + MoneyText.Format(facility.NextUpgradeCost());
         }
 
@@ -914,7 +914,7 @@ namespace SoccerClub.UI
             ty += 32f;
             GUI.Label(new Rect(tx, ty, tw, 28f), "資金  " + MoneyText.Format(club.Coins), _small);
             ty += 30f;
-            if (facility.CanUpgrade())
+            if (FrontLevelCap.CanUpgradeFacility(club, facility))
             {
                 GUI.Label(new Rect(tx, ty, tw - 150f, 28f), "次の費用  " + MoneyText.Format(facility.NextUpgradeCost()), _small);
                 if (!upgradable)
@@ -927,7 +927,7 @@ namespace SoccerClub.UI
             }
             else
             {
-                GUI.Label(new Rect(tx, ty, tw, 28f), "レベル上限です。", _small);
+                GUI.Label(new Rect(tx, ty, tw, 28f), "レベル上限です（リーグLVで解放）。", _small);
             }
 
             return y + 208f;
@@ -1697,7 +1697,7 @@ namespace SoccerClub.UI
             {
                 var staff = market[i];
                 if (staff == null || staff.FrontRole != role) continue;
-                if (!ClubMath.StaffMarketAllows(club, staff.Level)) continue;
+                if (!FrontLevelCap.MarketAllows(club, staff.Level)) continue;
                 _frontListed.Add(staff);
             }
         }
@@ -2260,8 +2260,8 @@ namespace SoccerClub.UI
 
         static string MarketRangeLabel(Club club)
         {
-            int min = club.Facilities.MarketLevelFloor();
-            int max = club.Facilities.MarketLevelCap();
+            int min = FrontLevelCap.MarketFloor(club);
+            int max = FrontLevelCap.MarketCap(club);
             if (min == max) return "採用できるレベル Lv" + max;
             return "採用できるレベル Lv" + min + "〜Lv" + max;
         }

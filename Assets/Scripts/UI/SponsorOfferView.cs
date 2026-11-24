@@ -236,7 +236,7 @@ namespace SoccerClub.UI
         }
 
         /// <summary>話し手は営業部のうち名前が一致する人。いなければレベルが最も高い人。</summary>
-        static StaffMember FindSpeaker(Club club, string name)
+        public static StaffMember FindSpeaker(Club club, string name)
         {
             var sales = club != null && club.Front != null ? club.Front.Sales : null;
             if (sales == null) return null;

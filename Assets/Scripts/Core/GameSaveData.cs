@@ -63,6 +63,8 @@ namespace SoccerClub.Core
         public long SupportFrontTicks;
         /// <summary>選ぶまで出し続けている提案のキー。なければ null（古いセーブも null）。</summary>
         public string SupportPendingKey;
+        /// <summary>出し続けている提案を最初に出した日。0 はロードした日から数える（古いセーブ）。</summary>
+        public long SupportPendingTicks;
         public string[] SupportSnoozeKeys;
         public long[] SupportSnoozeUntil;
         // 選手同士の関係（友達・恋人・夫婦）。古いセーブでは null。
@@ -239,6 +241,7 @@ namespace SoccerClub.Core
         public int ActiveContracts;
         public int CutRank;
         public int CutLosses;
+        public long OfferedTicks;
     }
 
     [Serializable]

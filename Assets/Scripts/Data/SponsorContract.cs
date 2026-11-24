@@ -34,6 +34,9 @@ namespace SoccerClub.Data
         public int ContractCap;
         public int CutRank;
         public int CutLosses;
+
+        /// <summary>この候補を持ってきた日（DateTime.Date.Ticks）。放置して平日 3 日たつと消える。</summary>
+        public long OfferedTicks;
     }
 
     /// <summary>この試合で解消したスポンサー。条件は社ごとに違う。</summary>

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using SoccerClub.Core;
 using SoccerClub.Data;
 using SoccerClub.Match;
@@ -5,7 +6,10 @@ using UnityEngine;
 
 namespace SoccerClub.UI
 {
-    /// <summary>試合前のスタメン紹介。Figma の match_preparation。</summary>
+    /// <summary>
+    /// 試合前のスタメン紹介。Figma の match_preparation。
+    /// 背景はロッカールームの絵（MatchBackdrop）。丸の外に体がはみ出さないよう、選手の絵は丸く切り抜いてから描く。
+    /// </summary>
     public sealed class MatchPreparationView
     {
         const float CardW = 260f;
@@ -23,10 +27,22 @@ namespace SoccerClub.UI
         static readonly Color32 DfColor = new Color32(0x5D, 0x8D, 0xB1, 255);
         static readonly Color32 MfColor = new Color32(0xCA, 0xC6, 0x5A, 255);
         static readonly Color32 FwColor = new Color32(0x75, 0xB0, 0x5E, 255);
+        // 背景の絵の上に重ねる色。カードが絵に埋もれないよう少し暗くする。
+        static readonly Color BackdropOverlay = new Color(0f, 0f, 0f, 0.3f);
+        const int PortraitSize = 160;
 
         Texture2D _circle;
-        Texture2D _outside;
         Texture2D _capsule;
+        // 選手 id → 丸く切り抜いた絵。元の絵（横歩きのコマ）が変わったら作り直す。
+        readonly Dictionary<string, Portrait> _portraits = new Dictionary<string, Portrait>();
+        TeamSheet _portraitSheet;
+
+        sealed class Portrait
+        {
+            public Texture2D Source;
+            public Texture2D Texture;
+        }
+
         GUIStyle _name;
         Font _font;
 
@@ -34,11 +50,18 @@ namespace SoccerClub.UI
         {
             Ensure(font);
             GUI.color = Color.white;
-            GUI.DrawTexture(new Rect(0f, 0f, GameRunner.ReferenceWidth, GameRunner.ReferenceHeight), Texture2D.whiteTexture);
+            MatchBackdrop.Draw(BackdropOverlay);
             if (emblem != null)
                 GUI.DrawTexture(EmblemRect, emblem, ScaleMode.StretchToFill, true);
 
             if (sheet == null || sheet.Formation == null) return;
+            if (sheet != _portraitSheet)
+            {
+                // 試合ごとに作り直す。前の試合の絵は捨てる。
+                _portraitSheet = sheet;
+                ClearPortraits();
+            }
+
             var slots = sheet.Formation.Slots;
             int count = sheet.StartingXi != null ? sheet.StartingXi.Length : 0;
             for (int i = 0; i < count && i < slots.Length; i++)
@@ -62,20 +85,89 @@ namespace SoccerClub.UI
 
             GUI.color = Color.white;
             var texture = player != null && crowd != null ? crowd.WalkSide(player.Id) : null;
-            if (texture != null)
-            {
-                float poseW = PoseH * (texture.width / (float)texture.height);
-                float poseX = PoseX + (PoseBoxW - poseW) * 0.5f;
-                GUI.BeginGroup(circle);
-                GUI.DrawTexture(new Rect(poseX, PoseY, poseW, PoseH), texture, ScaleMode.StretchToFill, true);
-                GUI.EndGroup();
-            }
+            var portrait = texture != null ? PortraitOf(player.Id, texture) : null;
+            if (portrait != null) GUI.DrawTexture(circle, portrait, ScaleMode.StretchToFill, true);
 
-            GUI.DrawTexture(circle, _outside, ScaleMode.StretchToFill, true);
             GUI.color = plate;
             GUI.DrawTexture(new Rect(card.x, card.y + NameY, CardW, NameH), _capsule, ScaleMode.StretchToFill, true);
             GUI.color = Color.white;
             GUI.Label(new Rect(card.x + 10f, card.y + NameY, CardW - 20f, NameH), player != null ? player.Name : "", _name);
+        }
+
+        /// <summary>
+        /// 横歩きのコマを丸（160 角）の中の元の位置に置き、丸の外を透明にした絵。
+        /// コマは読み取りできないテクスチャなので、一度 RenderTexture に写して読み戻してから切り抜く。
+        /// </summary>
+        Texture2D PortraitOf(string id, Texture2D source)
+        {
+            if (string.IsNullOrEmpty(id) || source == null) return null;
+            Portrait cached;
+            if (_portraits.TryGetValue(id, out cached) && cached.Source == source && cached.Texture != null)
+                return cached.Texture;
+
+            var readable = ReadableCopy(source);
+            if (readable == null) return null;
+
+            float poseW = PoseH * (source.width / (float)source.height);
+            float poseX = PoseX + (PoseBoxW - poseW) * 0.5f;
+            float radius = PortraitSize * 0.5f;
+            var pixels = new Color32[PortraitSize * PortraitSize];
+            for (int row = 0; row < PortraitSize; row++)
+            {
+                // row は下から数える（Texture2D の並び）。GUI の y は上から。
+                float guiY = PortraitSize - row - 0.5f;
+                float v = 1f - (guiY - PoseY) / PoseH;
+                for (int x = 0; x < PortraitSize; x++)
+                {
+                    float guiX = x + 0.5f;
+                    float u = (guiX - poseX) / poseW;
+                    if (u < 0f || u > 1f || v < 0f || v > 1f) continue;
+                    float dx = guiX - radius;
+                    float dy = guiY - radius;
+                    // 丸の縁は 1px でなめらかに消す。
+                    float cover = Mathf.Clamp01(radius - Mathf.Sqrt(dx * dx + dy * dy) + 0.5f);
+                    if (cover <= 0f) continue;
+                    var c = readable.GetPixelBilinear(u, v);
+                    c.a *= cover;
+                    pixels[row * PortraitSize + x] = c;
+                }
+            }
+
+            UnityEngine.Object.Destroy(readable);
+            var texture = Finish(PortraitSize, PortraitSize, pixels);
+            if (cached != null && cached.Texture != null) UnityEngine.Object.Destroy(cached.Texture);
+            _portraits[id] = new Portrait { Source = source, Texture = texture };
+            return texture;
+        }
+
+        void ClearPortraits()
+        {
+            foreach (var entry in _portraits.Values)
+                if (entry.Texture != null) UnityEngine.Object.Destroy(entry.Texture);
+            _portraits.Clear();
+        }
+
+        static Texture2D ReadableCopy(Texture2D source)
+        {
+            var rt = RenderTexture.GetTemporary(source.width, source.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            var previous = RenderTexture.active;
+            try
+            {
+                Graphics.Blit(source, rt);
+                RenderTexture.active = rt;
+                var copy = new Texture2D(source.width, source.height, TextureFormat.RGBA32, false);
+                copy.hideFlags = HideFlags.HideAndDontSave;
+                copy.ReadPixels(new Rect(0f, 0f, source.width, source.height), 0, 0, false);
+                copy.Apply(false, false);
+                copy.filterMode = FilterMode.Bilinear;
+                copy.wrapMode = TextureWrapMode.Clamp;
+                return copy;
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                RenderTexture.ReleaseTemporary(rt);
+            }
         }
 
         static Color Plate(Position position)
@@ -92,7 +184,6 @@ namespace SoccerClub.UI
         void Ensure(Font font)
         {
             if (_circle == null) _circle = Disc(160, true);
-            if (_outside == null) _outside = Disc(160, false);
             if (_capsule == null) _capsule = Capsule(260, 32);
             if (_name != null && _font == font) return;
             _font = font;

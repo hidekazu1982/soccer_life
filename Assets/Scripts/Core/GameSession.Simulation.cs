@@ -110,7 +110,7 @@ namespace SoccerClub.Core
         {
             var club = PlayerClub;
             var facility = club != null && club.Facilities != null ? club.Facilities.Get(kind) : null;
-            if (facility == null || !facility.CanUpgrade()) return false;
+            if (facility == null || !FrontLevelCap.CanUpgradeFacility(club, facility)) return false;
             var payroll = ClubMath.RenewalAnnual(club);
             // ルール1：資金が総年俸を下回っているときはしない。
             if (club.Coins < payroll) return false;
@@ -143,7 +143,7 @@ namespace SoccerClub.Core
                     var candidate = _frontMarket[i];
                     if (candidate == null || candidate.FrontRole != role) continue;
                     if (candidate.Level <= currentLevel) continue;
-                    if (!ClubMath.StaffMarketAllows(club, candidate.Level)) continue;
+                    if (!FrontLevelCap.MarketAllows(club, candidate.Level)) continue;
                     // 入れ替え後の総年俸と、支払い後の資金で判定する。
                     var payrollAfter = payroll - currentWage + ClubMath.StaffAnnual(candidate);
                     if (club.Coins - FrontOfficeHiring.HireCost(candidate) < payrollAfter) continue;

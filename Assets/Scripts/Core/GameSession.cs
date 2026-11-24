@@ -673,10 +673,23 @@ namespace SoccerClub.Core
             _pendingCut = null;
         }
 
-        /// <summary>消化した平日に、営業がスポンサーを連れてくるか抽選する。</summary>
+        /// <summary>
+        /// 1 日の終わりに呼ぶ。スポンサーの提案はメイン画面に営業部が出てきて伝える（施設・人事の提案と同じ）。
+        /// ・候補がいないとき：消化した平日に、営業がスポンサーを連れてくるか抽選する。
+        /// ・候補がいるとき：プレイヤーが「契約する／キャンセル」を選ぶまで出し続けるが、放置して平日 3 日たつと消える。
+        ///   消えた社は 7 日たつまで連れてこない（ProposalExpiry）。消えた日は新しい抽選をしない。
+        ///   契約の上限に達していたら（降格で上限が減ったときなど）結べないので取り下げる。
+        /// 候補が新しく出たら true。
+        /// </summary>
         public bool TryCreateSponsorOffer(DateTime playedDate)
         {
-            if (GameOver || PlayerClub == null || _pendingOffer != null) return false;
+            if (GameOver || PlayerClub == null) return false;
+            if (_pendingOffer != null)
+            {
+                KeepOrExpireSponsorOffer();
+                return false;
+            }
+
             if (!IsWeekday(playedDate)) return false;
             int level = PlayerClub.Front != null ? PlayerClub.Front.SalesLevel() : 0;
             if (level <= 0) return false;
@@ -684,12 +697,47 @@ namespace SoccerClub.Core
             if (active >= ClubMath.SponsorContractCapFor(LeagueLevel)) return false;
             if (_random.NextDouble() >= ClubMath.SponsorOfferChance) return false;
 
-            var name = PickSponsor(PlayerClub, out int cutRank, out int cutLosses, out double rate);
+            var name = PickSponsor(PlayerClub, true, out int cutRank, out int cutLosses, out double rate);
             if (name == null) return false;
             var monthly = ClubMath.SponsorContractMonthly(PlayerClub, rate, LeagueStrengthFactor, _random.NextDouble());
             if (monthly <= 0) return false;
             _pendingOffer = MakeSponsorOffer(name, monthly, active, cutRank, cutLosses);
             return true;
+        }
+
+        /// <summary>出し続けている候補の件数表示を今に合わせる。放置して平日 3 日たっていれば消し、7 日は同じ社を出さない。</summary>
+        void KeepOrExpireSponsorOffer()
+        {
+            var offer = _pendingOffer;
+            long today = Time.CurrentDate.Date.Ticks;
+            int active = ActiveSponsorCount(PlayerClub);
+            int cap = ClubMath.SponsorContractCapFor(LeagueLevel);
+            if (active >= cap)
+            {
+                _pendingOffer = null;
+                NotifyChanged();
+                return;
+            }
+
+            offer.ActiveContracts = active;
+            offer.ContractCap = cap;
+            // 古いセーブには日付がないので、ロード後の最初の日から数える。
+            if (offer.OfferedTicks <= 0)
+            {
+                offer.OfferedTicks = today;
+                return;
+            }
+
+            if (!ProposalExpiry.Expired(offer.OfferedTicks, today)) return;
+            SnoozeAtLeast(SponsorSnoozeKey(offer.SponsorName), ProposalExpiry.SnoozeUntil(today));
+            _pendingOffer = null;
+            NotifyChanged();
+        }
+
+        /// <summary>放置で消えた社を 7 日出さないためのキー（サポートのキャンセルと同じ表に入れる）。</summary>
+        static string SponsorSnoozeKey(string name)
+        {
+            return "P:" + (name ?? "");
         }
 
         /// <summary>
@@ -700,7 +748,7 @@ namespace SoccerClub.Core
         {
             if (GameOver || PlayerClub == null) return false;
             if (_pendingOffer != null) return true;
-            var name = PickSponsor(PlayerClub, out int cutRank, out int cutLosses, out double rate);
+            var name = PickSponsor(PlayerClub, false, out int cutRank, out int cutLosses, out double rate);
             if (name == null)
             {
                 name = "デバッグ商事";
@@ -729,7 +777,8 @@ namespace SoccerClub.Core
                 ActiveContracts = active,
                 ContractCap = ClubMath.SponsorContractCapFor(LeagueLevel),
                 CutRank = cutRank,
-                CutLosses = cutLosses
+                CutLosses = cutLosses,
+                OfferedTicks = Time.CurrentDate.Date.Ticks
             };
         }
 
@@ -771,8 +820,10 @@ namespace SoccerClub.Core
             return count;
         }
 
-        string PickSponsor(Club club, out int cutRank, out int cutLosses, out double rate)
+        /// <summary>結べる社から 1 社選ぶ。honorSnooze が true なら、放置で消えてから 7 日たっていない社を外す。</summary>
+        string PickSponsor(Club club, bool honorSnooze, out int cutRank, out int cutLosses, out double rate)
         {
+            long today = Time.CurrentDate.Date.Ticks;
             cutRank = 0;
             cutLosses = 0;
             rate = 1d;
@@ -782,6 +833,7 @@ namespace SoccerClub.Core
             var catalog = SponsorCatalog.All;
             for (int i = 0; i < catalog.Length; i++)
             {
+                if (honorSnooze && catalog[i] != null && IsSnoozed(SponsorSnoozeKey(catalog[i].Name), today)) continue;
                 if (SponsorEligible(club, catalog[i], rank, streak)) free++;
             }
 
@@ -790,6 +842,7 @@ namespace SoccerClub.Core
             for (int i = 0; i < catalog.Length; i++)
             {
                 var profile = catalog[i];
+                if (honorSnooze && profile != null && IsSnoozed(SponsorSnoozeKey(profile.Name), today)) continue;
                 if (!SponsorEligible(club, profile, rank, streak)) continue;
                 if (pick == 0)
                 {
@@ -1556,7 +1609,7 @@ namespace SoccerClub.Core
         public const double RivalStrengthJitter = 0.05d;
 
         /// <summary>他クラブの強さの基準倍率（リーグLVの標準 × これ）。シミュレーターから変えられる。</summary>
-        public const double DefaultRivalStrengthScale = 1.8d;
+        public const double DefaultRivalStrengthScale = 1.35d;
         public static double RivalStrengthScale = DefaultRivalStrengthScale;
 
         /// <summary>
@@ -1854,8 +1907,9 @@ namespace SoccerClub.Core
         void RefillFrontMarket()
         {
             _frontMarket.Clear();
-            int floor = PlayerClub.Facilities.MarketLevelFloor();
-            int cap = PlayerClub.Facilities.MarketLevelCap();
+            // フロントは「リーグLV＋10」を超える人が候補に出ない。
+            int floor = FrontLevelCap.MarketFloor(PlayerClub);
+            int cap = FrontLevelCap.MarketCap(PlayerClub);
             var roles = new[]
             {
                 FrontRole.Secretary, FrontRole.GeneralManager,

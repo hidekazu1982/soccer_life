@@ -140,6 +140,8 @@ namespace SoccerClub.Core
         readonly SupportEventView _supportView = new SupportEventView();
         bool _supportOpen;
         SupportSuggestion _supportOffer;
+        // スポンサーの提案も同じ吹き出しで営業部が出てくる。タップで sponsor（契約書）を開き、開いている間は日送りを止める。
+        bool _sponsorOpen;
         readonly GrowthLogView _growthLog = new GrowthLogView();
         // その日のうちにログへ出す予定。グラウンドの増減ポップと同じ時刻に出す。
         readonly List<GrowthLogItem> _growthLogQueue = new List<GrowthLogItem>();
@@ -292,6 +294,7 @@ namespace SoccerClub.Core
             if (Session != null) Session.StateChanged -= OnSessionChanged;
             Session = session;
             CloseSupport();
+            CloseSponsorOffer();
             _growthLog.Clear();
             _growthLogQueue.Clear();
             Session.StateChanged += OnSessionChanged;
@@ -311,12 +314,6 @@ namespace SoccerClub.Core
                 _phase = DayPhase.SponsorCut;
                 _dayElapsed = -1f;
                 _status = "スポンサー打ち切り";
-            }
-            else if (Session.HasSponsorOffer)
-            {
-                _phase = DayPhase.SponsorOffer;
-                _dayElapsed = -1f;
-                _status = "スポンサー獲得";
             }
         }
 
@@ -358,6 +355,7 @@ namespace SoccerClub.Core
             _playerFixtureCached = false;
             _dayDeltas.Clear();
             CloseSupport();
+            CloseSponsorOffer();
             _dialogs.Close();
             _status = "右下の「1日進める」で日が進みます。シーズン中の休日は5秒、ウィンターブレイクとオフシーズンは1秒です。";
         }
@@ -433,6 +431,12 @@ namespace SoccerClub.Core
                 CloseSupport();
             }
 
+            if (_sponsorOpen)
+            {
+                if (Session != null && Session.HasSponsorOffer) return;
+                CloseSponsorOffer();
+            }
+
             if (_crowd != null && Session != null)
             {
                 TickCrowd(UnityEngine.Time.deltaTime);
@@ -456,7 +460,7 @@ namespace SoccerClub.Core
                     _suppressOwnerOpen = false;
                 }
             }
-            if (Session == null || (Session.GameOver && _phase != DayPhase.MonthReport && _phase != DayPhase.SponsorCut && _phase != DayPhase.SponsorOffer))
+            if (Session == null || (Session.GameOver && _phase != DayPhase.MonthReport && _phase != DayPhase.SponsorCut))
             {
                 _dayElapsed = -1f;
                 _phase = DayPhase.Idle;
@@ -516,7 +520,7 @@ namespace SoccerClub.Core
                         ContinuePostMatch();
                 }
             }
-            else if (_phase == DayPhase.MonthReport || _phase == DayPhase.SponsorCut || _phase == DayPhase.SponsorOffer)
+            else if (_phase == DayPhase.MonthReport || _phase == DayPhase.SponsorCut)
             {
                 if (_autoPlay)
                 {
@@ -576,8 +580,8 @@ namespace SoccerClub.Core
 
         bool CoveringScreen =>
             _phase == DayPhase.Lineup || _phase == DayPhase.Stats || _phase == DayPhase.Ranking || _phase == DayPhase.Settlement || _phase == DayPhase.MonthReport
-            || _phase == DayPhase.SponsorCut || _phase == DayPhase.SponsorOffer || _phase == DayPhase.Story || _matchScreen
-            || _supportOpen;
+            || _phase == DayPhase.SponsorCut || _phase == DayPhase.Story || _matchScreen
+            || _supportOpen || _sponsorOpen;
 
         float PaceSeconds()
         {
@@ -672,6 +676,18 @@ namespace SoccerClub.Core
                 return;
             }
 
+            if (_sponsorOpen && Session.PendingSponsorOffer != null)
+            {
+                UseUiScreen();
+                var sponsorChoice = _sponsorOfferView.Draw(Session.PendingSponsorOffer, Session, _font);
+                DrawAutoButton(SponsorAutoRect);
+                if (sponsorChoice == SponsorChoice.Accept) AcceptSponsorOffer();
+                else if (sponsorChoice == SponsorChoice.Decline) DeclineSponsorOffer();
+                GUI.matrix = previousMatrix;
+                GUI.color = previousColor;
+                return;
+            }
+
             if (_phase == DayPhase.Lineup)
             {
                 UseUiScreen();
@@ -728,23 +744,6 @@ namespace SoccerClub.Core
                 UseUiScreen();
                 _sponsorCutView.Draw(Session.PendingSponsorCut, _font);
                 DrawReviewChrome();
-                GUI.matrix = previousMatrix;
-                GUI.color = previousColor;
-                return;
-            }
-
-            if (_phase == DayPhase.SponsorOffer && Session.PendingSponsorOffer != null)
-            {
-                UseUiScreen();
-                var choice = _sponsorOfferView.Draw(Session.PendingSponsorOffer, Session, _font);
-                float sponsorProgress = _autoPlay && _dayElapsed >= 0f
-                    ? Mathf.Clamp01(_dayElapsed / NextSeconds(DayAdvanceSeconds))
-                    : 0f;
-                DrawDayGauge(SponsorGaugeRect, sponsorProgress);
-                DrawAutoButton(SponsorAutoRect);
-                DrawFullAutoButton(SponsorFullAutoAnchor);
-                if (choice == SponsorChoice.Accept) AcceptSponsorOffer();
-                else if (choice == SponsorChoice.Decline) DeclineSponsorOffer();
                 GUI.matrix = previousMatrix;
                 GUI.color = previousColor;
                 return;
@@ -1620,6 +1619,8 @@ namespace SoccerClub.Core
                 var spent = Session.SpendFullAuto();
                 if (!string.IsNullOrEmpty(spent))
                     Debug.Log("SoccerClub full auto: " + spent);
+                // フルオートでは営業部の吹き出しを出さないので、スポンサーはその場で結ぶ。
+                if (Session.HasSponsorOffer) Session.AcceptSponsorOffer();
             }
 
             var today = PlayerFixtureToday();
@@ -1713,8 +1714,6 @@ namespace SoccerClub.Core
                 DismissMonthReport();
             else if (_phase == DayPhase.SponsorCut)
                 DismissSponsorCut();
-            else if (_phase == DayPhase.SponsorOffer)
-                AcceptSponsorOffer();
         }
 
         void CaptureSupporters()
@@ -1830,22 +1829,17 @@ namespace SoccerClub.Core
                 return;
             }
 
-            if (OpenSponsorNotice(offered)) return;
+            if (OpenSponsorNotice()) return;
 
             _phase = DayPhase.Idle;
         }
 
-        bool OpenSponsorNotice(bool offered)
+        /// <summary>スポンサーの打ち切りだけは日の終わりに画面を出す。新しいスポンサーはメイン画面の営業部から（OpenSponsorOffer）。</summary>
+        bool OpenSponsorNotice()
         {
             if (Session != null && Session.HasSponsorCut)
             {
                 OpenSponsorCut();
-                return true;
-            }
-
-            if (offered || (Session != null && Session.HasSponsorOffer))
-            {
-                OpenSponsorOffer();
                 return true;
             }
 
@@ -2026,35 +2020,32 @@ namespace SoccerClub.Core
                 _status = "オートセーブに失敗しました。";
         }
 
+        /// <summary>営業部の吹き出しをタップしたとき。sponsor（契約書）を開き、選ぶまで日送りを止める。</summary>
         void OpenSponsorOffer()
         {
-            _phase = DayPhase.SponsorOffer;
-            _dayElapsed = _autoPlay ? 0f : -1f;
-            _growthCursor = 0f;
-            _matchScreen = false;
-            if (_status != "オートセーブに失敗しました。")
-                _status = "スポンサー獲得";
+            if (Session == null || !Session.HasSponsorOffer) return;
+            _sponsorOpen = true;
+        }
+
+        void CloseSponsorOffer()
+        {
+            _sponsorOpen = false;
+            _sponsorOfferView.Clear();
         }
 
         void AcceptSponsorOffer()
         {
+            CloseSponsorOffer();
             if (Session != null) Session.AcceptSponsorOffer();
-            _sponsorOfferView.Clear();
-            _phase = DayPhase.Idle;
-            _dayElapsed = -1f;
-            if (_status != "オートセーブに失敗しました。")
-                _status = "スポンサーと契約しました。";
+            _status = "スポンサーと契約しました。";
             TryAutoSave();
         }
 
         void DeclineSponsorOffer()
         {
+            CloseSponsorOffer();
             if (Session != null) Session.DeclineSponsorOffer();
-            _sponsorOfferView.Clear();
-            _phase = DayPhase.Idle;
-            _dayElapsed = -1f;
-            if (_status != "オートセーブに失敗しました。")
-                _status = "スポンサーは見送りました。";
+            _status = "スポンサーは見送りました。";
             TryAutoSave();
         }
 
@@ -2073,17 +2064,20 @@ namespace SoccerClub.Core
         /// <summary>
         /// サポートキャラを出すか。メイン画面で、日送り前か日送り中（試合画面を除く）。
         /// ダイアログ・キャラ詳細・イベント中とフルオートでは出さない。今日すでに対応済みなら Session 側で null になる。
+        /// 施設・人事の提案とスポンサーの提案は同じ場所に 1 人ずつ。施設・人事を先に出し、なければ営業部がスポンサーを持ってくる。
         /// </summary>
         bool SupportCalloutVisible =>
             Session != null
             && !_supportOpen
+            && !_sponsorOpen
             && !_fullAuto
             && !_dialogs.IsOpen
             && !_miniEvents.Spotlight
             && (_phase == DayPhase.Idle || (_phase == DayPhase.Advancing && !_matchScreen))
             && (_crowd == null || _crowd.SelectedId == null)
             && Session.CurrentStory == null
-            && Session.CurrentSupport != null;
+            && !Session.GameOver
+            && (Session.CurrentSupport != null || Session.HasSponsorOffer);
 
         bool HitsSupportCallout(Vector2 mouse)
         {
@@ -2094,8 +2088,18 @@ namespace SoccerClub.Core
         {
             if (!SupportCalloutVisible) return;
             var suggestion = Session.CurrentSupport;
-            if (_supportView.DrawCallout(suggestion, Session, _font, SupportCalloutOrigin))
-                OpenSupport(suggestion);
+            if (suggestion != null)
+            {
+                if (_supportView.DrawCallout(suggestion, Session, _font, SupportCalloutOrigin))
+                    OpenSupport(suggestion);
+                return;
+            }
+
+            if (_supportView.DrawSponsorCallout(Session.PendingSponsorOffer, Session, _font, SupportCalloutOrigin))
+            {
+                if (_crowd != null) _crowd.ClearSelection();
+                OpenSponsorOffer();
+            }
         }
 
         void OpenSupport(SupportSuggestion suggestion)
@@ -2139,7 +2143,7 @@ namespace SoccerClub.Core
             if (Session != null) Session.DismissMonthReport();
             _growthCursor = 0f;
             _matchScreen = false;
-            if (OpenSponsorNotice(false)) return;
+            if (OpenSponsorNotice()) return;
 
             _phase = DayPhase.Idle;
             _dayElapsed = -1f;
@@ -2151,13 +2155,6 @@ namespace SoccerClub.Core
             if (Session != null) Session.DismissSponsorCut();
             _growthCursor = 0f;
             _matchScreen = false;
-            if (Session != null && Session.HasSponsorOffer)
-            {
-                OpenSponsorOffer();
-                if (!GameSaveStore.Write(Session))
-                    _status = "オートセーブに失敗しました。";
-                return;
-            }
 
             _phase = DayPhase.Idle;
             _dayElapsed = -1f;
@@ -2437,6 +2434,7 @@ namespace SoccerClub.Core
                    && Session != null
                    && !Session.GameOver
                    && !_supportOpen
+                   && !_sponsorOpen
                    && !_fullAuto
                    && (_phase == DayPhase.Idle || (_phase == DayPhase.Advancing && !_matchScreen));
         }

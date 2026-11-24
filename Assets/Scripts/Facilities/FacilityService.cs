@@ -23,7 +23,7 @@ namespace SoccerClub.Facilities
         public bool TryUpgrade(Club club, FacilityKind kind)
         {
             var facility = club.Facilities.Get(kind);
-            if (!facility.CanUpgrade()) return false;
+            if (!FrontLevelCap.CanUpgradeFacility(club, facility)) return false;
             var cost = facility.NextUpgradeCost();
             if (!_economy.TrySpend(club, cost, "facility-" + kind)) return false;
             facility.Upgrade();
@@ -44,7 +44,7 @@ namespace SoccerClub.Facilities
                          club.Facilities.Clubhouse
                      })
             {
-                if (!candidate.CanUpgrade()) continue;
+                if (!FrontLevelCap.CanUpgradeFacility(club, candidate)) continue;
                 if (best == null || candidate.Level < best.Level)
                     best = candidate;
             }

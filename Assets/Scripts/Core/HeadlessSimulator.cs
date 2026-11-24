@@ -118,6 +118,9 @@ namespace SoccerClub.Core
 
         /// <summary>初年度の他クラブの弱体化補正（調整用）。</summary>
         public double FirstSeasonRivalScale = GameSession.DefaultFirstSeasonRivalScale;
+
+        /// <summary>フロントとチームスタッフの上限「リーグLV＋この値」（調整用、0 で無制限）。</summary>
+        public int FrontAllowance = FrontLevelCap.DefaultLeagueLevelAllowance;
     }
 
     /// <summary>
@@ -157,6 +160,7 @@ namespace SoccerClub.Core
                 ? Settings.TrainingCostGrowthPermil : Facility.DefaultTrainingCostGrowthPermil;
             Facility.GrowthFacilityBaseScale = Settings.BaseScale > 0d ? Settings.BaseScale : Facility.DefaultGrowthFacilityBaseScale;
             Facility.LeagueLevelAllowance = Settings.Allowance >= 0 ? Settings.Allowance : Facility.DefaultLeagueLevelAllowance;
+            FrontLevelCap.LeagueLevelAllowance = Settings.FrontAllowance >= 0 ? Settings.FrontAllowance : FrontLevelCap.DefaultLeagueLevelAllowance;
             GameSession.FirstSeasonRivalScale = Settings.FirstSeasonRivalScale > 0d ? Settings.FirstSeasonRivalScale : GameSession.DefaultFirstSeasonRivalScale;
             GameSession.RivalStreakBoost = Settings.Streak >= 0d && Settings.Streak < 1d ? Settings.Streak : GameSession.DefaultRivalStreakBoost;
             GameSession.RivalDroughtRelief = Settings.Relief >= 0d && Settings.Relief < 1d ? Settings.Relief : GameSession.DefaultRivalDroughtRelief;

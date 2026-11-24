@@ -33,6 +33,9 @@ namespace SoccerClub.Core
 
         /// <summary>キャンセルで 1 か月出さないための識別子。施設は種類と目標レベル、フロントは枠と候補。</summary>
         public string Key;
+
+        /// <summary>main に最初に出した日（DateTime.Date.Ticks）。放置して平日 3 日たつと消える。</summary>
+        public long ShownTicks;
     }
 
     /// <summary>
@@ -45,9 +48,10 @@ namespace SoccerClub.Core
     /// ・スタジアムは、ホームの入場者が収容の 80% を超えているときだけ勧める。
     /// ・フロントは空き枠を先に勧める。空きがなければ、在籍 1 年以上の人より高レベルの候補との交代を勧める。
     /// ・キャンセルした内容は 1 か月出さない。提案は内容が違っても 1 日 1 回まで。
-    /// ・一度出した提案は、プレイヤーが「レベルアップ／契約する」か「キャンセル」を選ぶまで日をまたいでも出し続ける。
-    ///   施設のレベルが変わった、候補が市場からいなくなった、などで実行できなくなったときだけ取り下げる。
-    ///   週 1 回の間隔は、選んだ日から数える。
+    /// ・一度出した提案は、プレイヤーが選ぶまで日をまたいで出し続けるが、放置して平日 3 日たつと消える（土日は数えない）。
+    ///   消えた内容は 7 日たつまで出さない（ProposalExpiry）。
+    ///   施設のレベルが変わった、候補が市場からいなくなった、などで実行できなくなったときも取り下げる。
+    ///   週 1 回の間隔は、選んだ日から数える（放置で消えたときは、出した日から）。
     /// </summary>
     public sealed partial class GameSession
     {
@@ -82,6 +86,7 @@ namespace SoccerClub.Core
         SupportSuggestion _supportPending;
         /// <summary>ロード直後はキーだけ持っておき、最初の参照で提案に戻す。</summary>
         string _supportPendingKey;
+        long _supportPendingTicks;
 
         /// <summary>今日のサポートの提案。今日すでに対応済み、または勧める内容がなければ null。</summary>
         public SupportSuggestion CurrentSupport
@@ -94,17 +99,23 @@ namespace SoccerClub.Core
                 if (_supportDoneTicks == today) return null;
 
                 // 選ぶまで出し続ける。実行できなくなっていたら取り下げて探し直す。
-                if (_supportPending == null && !string.IsNullOrEmpty(_supportPendingKey))
-                {
-                    _supportPending = RestoreSupport(_supportPendingKey);
-                    _supportPendingKey = null;
-                }
+                RestorePendingSupport(today);
 
                 if (_supportPending != null)
                 {
-                    if (SupportStillValid(_supportPending)) return _supportPending;
-                    _supportPending = null;
-                    _supportDirty = true;
+                    if (ProposalExpiry.Expired(_supportPending.ShownTicks, today))
+                    {
+                        // 放置して平日 3 日。同じ内容は 7 日出さない（キャンセルの 1 か月が残っていればそちらを優先）。
+                        SnoozeAtLeast(_supportPending.Key, ProposalExpiry.SnoozeUntil(today));
+                        _supportPending = null;
+                        _supportDirty = true;
+                    }
+                    else if (SupportStillValid(_supportPending)) return _supportPending;
+                    else
+                    {
+                        _supportPending = null;
+                        _supportDirty = true;
+                    }
                 }
 
                 if (!_supportDirty && _supportCacheDay == today && _supportCacheCoins == club.Coins)
@@ -114,9 +125,28 @@ namespace SoccerClub.Core
                 _supportCacheDay = today;
                 _supportCacheCoins = club.Coins;
                 _supportCache = FindSupport(today);
+                if (_supportCache != null) _supportCache.ShownTicks = today;
                 _supportPending = _supportCache;
                 return _supportCache;
             }
+        }
+
+        /// <summary>ロード直後に持っていたキーから、出し続けていた提案を作り直す。</summary>
+        void RestorePendingSupport(long today)
+        {
+            if (_supportPending != null || string.IsNullOrEmpty(_supportPendingKey)) return;
+            _supportPending = RestoreSupport(_supportPendingKey);
+            if (_supportPending != null)
+                _supportPending.ShownTicks = _supportPendingTicks > 0 ? _supportPendingTicks : today;
+            _supportPendingKey = null;
+            _supportPendingTicks = 0;
+        }
+
+        void SnoozeAtLeast(string key, long until)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            if (_supportSnooze.TryGetValue(key, out var current) && current >= until) return;
+            _supportSnooze[key] = until;
         }
 
         /// <summary>「レベルアップ」「契約する」。実行できたら true。どちらでも今日のサポートは終わり。</summary>
@@ -171,6 +201,7 @@ namespace SoccerClub.Core
             _supportCache = null;
             _supportPending = null;
             _supportPendingKey = null;
+            _supportPendingTicks = 0;
         }
 
         /// <summary>出し続けている提案が、まだ実行できる形か（お金の判定は「レベルアップ／契約する」のときに行う）。</summary>
@@ -205,6 +236,7 @@ namespace SoccerClub.Core
                 var kind = (FacilityKind)kindValue;
                 var facility = club.Facilities != null ? club.Facilities.Get(kind) : null;
                 if (facility == null || facility.Level + 1 != target) return null;
+                if (!FrontLevelCap.CanUpgradeFacility(club, facility)) return null;
                 return new SupportSuggestion
                 {
                     Kind = SupportKind.Facility,
@@ -290,18 +322,16 @@ namespace SoccerClub.Core
         {
             var club = PlayerClub;
             if (club == null || club.Facilities == null || GameOver) return null;
-            if (_supportPending == null && !string.IsNullOrEmpty(_supportPendingKey))
-            {
-                _supportPending = RestoreSupport(_supportPendingKey);
-                _supportPendingKey = null;
-            }
+            long today = Time.CurrentDate.Date.Ticks;
+            RestorePendingSupport(today);
 
             if (_supportPending != null && _supportPending.Kind == SupportKind.Facility && SupportStillValid(_supportPending))
                 return _supportPending;
 
-            var found = BestFacilitySupport(Time.CurrentDate.Date.Ticks, false);
+            var found = BestFacilitySupport(today, false);
             if (found == null) return null;
             // 出していたフロントの提案は取り下げる（7 日たてばまた探す）。
+            found.ShownTicks = today;
             _supportPending = found;
             _supportPendingKey = null;
             return found;
@@ -365,7 +395,7 @@ namespace SoccerClub.Core
                     var candidate = _frontMarket[i];
                     if (candidate == null || candidate.FrontRole != role) continue;
                     if (candidate.Level <= currentLevel) continue;
-                    if (!ClubMath.StaffMarketAllows(club, candidate.Level)) continue;
+                    if (!FrontLevelCap.MarketAllows(club, candidate.Level)) continue;
                     var cost = FrontOfficeHiring.HireCost(candidate);
                     var payrollAfter = payroll - currentWage + ClubMath.StaffAnnual(candidate);
                     if (club.Coins - cost < payrollAfter) continue;
@@ -421,6 +451,7 @@ namespace SoccerClub.Core
             file.SupportFacilityTicks = _supportFacilityTicks;
             file.SupportFrontTicks = _supportFrontTicks;
             file.SupportPendingKey = _supportPending != null ? _supportPending.Key : _supportPendingKey;
+            file.SupportPendingTicks = _supportPending != null ? _supportPending.ShownTicks : _supportPendingTicks;
             file.SupportSnoozeKeys = new string[_supportSnooze.Count];
             file.SupportSnoozeUntil = new long[_supportSnooze.Count];
             int index = 0;
@@ -442,8 +473,10 @@ namespace SoccerClub.Core
             _supportCache = null;
             _supportPending = null;
             _supportPendingKey = null;
+            _supportPendingTicks = 0;
             if (file == null) return;
             _supportPendingKey = file.SupportPendingKey;
+            _supportPendingTicks = file.SupportPendingTicks;
             _supportDoneTicks = file.SupportDoneTicks;
             _supportFacilityTicks = file.SupportFacilityTicks;
             _supportFrontTicks = file.SupportFrontTicks;
@@ -455,6 +488,41 @@ namespace SoccerClub.Core
                 if (string.IsNullOrEmpty(keys[i])) continue;
                 _supportSnooze[keys[i]] = until[i];
             }
+        }
+    }
+
+    /// <summary>
+    /// main に出る提案（施設・人事・スポンサー）の放置ルール。
+    /// ・出した日から、土日を除いて 3 日たつと消える（出した日が平日ならその日も 1 日と数える）。
+    ///   例: 月曜に出たら月・火・水と出て、木曜に消える。金曜に出たら金・土・日・月・火と出て、水曜に消える。
+    /// ・消えた内容は、消えた日から 7 日たつまで出さない。
+    /// </summary>
+    public static class ProposalExpiry
+    {
+        public const int KeepWeekdays = 3;
+        public const int SnoozeDays = 7;
+
+        /// <summary>shownTicks の日から today の前日までの平日が 3 日以上なら true。shownTicks が 0 なら false。</summary>
+        public static bool Expired(long shownTicks, long today)
+        {
+            if (shownTicks <= 0 || today <= shownTicks) return false;
+            int weekdays = 0;
+            var day = new DateTime(shownTicks).Date;
+            var end = new DateTime(today).Date;
+            for (; day < end; day = day.AddDays(1))
+            {
+                if (day.DayOfWeek == DayOfWeek.Saturday || day.DayOfWeek == DayOfWeek.Sunday) continue;
+                weekdays++;
+                if (weekdays >= KeepWeekdays) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>消えた日から 7 日後（この日になれば再び出せる）。</summary>
+        public static long SnoozeUntil(long today)
+        {
+            return new DateTime(today).Date.AddDays(SnoozeDays).Ticks;
         }
     }
 }

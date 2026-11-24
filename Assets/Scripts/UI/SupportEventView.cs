@@ -15,6 +15,7 @@ namespace SoccerClub.UI
 
     /// <summary>
     /// サポートキャラ。Figma main の support（左下で「オーナー お話があります！」）と、
+    /// （スポンサーの提案も同じ吹き出しで営業部が出てくる。開く画面は SponsorOfferView）
     /// タップで開く support_event（会議室で施設のレベルアップかフロント人事を確認する）。
     /// レイアウトは sponsor と同じ。
     /// </summary>
@@ -99,10 +100,22 @@ namespace SoccerClub.UI
         public bool DrawCallout(SupportSuggestion suggestion, GameSession session, Font font, Vector2 origin)
         {
             if (suggestion == null) return false;
+            var club = session != null ? session.PlayerClub : null;
+            return DrawCalloutFor(FindSpeaker(club, suggestion), club, font, origin);
+        }
+
+        /// <summary>main の左下に、スポンサーを連れてきた営業部を描く。タップされたら true。</summary>
+        public bool DrawSponsorCallout(SponsorOffer offer, GameSession session, Font font, Vector2 origin)
+        {
+            if (offer == null) return false;
+            var club = session != null ? session.PlayerClub : null;
+            return DrawCalloutFor(SponsorOfferView.FindSpeaker(club, offer.StaffName), club, font, origin);
+        }
+
+        bool DrawCalloutFor(StaffMember speaker, Club club, Font font, Vector2 origin)
+        {
             EnsureStyles(font);
             EnsureTextures();
-            var club = session != null ? session.PlayerClub : null;
-            var speaker = FindSpeaker(club, suggestion);
             EnsureCallout(speaker, club);
 
             GUI.color = Color.white;
@@ -258,10 +271,10 @@ namespace SoccerClub.UI
             return (5000 + level * 2000).ToString("N0", CultureInfo.InvariantCulture) + "人";
         }
 
-        /// <summary>ClubFacilities.MarketLevelCap / MarketLevelFloor と同じ式。</summary>
+        /// <summary>FrontLevelCap.MarketCap / MarketFloor と同じ式（クラブハウスLvとリーグLV＋10の低いほう）。</summary>
         static string MarketRange(int clubhouseLevel)
         {
-            int max = Mathf.Clamp(clubhouseLevel, 1, Facility.MaxLevel);
+            int max = Mathf.Clamp(Mathf.Min(clubhouseLevel, FrontLevelCap.Max()), 1, Facility.MaxLevel);
             int min = Mathf.Max(1, max - 5);
             return min == max ? "Lv" + max : "Lv" + min + "〜" + max;
         }

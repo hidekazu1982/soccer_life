@@ -10,9 +10,9 @@ using UnityEngine;
 namespace SoccerClub.UI
 {
     /// <summary>
-    /// 新しいクラブハウス（Figma の main の new_clubhouse）。選手タブとスタッフタブを新しいデザインで描く。
-    /// 左が選んだ人の詳細（選手詳細 206:3 / スタッフ詳細 211:75）、右が一覧（選手リスト 206:618 / スタッフリスト 211:3）。
-    /// フロントのタブは今までの画面を使う。
+    /// 新しいクラブハウス（Figma の main の new_clubhouse）。選手・スタッフ・フロントの 3 タブを新しいデザインで描く。
+    /// 左が選んだ人の詳細（選手詳細 206:3 / スタッフ詳細 211:75 / フロント詳細 215:2）、
+    /// 右が一覧（選手リスト 206:618 / スタッフリスト 211:3 / フロントリスト 214:2）。フロントは ClubDialogView.NewFront.cs。
     /// </summary>
     public sealed partial class ClubDialogView
     {
@@ -121,10 +121,11 @@ namespace SoccerClub.UI
         NcStaffSort _ncStaffSort = NcStaffSort.Role;
         bool _ncStaffAsc = true;
 
-        /// <summary>新しいクラブハウスで描くか。選手とスタッフのタブ。</summary>
-        bool UsesNewClubhouse => _kind == Kind.Clubhouse && (_page == ClubPage.Players || _page == ClubPage.Staff);
+        /// <summary>新しいクラブハウスで描くか。選手・スタッフ・フロントのタブ。</summary>
+        bool UsesNewClubhouse => _kind == Kind.Clubhouse
+                                 && (_page == ClubPage.Players || _page == ClubPage.Staff || _page == ClubPage.Front);
 
-        void DrawNewClubhouse(GameSession session, Club club, System.Action<string> focusCharacter)
+        void DrawNewClubhouse(GameSession session, Club club, System.Action<string> focusCharacter, System.Action<string> setStatus)
         {
             EnsureNcStyles();
             var previous = GUI.color;
@@ -132,13 +133,19 @@ namespace SoccerClub.UI
             GUI.DrawTexture(new Rect(-GameRunner.HorizontalEdgeInset, -GameRunner.VerticalEdgeInset,
                 GameRunner.ReferenceWidth + GameRunner.HorizontalEdgeInset * 2f,
                 GameRunner.ReferenceHeight + GameRunner.VerticalEdgeInset * 2f), Texture2D.whiteTexture);
+            // 暗幕の色のままだと、顔やコンディションのアイコンが暗く半透明になる。
+            GUI.color = Color.white;
             NcFill(NcDialog, NcGray6);
             GUI.Label(NcTitle, "クラブハウス", _ncTitle);
 
             if (session.GameOver)
                 GUI.Label(new Rect(NcDialog.x, 240f, NcDialog.width, 28f), "資金ショートのためゲームオーバーです。", _ncSmallCenter);
 
-            if (_page == ClubPage.Staff)
+            if (_page == ClubPage.Front)
+            {
+                DrawNcFront(session, club, setStatus);
+            }
+            else if (_page == ClubPage.Staff)
             {
                 CollectNcStaff(club);
                 DrawNcStaffList();
@@ -150,6 +157,14 @@ namespace SoccerClub.UI
                 CollectRoster(club);
                 DrawNcPlayerList();
                 DrawNcDetail(session, club, SelectedPlayer());
+            }
+
+            // 契約の確認中は、確認のパネルだけ押せる。
+            if (_page == ClubPage.Front && _frontConfirm)
+            {
+                DrawFrontConfirm(session, setStatus);
+                GUI.color = previous;
+                return;
             }
 
             // タブと閉じるボタンは最後に置いて、一覧のドラッグより先に押せるようにする。
@@ -705,8 +720,10 @@ namespace SoccerClub.UI
         // ---- 関係とパーソナルデータ
 
         /// <summary>関係（夫婦・恋人・親友・友達）と、パーソナルデータ（趣味・好きな食べ物・苦手な食べ物・子ども）。多いときはスクロールする。</summary>
-        void DrawNcInfo(GameSession session, string id, int childCount)
+        void DrawNcInfo(GameSession session, string id, int childCount, float top = 667f, float bottom = 899f)
         {
+            var area = new Rect(NcInfoArea.x, top, NcInfoArea.width, bottom - top);
+            var track = new Rect(NcInfoTrack.x, top, NcInfoTrack.width, bottom - top);
             string key = id + "|" + (session != null ? session.Time.CurrentDate.Ticks : 0L);
             if (_ncInfoKey != key)
             {
@@ -720,10 +737,10 @@ namespace SoccerClub.UI
             bool children = childCount > 0;
             int rows = _ncRelations.Count + 3 + (children ? 1 : 0);
             float content = rows * NcInfoStride - (NcInfoStride - 40f);
-            float maxScroll = Mathf.Max(0f, content - NcInfoArea.height);
-            UpdateNcInfoScroll(maxScroll);
+            float maxScroll = Mathf.Max(0f, content - area.height);
+            UpdateNcInfoScroll(maxScroll, area, track);
 
-            GUI.BeginGroup(NcInfoArea);
+            GUI.BeginGroup(area);
             float y = -_ncInfoScroll;
             for (int i = 0; i < _ncRelations.Count; i++, y += NcInfoStride)
             {
@@ -747,10 +764,10 @@ namespace SoccerClub.UI
 
             if (maxScroll > 0.5f)
             {
-                NcFill(NcInfoTrack, NcGray);
-                float thumbH = Mathf.Clamp(NcInfoTrack.height * NcInfoArea.height / content, 32f, NcInfoTrack.height);
-                float span = Mathf.Max(1f, NcInfoTrack.height - thumbH);
-                NcFill(new Rect(NcInfoTrack.x, NcInfoTrack.y + span * (_ncInfoScroll / maxScroll), NcInfoTrack.width, thumbH), NcGray4);
+                NcFill(track, NcGray);
+                float thumbH = Mathf.Clamp(track.height * area.height / content, 32f, track.height);
+                float span = Mathf.Max(1f, track.height - thumbH);
+                NcFill(new Rect(track.x, track.y + span * (_ncInfoScroll / maxScroll), track.width, thumbH), NcGray4);
             }
         }
 
@@ -762,12 +779,12 @@ namespace SoccerClub.UI
             FitNcLabel(new Rect(152f, y, 200f, 40f), value ?? "", _ncSmall, 20);
         }
 
-        void UpdateNcInfoScroll(float maxScroll)
+        void UpdateNcInfoScroll(float maxScroll, Rect infoArea, Rect infoTrack)
         {
             _ncInfoScroll = Mathf.Clamp(_ncInfoScroll, 0f, maxScroll);
             var e = Event.current;
             if (e == null) return;
-            var area = new Rect(NcInfoArea.x, NcInfoArea.y, NcInfoTrack.xMax - NcInfoArea.x, NcInfoArea.height);
+            var area = new Rect(infoArea.x, infoArea.y, infoTrack.xMax - infoArea.x, infoArea.height);
             bool over = area.Contains(e.mousePosition);
             if (e.type == EventType.ScrollWheel && over && maxScroll > 0.5f)
             {

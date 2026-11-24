@@ -83,16 +83,24 @@ namespace SoccerClub.Data
         }
 
         /// <summary>
-        /// 練習場・トレーニング室・クラブハウスは「リーグLV＋この値」までしか上げられない。0 で無制限。
+        /// 練習場・トレーニング室・クラブハウスは「リーグLV＋この値」までしか上げられない（強化の上限）。0 で無制限。
         /// シミュレーターから変えられる。
         /// </summary>
-        public const int DefaultLeagueLevelAllowance = 30;
+        public const int DefaultLeagueLevelAllowance = 10;
         public static int LeagueLevelAllowance = DefaultLeagueLevelAllowance;
 
         /// <summary>いまのリーグLV。GameSession が設定する。</summary>
         public static int CurrentLeagueLevel = 1;
 
         public bool CanUpgrade() => Level < LevelCap;
+
+        /// <summary>練習場・トレーニング室・クラブハウス。リーグLVの上限がかかる。</summary>
+        public static bool IsGrowthKind(FacilityKind kind)
+        {
+            return kind == FacilityKind.TrainingGround
+                   || kind == FacilityKind.TrainingFacility
+                   || kind == FacilityKind.Clubhouse;
+        }
 
         public void Upgrade()
         {

@@ -15,6 +15,7 @@ namespace SoccerClub.EditorTools
     /// run.request の中身（省略可、1行に key=value）: club=0 / seed=1 / years=100 / fillEmpty=1 / runs=1
     /// / steps=1.15,1.08（優勝時の相手強化倍率。並べると、倍率ごとに seed から runs 本ずつ回す）
     /// / train=1.08,1.1（練習施設の費用の伸び。steps と組み合わせた全通りを回す）
+    /// / front=5,10,20（フロントとチームスタッフの上限「リーグLV＋値」。0 で無制限）
     /// </summary>
     [InitializeOnLoad]
     static class SimulatorFileTrigger
@@ -43,6 +44,7 @@ namespace SoccerClub.EditorTools
         static readonly List<double> _allows = new List<double>();
         static readonly List<double> _supports = new List<double>();
         static readonly List<double> _firsts = new List<double>();
+        static readonly List<double> _fronts = new List<double>();
         static readonly List<double[]> _combos = new List<double[]>();
         static int _stepIndex;
         static readonly System.Text.StringBuilder _log = new System.Text.StringBuilder();
@@ -85,6 +87,7 @@ namespace SoccerClub.EditorTools
             _allows.Clear();
             _supports.Clear();
             _firsts.Clear();
+            _fronts.Clear();
             try
             {
                 foreach (var raw in File.ReadAllLines(RequestPath))
@@ -93,14 +96,14 @@ namespace SoccerClub.EditorTools
                     int eq = line.IndexOf('=');
                     if (eq <= 0) continue;
                     var key = line.Substring(0, eq).Trim().ToLowerInvariant();
-                    if (key == "steps" || key == "train" || key == "house" || key == "rival" || key == "base" || key == "relief" || key == "streak" || key == "allow" || key == "support" || key == "first")
+                    if (key == "steps" || key == "train" || key == "house" || key == "rival" || key == "base" || key == "relief" || key == "streak" || key == "allow" || key == "support" || key == "first" || key == "front")
                     {
-                        var list = key == "steps" ? _steps : key == "train" ? _trains : key == "house" ? _houses : key == "rival" ? _rivals : key == "base" ? _bases : key == "relief" ? _reliefs : key == "streak" ? _streaks : key == "allow" ? _allows : key == "support" ? _supports : _firsts;
+                        var list = key == "steps" ? _steps : key == "train" ? _trains : key == "house" ? _houses : key == "rival" ? _rivals : key == "base" ? _bases : key == "relief" ? _reliefs : key == "streak" ? _streaks : key == "allow" ? _allows : key == "support" ? _supports : key == "first" ? _firsts : _fronts;
                         foreach (var part in line.Substring(eq + 1).Split(','))
                         {
                             double step;
                             if (double.TryParse(part.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out step)
-                                && (step > 1d || ((key == "rival" || key == "base") && step > 0d) || ((key == "relief" || key == "streak") && step >= 0d && step < 1d) || ((key == "allow" || key == "support") && step >= 0d) || (key == "first" && step > 0d)))
+                                && (step > 1d || ((key == "rival" || key == "base") && step > 0d) || ((key == "relief" || key == "streak") && step >= 0d && step < 1d) || ((key == "allow" || key == "support" || key == "front") && step >= 0d) || (key == "first" && step > 0d)))
                                 list.Add(step);
                         }
 
@@ -130,6 +133,7 @@ namespace SoccerClub.EditorTools
                 if (_allows.Count == 0) _allows.Add(SoccerClub.Data.Facility.DefaultLeagueLevelAllowance);
                 if (_supports.Count == 0) _supports.Add(0d);
                 if (_firsts.Count == 0) _firsts.Add(GameSession.DefaultFirstSeasonRivalScale);
+                if (_fronts.Count == 0) _fronts.Add(SoccerClub.Data.FrontLevelCap.DefaultLeagueLevelAllowance);
                 _combos.Clear();
                 foreach (var st in _steps)
                     foreach (var tr in _trains)
@@ -141,7 +145,8 @@ namespace SoccerClub.EditorTools
                                             foreach (var al in _allows)
                                                 foreach (var sp in _supports)
                                                     foreach (var fs in _firsts)
-                                                        _combos.Add(new[] { st, Math.Round(tr * 1000d), Math.Round(ho * 1000d), rv, bs, rl, sk, al, sp, fs });
+                                                        foreach (var fr in _fronts)
+                                                            _combos.Add(new[] { st, Math.Round(tr * 1000d), Math.Round(ho * 1000d), rv, bs, rl, sk, al, sp, fs, fr });
                 _stepIndex = 0;
                 _firstSeed = seed;
                 _nextSeed = seed;
@@ -179,6 +184,7 @@ namespace SoccerClub.EditorTools
             settings.Allowance = (int)Math.Round(_combos[_stepIndex][7]);
             settings.FollowSupport = _combos[_stepIndex][8] > 0.5d;
             settings.FirstSeasonRivalScale = _combos[_stepIndex][9];
+            settings.FrontAllowance = (int)Math.Round(_combos[_stepIndex][10]);
             _sim = new HeadlessSimulator(settings);
             if (_nextSeed.HasValue) _nextSeed = _nextSeed.Value + 1;
             _watch = Stopwatch.StartNew();
@@ -204,6 +210,7 @@ namespace SoccerClub.EditorTools
             GameSession.RivalDroughtRelief = GameSession.DefaultRivalDroughtRelief;
             GameSession.RivalStreakBoost = GameSession.DefaultRivalStreakBoost;
             SoccerClub.Data.Facility.LeagueLevelAllowance = SoccerClub.Data.Facility.DefaultLeagueLevelAllowance;
+            SoccerClub.Data.FrontLevelCap.LeagueLevelAllowance = SoccerClub.Data.FrontLevelCap.DefaultLeagueLevelAllowance;
             WriteStatus(_log + "all done");
         }
 
@@ -238,6 +245,7 @@ namespace SoccerClub.EditorTools
                     + " allow=" + _sim.Settings.Allowance.ToString(CultureInfo.InvariantCulture)
                     + (_sim.Settings.FollowSupport ? " support" : "")
                     + " first=" + _sim.Settings.FirstSeasonRivalScale.ToString("0.###", CultureInfo.InvariantCulture)
+                    + " front=" + _sim.Settings.FrontAllowance.ToString(CultureInfo.InvariantCulture)
                     + " seed=" + _sim.Settings.Seed + " " + _watch.Elapsed.TotalSeconds.ToString("0.0") + "s\n" + _sim.BuildSummary() + "csv: " + path);
                 return;
             }
@@ -255,6 +263,7 @@ namespace SoccerClub.EditorTools
                     + " allow=" + _sim.Settings.Allowance.ToString(CultureInfo.InvariantCulture)
                     + (_sim.Settings.FollowSupport ? " support" : "")
                     + " first=" + _sim.Settings.FirstSeasonRivalScale.ToString("0.###", CultureInfo.InvariantCulture)
+                    + " front=" + _sim.Settings.FrontAllowance.ToString(CultureInfo.InvariantCulture)
                     + " seed=" + _sim.Settings.Seed + " " + _sim.Records.Count + "/" + _sim.Settings.Seasons + "  "
                     + _sim.Session.Time.CurrentDate.ToString("yyyy/MM/dd") + "  "
                     + _watch.Elapsed.TotalSeconds.ToString("0") + "s");
