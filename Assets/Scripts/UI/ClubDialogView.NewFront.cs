@@ -8,7 +8,7 @@ using UnityEngine;
 namespace SoccerClub.UI
 {
     /// <summary>
-    /// 新しいクラブハウスのフロントタブ（Figma のフロントリスト 214:2 / フロント詳細 215:2）。
+    /// 新しいクラブハウスのフロントタブ（Figma の main_clubhouse_design_front のフロントリスト / フロント詳細）。
     /// 一覧は 12 枠（秘書、GM、強化 2、営業 2、広報 2、事業 2、育成 2）。空き枠をタップすると採用候補を出す。
     /// 詳細の下に「交代」「解雇」、候補の一覧では「戻る」「契約」を出す。契約は今までの確認パネルを使う。
     /// 一覧と候補の作り方、契約と解雇の処理は今までのフロント画面（ClubDialogView.cs）と同じ。
@@ -17,9 +17,9 @@ namespace SoccerClub.UI
     {
         static readonly string[] NcFrontHeadLabels = { "POS", "M/F", "名前", "AGE", "LV", "年俸", "" };
 
-        // 詳細の下のボタン（859〜899）。パーソナルデータは 763〜851 に詰める。
-        static readonly Rect NcFrontLeftButton = new Rect(236f, 859f, 176f, 40f);
-        static readonly Rect NcFrontRightButton = new Rect(421f, 859f, 176f, 40f);
+        // 詳細の下のボタン（859〜899、236 幅を 2 つ、間 9）。パーソナルデータは 763〜851 に詰める。
+        static readonly Rect NcFrontLeftButton = new Rect(236f, 859f, 236f, 40f);
+        static readonly Rect NcFrontRightButton = new Rect(481f, 859f, 236f, 40f);
         const float NcFrontInfoTop = 763f;
         const float NcFrontInfoBottom = 851f;
         const float NcEffectPillWidth = 72f;
@@ -78,24 +78,21 @@ namespace SoccerClub.UI
         {
             if (staff == null)
             {
-                NcFill(new Rect(0f, y, NcListWidth, NcRowHeight), NcGray5);
-                NcFill(new Rect(0f, y, 100f, 100f), NcGray4);
-                FitNcLabel(new Rect(0f, y, 100f, NcRowHeight), NcFrontCode(FrontOffice.RoleAt(index)), _ncCell, 36);
-                GUI.Label(new Rect(177f, y, 600f, NcRowHeight), "（空き）タップで採用", _ncCellLeft);
+                DrawNcEmptyRow(y, NcBrown, NcFrontCode(FrontOffice.RoleAt(index)), "（空き）タップで採用");
                 return;
             }
 
-            DrawNcRowBase(y, staff.Id == _frontSelectedId, NcFrontCode(staff.FrontRole), staff.Gender, staff.Name, staff.Age);
-            FitNcLabel(new Rect(1208f - NcListX, y, 124f, NcRowHeight), staff.Level.ToString(CultureInfo.InvariantCulture), _ncCell, 36);
-            FitNcLabel(new Rect(1340f - NcListX, y, 288f, NcRowHeight), MoneyText.Format(staff.AnnualSalary), _ncCellRight, 36);
+            DrawNcRowBase(y, staff.Id == _frontSelectedId, NcFrontCode(staff.FrontRole), NcBrown, staff.Gender, staff.Name, staff.Age);
+            FitNcLabel(new Rect(NcRowParam, y, NcHeadW[4], NcRowHeight), staff.Level.ToString(CultureInfo.InvariantCulture), _ncCell, 24);
+            FitNcLabel(NcSalaryCell(y), MoneyText.Format(staff.AnnualSalary), _ncCellRight, 24);
         }
 
         void DrawNcFrontDetail(GameSession session, Club club, StaffMember staff, Action<string> setStatus)
         {
-            NcFill(NcDetailPanel, NcGray5);
+            DrawNcDetailPanel();
             if (staff == null)
             {
-                if (_frontMarket && NcButton(NcFrontLeftButton, "戻る", !_frontConfirm))
+                if (_frontMarket && NcButton(NcFrontLeftButton, "戻る", !_frontConfirm, NcButtonKind.Neutral))
                     LeaveFrontMarket(club);
                 return;
             }
@@ -111,8 +108,7 @@ namespace SoccerClub.UI
                 MoneyText.Format(staff.AnnualSalary));
 
             // LV と、部署人数・在籍・上限。
-            NcFill(new Rect(NcBoxX, 451f, NcBoxWidth, 40f), NcGray4);
-            GUI.Label(new Rect(NcBoxX, 451f, NcBoxWidth, 40f), "LV " + staff.Level.ToString(CultureInfo.InvariantCulture), _ncOverall);
+            NcTopBox("LV " + staff.Level.ToString(CultureInfo.InvariantCulture));
             NcTrait(491f, "部署人数", NcFrontCount(club, staff.FrontRole).ToString(CultureInfo.InvariantCulture) + "人");
             NcTrait(531f, "在籍", _frontMarket ? "候補" : NcTenure(session, staff));
             NcTrait(571f, "上限", "Lv" + FrontLevelCap.Max().ToString(CultureInfo.InvariantCulture));
@@ -129,13 +125,13 @@ namespace SoccerClub.UI
             bool active = !_frontConfirm;
             if (_frontMarket)
             {
-                if (NcButton(NcFrontLeftButton, "戻る", active))
+                if (NcButton(NcFrontLeftButton, "戻る", active, NcButtonKind.Neutral))
                 {
                     LeaveFrontMarket(club);
                     return;
                 }
 
-                if (NcButton(NcFrontRightButton, "契約", active))
+                if (NcButton(NcFrontRightButton, "契約", active, NcButtonKind.Primary))
                 {
                     _frontConfirm = true;
                     _frontConfirmId = staff.Id;
@@ -145,14 +141,14 @@ namespace SoccerClub.UI
             }
 
             int slot = FrontSlotOf(staff);
-            if (NcButton(NcFrontLeftButton, "交代", active && slot >= 0))
+            if (NcButton(NcFrontLeftButton, "交代", active && slot >= 0, NcButtonKind.Primary))
             {
                 OpenFrontMarket(slot);
                 return;
             }
 
             bool canDismiss = slot >= 0 && session.CanDismissFront(slot);
-            if (NcButton(NcFrontRightButton, "解雇", active && slot >= 0))
+            if (NcButton(NcFrontRightButton, "解雇", active && slot >= 0, NcButtonKind.Danger))
             {
                 if (!canDismiss)
                     setStatus("部署の最後の1人なので解雇できません。交代は市場から契約してください。");
@@ -167,19 +163,50 @@ namespace SoccerClub.UI
         /// <summary>左に 72 幅の札、右に文言（効果・次LV・契約金）。</summary>
         void NcEffectRow(float y, string label, string value)
         {
-            NcFill(new Rect(NcDetailX, y, NcDetailWidth, 40f), NcGray4);
+            NcRowBox(new Rect(NcDetailX, y, NcDetailWidth, 40f));
             NcPill(new Rect(NcPillX, y + 4f, NcEffectPillWidth, 32f), label);
-            FitNcLabel(new Rect(NcPillX + NcEffectPillWidth + 12f, y, NcRightX - (NcPillX + NcEffectPillWidth + 12f), 40f), value ?? "", _ncSmall, 20);
+            FitNcLabel(new Rect(NcPillX + NcEffectPillWidth + 12f, y, NcRightX - (NcPillX + NcEffectPillWidth + 12f), 40f), value ?? "", _ncSmall, 24);
         }
 
-        /// <summary>灰色の四角のボタン。押せないときは薄くして、押されても false。</summary>
-        bool NcButton(Rect rect, string label, bool enabled)
+        enum NcButtonKind
         {
-            NcFill(rect, enabled ? NcGray3 : NcGray5);
-            var previous = _ncSmallCenter.normal.textColor;
-            if (!enabled) _ncSmallCenter.normal.textColor = NcGray;
-            GUI.Label(rect, label, _ncSmallCenter);
-            _ncSmallCenter.normal.textColor = previous;
+            Primary,  // 交代・契約（黄色）
+            Danger,   // 解雇（赤茶）
+            Neutral   // 戻る（タブと同じクリーム色）
+        }
+
+        /// <summary>角丸のボタン（角丸 20、線 3）。押せないときは薄くして、押されても false。</summary>
+        bool NcButton(Rect rect, string label, bool enabled, NcButtonKind kind)
+        {
+            Color fill, line, text;
+            switch (kind)
+            {
+                case NcButtonKind.Danger:
+                    fill = NcDangerFill;
+                    line = NcDangerLine;
+                    text = NcDangerText;
+                    break;
+                case NcButtonKind.Neutral:
+                    fill = NcTabOff;
+                    line = NcPanelLine;
+                    text = NcHeadBrown;
+                    break;
+                default:
+                    fill = NcYellow;
+                    line = NcDarkBrown;
+                    text = NcDarkBrown;
+                    break;
+            }
+
+            if (!enabled)
+            {
+                fill.a = 0.45f;
+                line.a = 0.45f;
+                text.a = 0.45f;
+            }
+
+            NcBox(rect, fill, line, 3f, 20f);
+            NcLabel(rect, label, _ncBold, text);
             return enabled && GUI.Button(rect, GUIContent.none, _hit);
         }
 
