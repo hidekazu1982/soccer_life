@@ -180,6 +180,20 @@ namespace SoccerClub.UI
         float _pressStart;
         float _pressTravel;
         public string SelectedId { get; private set; }
+
+        // 頭上に吹き出しアイコンを出している人は、ゆっくり歩かせてタップしやすくする。
+        const float BubbleWalkScale = 0.35f;
+        readonly HashSet<string> _slow = new HashSet<string>();
+
+        /// <summary>吹き出しアイコンを出している人。毎フレーム入れ直す。</summary>
+        public void SetSlow(HashSet<string> ids)
+        {
+            _slow.Clear();
+            if (ids == null) return;
+            foreach (var id in ids)
+                if (!string.IsNullOrEmpty(id)) _slow.Add(id);
+        }
+
         const float MeetGap = 56f;
         const float MeetSpeed = 1.75f;
 
@@ -359,7 +373,8 @@ namespace SoccerClub.UI
                 var walker = pair.Value;
                 bool absent = absentees != null && absentees.Contains(walker.Id);
                 UpdatePresence(walker, absent);
-                Step(walker, deltaTime);
+                bool slow = !walker.Leaving && !walker.Arriving && _slow.Contains(walker.Id);
+                Step(walker, slow ? deltaTime * BubbleWalkScale : deltaTime);
                 if (!walker.Leaving && walker != _dragged)
                     KeepInZone(walker);
             }

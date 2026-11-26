@@ -442,6 +442,189 @@ namespace SoccerClub.UI
 
         public static float TransferDuration(bool leaves) => TransferTimeline(leaves).End;
 
+        // ---- スポンサー打ち切り（日の締めのあと。営業部が会議室で報告する） ----
+
+        /// <summary>スポンサー打ち切りの流れ。営業部が入る → 1 つ目の台詞 → 2 つ目の台詞（右に打ち切りの一覧）。</summary>
+        public static Marks SponsorCutTimeline()
+        {
+            var marks = new Marks();
+            marks.PlayerInEnd = SlideSeconds;
+            marks.GreetEnd = marks.PlayerInEnd + LineSeconds + 1.0f;
+            marks.GmGreetEnd = marks.GreetEnd + LineSeconds + 2.0f;
+            marks.End = marks.GmGreetEnd + 0.6f;
+            return marks;
+        }
+
+        public static float SponsorCutDuration => SponsorCutTimeline().End;
+
+        static readonly RoleLineCatalog SponsorCutLines = new RoleLineCatalog(
+            "MeetingSponsorCut.csv",
+            new[] { "cut.1", "cut.2" },
+            new System.Collections.Generic.Dictionary<string, string>
+            {
+                { "cut.1", "オーナー、残念なご報告があります。" },
+                { "cut.2", "{sponsor}{others}との契約が、解消条件に当たったため終わりました。" }
+            });
+
+        // 右の一覧（打ち切りになったスポンサー）。白 90%・角丸 10。1 社 96 の高さで最大 5 社。
+        static readonly Rect CutPanel = new Rect(1000f, 220f, 840f, 560f);
+        const float CutRowHeight = 96f;
+        const int CutRowsMax = 5;
+
+        SponsorCutNotice _cutNotice;
+        StaffMember _cutSpeaker;
+        string _cutDepartment;
+        Texture2D _cutPortrait;
+        string[] _cutLines;
+        GUIStyle _cutName;
+        GUIStyle _cutNote;
+
+        /// <summary>
+        /// スポンサー打ち切りの報告。会議室に営業部（いちばんレベルの高い人。いなければ秘書）が入り、2 つの台詞で伝える。
+        /// 2 つ目の台詞から、右に打ち切りになったスポンサーの名前・解消条件・月額を出す。上に「スポンサー打ち切り」。
+        /// </summary>
+        public void DrawSponsorCut(SponsorCutNotice notice, GameSession session, Font font, float elapsed)
+        {
+            if (notice == null) return;
+            EnsureStyles(font);
+            EnsureBackground();
+            EnsureCutCast(notice, session);
+            var screen = FullScreenRect();
+            if (_background != null)
+                GUI.DrawTexture(screen, _background, ScaleMode.ScaleAndCrop, false);
+            else
+                Fill(screen, new Color(0.12f, 0.14f, 0.16f, 1f), 0f);
+
+            float time = elapsed < 0f ? 0f : elapsed;
+            _leftTalking = _leftTalkingNext;
+            _rightTalking = _rightTalkingNext;
+            _leftTalkingNext = false;
+            _rightTalkingNext = false;
+
+            var marks = SponsorCutTimeline();
+            float leftX = time < marks.PlayerInEnd ? Move(OffX, LeftFrameX, 0f, time) : LeftFrameX;
+            DrawFigure(_cutPortrait, leftX, _leftTalking);
+            string name = _cutSpeaker != null && !string.IsNullOrEmpty(_cutSpeaker.Name) ? _cutSpeaker.Name : _cutDepartment;
+            if (time >= marks.PlayerInEnd && time < marks.GreetEnd)
+                DrawBubble(LeftBubble, _cutDepartment, name, _cutLines[0]);
+            else if (time >= marks.GreetEnd)
+                DrawBubble(LeftBubble, _cutDepartment, name, _cutLines[1]);
+
+            DrawBanner("スポンサー打ち切り");
+            if (time >= marks.GreetEnd)
+                DrawCutPanel(notice);
+        }
+
+        void DrawCutPanel(SponsorCutNotice notice)
+        {
+            EnsureCutStyles();
+            int count = 0;
+            for (int i = 0; i < notice.Contracts.Count; i++)
+                if (notice.Contracts[i] != null) count++;
+            if (count == 0) return;
+            int rows = Mathf.Min(count, CutRowsMax);
+            float height = 40f + rows * CutRowHeight + (count > CutRowsMax ? 44f : 0f);
+            var panel = new Rect(CutPanel.x, CutPanel.y, CutPanel.width, Mathf.Min(CutPanel.height, height));
+            GUI.color = Color.white;
+            Fill(panel, new Color(1f, 1f, 1f, BoxAlpha), BoxRadius);
+            float y = panel.y + 20f;
+            int shown = 0;
+            for (int i = 0; i < notice.Contracts.Count && shown < CutRowsMax; i++)
+            {
+                var contract = notice.Contracts[i];
+                if (contract == null) continue;
+                shown++;
+                GUI.Label(new Rect(panel.x + 40f, y, panel.width - 80f, 50f), contract.Name ?? "", _cutName);
+                string note = ClubMath.SponsorCutLabel(contract.CutRank, contract.CutLosses)
+                              + "　月額 " + MoneyText.Format(contract.Monthly);
+                GUI.Label(new Rect(panel.x + 40f, y + 48f, panel.width - 80f, 40f), note, _cutNote);
+                y += CutRowHeight;
+            }
+
+            if (count > CutRowsMax)
+                GUI.Label(new Rect(panel.x + 40f, y, panel.width - 80f, 40f), "ほか" + (count - CutRowsMax) + "社", _cutNote);
+        }
+
+        void EnsureCutCast(SponsorCutNotice notice, GameSession session)
+        {
+            if (_cutNotice == notice && _cutLines != null) return;
+            _cutNotice = notice;
+            _cutSpeaker = null;
+            DestroyTexture(ref _cutPortrait);
+            var club = session != null ? session.PlayerClub : null;
+            _cutDepartment = "営業部";
+            _cutSpeaker = SponsorOfferView.FindSpeaker(club, null);
+            if (_cutSpeaker == null && club != null && club.Front != null)
+            {
+                _cutSpeaker = club.Front.Secretary;
+                _cutDepartment = "秘書";
+            }
+
+            if (!_libraryLoaded)
+            {
+                _libraryLoaded = true;
+                _avatars.Load();
+            }
+
+            if (club != null && _avatars.Ready)
+                _cutPortrait = Portrait(_cutSpeaker, AvatarLibrary.Kit(club.EmblemIndex));
+            _cutLines = BuildCutLines(notice, _cutSpeaker != null ? _cutSpeaker.Name : _cutDepartment);
+        }
+
+        static string[] BuildCutLines(SponsorCutNotice notice, string speaker)
+        {
+            string first = "";
+            string reason = "";
+            int count = 0;
+            for (int i = 0; i < notice.Contracts.Count; i++)
+            {
+                var c = notice.Contracts[i];
+                if (c == null) continue;
+                if (count == 0)
+                {
+                    first = c.Name ?? "";
+                    reason = ClubMath.SponsorCutLabel(c.CutRank, c.CutLosses);
+                }
+
+                count++;
+            }
+
+            var tokens = new System.Collections.Generic.Dictionary<string, string>
+            {
+                { "speaker", speaker ?? "" },
+                { "sponsor", first },
+                { "others", count > 1 ? "ほか" + (count - 1) + "社" : "" },
+                { "count", count.ToString() },
+                { "reason", reason }
+            };
+            System.Func<string, bool> matches = condition =>
+            {
+                switch (condition)
+                {
+                    case "single": return count <= 1;
+                    case "multiple": return count > 1;
+                    default: return false;
+                }
+            };
+            var all = SponsorCutLines.Lines(matches, tokens, new System.Random(count * 31 + first.Length));
+            var roles = SponsorCutLines.Roles;
+            var result = new[] { "", "" };
+            for (int i = 0; i < roles.Count; i++)
+            {
+                if (roles[i] == "cut.1") result[0] = all[i];
+                else if (roles[i] == "cut.2") result[1] = all[i];
+            }
+
+            return result;
+        }
+
+        void EnsureCutStyles()
+        {
+            if (_cutName != null && _cutName.font == _line.font) return;
+            _cutName = new GUIStyle(_line) { fontSize = 36, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleLeft, wordWrap = false, clipping = TextClipping.Clip };
+            _cutNote = new GUIStyle(_line) { fontSize = 26, alignment = TextAnchor.MiddleLeft, wordWrap = false, clipping = TextClipping.Clip };
+        }
+
         public void Clear()
         {
             _castKey = null;

@@ -65,6 +65,13 @@ namespace SoccerClub.Core
             WriteSupport(file);
             file.Relationships = _relations.Write();
             file.LastFriendEventTicks = _lastRelationEvent == default ? 0 : _lastRelationEvent.Ticks;
+            if (_relationBubble != null)
+            {
+                file.RelationBubbleA = _relationBubble.A;
+                file.RelationBubbleB = _relationBubble.B;
+                file.RelationBubbleNext = (int)_relationBubble.Next;
+                file.RelationBubbleTicks = _relationBubble.Since.Ticks;
+            }
             WriteExtraPractice(file);
             WriteParty(file);
             return file;
@@ -138,6 +145,17 @@ namespace SoccerClub.Core
             // 無所属のキャリアやり直し（ReadPersonnel 内）で関係を消せるよう、先に読む。
             session._relations.Read(file.Relationships);
             session._lastRelationEvent = file.LastFriendEventTicks > 0 ? new DateTime(file.LastFriendEventTicks) : default;
+            // 古いセーブには無い。無ければアイコンは出ていない扱い。
+            if (!string.IsNullOrEmpty(file.RelationBubbleA) && !string.IsNullOrEmpty(file.RelationBubbleB) && file.RelationBubbleTicks > 0)
+            {
+                session._relationBubble = new RelationBubble
+                {
+                    A = file.RelationBubbleA,
+                    B = file.RelationBubbleB,
+                    Next = (RelationStage)file.RelationBubbleNext,
+                    Since = new DateTime(file.RelationBubbleTicks)
+                };
+            }
             session.ReadExtraPractice(file);
             session.ReadParty(file);
             session.ReadPersonnel(file);

@@ -94,6 +94,27 @@ namespace SoccerClub.Core
         /// <summary>最後に関係イベントで段階が進んだ日。default は未発生。</summary>
         DateTime _lastRelationEvent;
 
+        /// <summary>関係イベントの吹き出しアイコンを出したまま待つ日数。過ぎたら消して、次の抽選に回す。</summary>
+        public const int RelationBubbleDays = 3;
+
+        /// <summary>頭上に吹き出しアイコンを出して、タップを待っている関係イベント。</summary>
+        public sealed class RelationBubble
+        {
+            public string A;
+            public string B;
+            public RelationStage Next;
+            /// <summary>アイコンを出した日。</summary>
+            public DateTime Since;
+
+            public bool Is(string a, string b)
+            {
+                return (A == a && B == b) || (A == b && B == a);
+            }
+        }
+
+        RelationBubble _relationBubble;
+        long _relationBubbleCheckedTicks;
+
         public IReadOnlyList<StaffMember> FrontMarket => _frontMarket;
 
         /// <summary>選手同士の関係（友達・恋人・夫婦）。</summary>
@@ -115,11 +136,63 @@ namespace SoccerClub.Core
             return _relations.EventCandidates(PlayerClub, Time.CurrentDate.Date);
         }
 
+        /// <summary>
+        /// タップを待っている関係イベント。出してから RelationBubbleDays 日たったか、
+        /// その組が条件を満たさなくなったら（移籍・関係の変化など）消して null を返す。
+        /// </summary>
+        public RelationBubble PendingRelation
+        {
+            get
+            {
+                if (_relationBubble == null) return null;
+                var today = Time.CurrentDate.Date;
+                if ((today - _relationBubble.Since.Date).TotalDays >= RelationBubbleDays)
+                {
+                    _relationBubble = null;
+                    return null;
+                }
+
+                // 条件の確かめ直しは 1 日 1 回。
+                if (_relationBubbleCheckedTicks != today.Ticks)
+                {
+                    _relationBubbleCheckedTicks = today.Ticks;
+                    bool alive = false;
+                    var list = RelationEventCandidates();
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        if (list[i].Next != _relationBubble.Next) continue;
+                        if (!_relationBubble.Is(list[i].Rel.PlayerIdA, list[i].Rel.PlayerIdB)) continue;
+                        alive = true;
+                        break;
+                    }
+
+                    if (!alive)
+                    {
+                        _relationBubble = null;
+                        return null;
+                    }
+                }
+
+                return _relationBubble;
+            }
+        }
+
+        /// <summary>関係イベントの吹き出しアイコンを出す。出ている間は次の抽選をしない。</summary>
+        public bool OfferRelationBubble(string a, string b, RelationStage next)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b) || a == b) return false;
+            if (!RelationEventReady || PendingRelation != null) return false;
+            _relationBubble = new RelationBubble { A = a, B = b, Next = next, Since = Time.CurrentDate.Date };
+            _relationBubbleCheckedTicks = Time.CurrentDate.Date.Ticks;
+            return true;
+        }
+
         /// <summary>関係イベントの結果。段階を進め、次のイベントまでの間隔を数え始める。</summary>
         public bool CompleteRelationEvent(string a, string b, RelationStage next)
         {
             if (!RelationEventReady) return false;
             if (!_relations.PromoteByEvent(PlayerClub, a, b, next, Time.CurrentDate.Date)) return false;
+            if (_relationBubble != null && _relationBubble.Is(a, b)) _relationBubble = null;
             _lastRelationEvent = Time.CurrentDate.Date;
             if (next == RelationStage.Married && PlayerClub != null) _relations.SyncMarried(PlayerClub.Squad);
             return true;
@@ -226,6 +299,7 @@ namespace SoccerClub.Core
             {
                 simulation.RelationLookup = (a, b) => _relations.StageBetween(a.Id, b.Id);
                 simulation.ClubStrengthModifier = ClubMatchFactor;
+                simulation.StaminaBaseline = LeagueStaminaBaseline;
             }
             ReleaseOperatingReserve(playerClub);
             Economy.OnBankrupt += club =>
@@ -1640,6 +1714,39 @@ namespace SoccerClub.Core
         public static double FirstSeasonRivalScale = DefaultFirstSeasonRivalScale;
 
         /// <summary>試合での強さの倍率。初年度の他クラブだけ FirstSeasonRivalScale。</summary>
+        double _staminaBaseline;
+        long _staminaBaselineTicks = -1;
+
+        /// <summary>
+        /// リーグ全体（全クラブの所属選手）の平均の最大スタミナ。試合のスタミナの減り方の基準にする。
+        /// 1 日 1 回だけ数え直す。
+        /// </summary>
+        double LeagueStaminaBaseline()
+        {
+            long ticks = Time != null ? Time.CurrentDate.Date.Ticks : 0L;
+            if (_staminaBaselineTicks == ticks && _staminaBaseline > 0d) return _staminaBaseline;
+            double sum = 0d;
+            int count = 0;
+            if (Clubs != null)
+            {
+                for (int c = 0; c < Clubs.Count; c++)
+                {
+                    var squad = Clubs[c] != null ? Clubs[c].Squad : null;
+                    if (squad == null) continue;
+                    for (int i = 0; i < squad.Count; i++)
+                    {
+                        if (squad[i] == null) continue;
+                        sum += squad[i].StaminaMax;
+                        count++;
+                    }
+                }
+            }
+
+            _staminaBaseline = count > 0 ? sum / count : 0d;
+            _staminaBaselineTicks = ticks;
+            return _staminaBaseline;
+        }
+
         double ClubMatchFactor(Club club)
         {
             if (club == null || club.IsPlayerOwned) return 1d;

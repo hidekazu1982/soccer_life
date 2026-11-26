@@ -345,7 +345,7 @@ namespace SoccerClub.UI
         }
 
         /// <summary>施設は事業部、フロント人事は GM が話す。いなければ秘書、GM の順に代わりに話す。</summary>
-        static StaffMember FindSpeaker(Club club, SupportSuggestion suggestion)
+        internal static StaffMember FindSpeaker(Club club, SupportSuggestion suggestion)
         {
             var front = club != null ? club.Front : null;
             if (front == null) return null;

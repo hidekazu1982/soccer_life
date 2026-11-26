@@ -12,8 +12,25 @@ namespace SoccerClub.Match
     public sealed class MatchSimulationManager : IMatchSimulation
     {
         public const int DrawCount = 10;
-        public const double AllPlayersStaminaDrain = 3d;
-        public const double ParticipantExtraDrain = 7d;
+        // 最大スタミナ 100 の選手の 1 回ごとの減り方（版 1.56 で 3・7 から調整）。
+        // 平均的なチームで交代枠 5 人をほぼ使い切り、スタミナがリーグ平均の 1.3 倍のチームでも 3 人ほど交代する。
+        public const double AllPlayersStaminaDrain = 6d;
+        public const double ParticipantExtraDrain = 10d;
+        /// <summary>ベンチは走らないので、スタメンより少なく減らす（交代の候補はスタミナ比 0.6 以上）。</summary>
+        public const double BenchStaminaDrain = 3d;
+
+        /// <summary>
+        /// スタミナの減り方の基準（版 1.55）。上の 3 と 7 は「最大スタミナ 100 の選手」の減り方で、
+        /// 実際はリーグ全体の平均の最大スタミナ ÷ 100 を掛ける。平均的な選手は 1 回で約 6%（関わると +10%）減り、
+        /// 平均よりスタミナの高い選手は疲れにくく、低い選手は早く交代する。
+        /// </summary>
+        public const double StaminaDrainReference = 100d;
+
+        /// <summary>リーグ全体の平均の最大スタミナ。GameSession が設定する。null か 0 以下なら、この試合の先発 22 人の平均を使う。</summary>
+        public Func<double> StaminaBaseline { get; set; }
+
+        // この試合で 3・7 に掛ける倍率（基準 ÷ 100、最低 1）。
+        double _drainUnit = 1d;
 
         /// <summary>同じ試合に一緒に出ている相手との関係で、実効攻撃・実効守備に掛ける上乗せ（いちばん強い関係の1つだけ）。</summary>
         public const double FriendChemistry = 0.01d;
@@ -53,6 +70,7 @@ namespace SoccerClub.Match
             var substitutions = new List<Substitution>();
             ResetSheetStamina(homeState.Sheet);
             ResetSheetStamina(awayState.Sheet);
+            _drainUnit = DrainUnit(homeState.Sheet, awayState.Sheet);
             _chemistry.Clear();
             SetTeamFactors(home, away);
             RefreshChemistry(homeState.Sheet);
@@ -66,7 +84,7 @@ namespace SoccerClub.Match
                 var attack = homeAttacks ? homeState : awayState;
                 var defense = homeAttacks ? awayState : homeState;
                 ResolveAttackRound(round, attack, defense, resultEvents);
-                DrainForRound(homeState, awayState, resultEvents[resultEvents.Count - 1]);
+                DrainForRound(homeState, awayState, resultEvents[resultEvents.Count - 1], _drainUnit);
                 if (TrySubstitute(homeState, true, round, substitutions)) RefreshChemistry(homeState.Sheet);
                 if (TrySubstitute(awayState, false, round, substitutions)) RefreshChemistry(awayState.Sheet);
                 NoteAppeared(homeState.Sheet, homeAppeared);
@@ -473,7 +491,35 @@ namespace SoccerClub.Match
         /// スタメンのスタミナ合計が相手より少ないほど、そのチームの減り方を大きくする。
         /// 減ったスタミナ比だけ、実効攻撃と実効守備が下がる。
         /// </summary>
-        static void DrainForRound(MatchTeamState home, MatchTeamState away, DuelEvent duel)
+        /// <summary>この試合のスタミナの減り方の倍率。リーグ平均の最大スタミナ ÷ 100（最低 1）。</summary>
+        double DrainUnit(TeamSheet home, TeamSheet away)
+        {
+            double baseline = 0d;
+            var source = StaminaBaseline;
+            if (source != null) baseline = source();
+            if (!(baseline > 0d))
+            {
+                double sum = 0d;
+                int count = 0;
+                foreach (var sheet in new[] { home, away })
+                {
+                    if (sheet == null || sheet.StartingXi == null) continue;
+                    for (int i = 0; i < sheet.StartingXi.Length; i++)
+                    {
+                        var player = sheet.StartingXi[i]?.Player;
+                        if (player == null) continue;
+                        sum += player.StaminaMax;
+                        count++;
+                    }
+                }
+
+                baseline = count > 0 ? sum / count : StaminaDrainReference;
+            }
+
+            return Math.Max(1d, baseline / StaminaDrainReference);
+        }
+
+        static void DrainForRound(MatchTeamState home, MatchTeamState away, DuelEvent duel, double unit)
         {
             double homeSum = StaminaSum(home != null ? home.Sheet : null);
             double awaySum = StaminaSum(away != null ? away.Sheet : null);
@@ -485,8 +531,8 @@ namespace SoccerClub.Match
                 if (duel.Breakthrough && duel.Goalkeeper != null) involved.Add(duel.Goalkeeper);
             }
 
-            DrainTeam(home != null ? home.Sheet : null, homeSum, awaySum, involved);
-            DrainTeam(away != null ? away.Sheet : null, awaySum, homeSum, involved);
+            DrainTeam(home != null ? home.Sheet : null, homeSum, awaySum, involved, unit);
+            DrainTeam(away != null ? away.Sheet : null, awaySum, homeSum, involved, unit);
         }
 
         static void AddInvolved(HashSet<Player> involved, Player[] people)
@@ -517,10 +563,10 @@ namespace SoccerClub.Match
             return 1d + (theirs - mine) / theirs;
         }
 
-        static void DrainTeam(TeamSheet sheet, double mine, double theirs, HashSet<Player> involved)
+        static void DrainTeam(TeamSheet sheet, double mine, double theirs, HashSet<Player> involved, double unit)
         {
             if (sheet == null) return;
-            double scale = DrainScale(mine, theirs);
+            double scale = DrainScale(mine, theirs) * unit;
             for (int i = 0; i < sheet.StartingXi.Length; i++)
             {
                 var player = sheet.StartingXi[i]?.Player;
@@ -536,7 +582,7 @@ namespace SoccerClub.Match
             {
                 var player = sheet.Bench[i];
                 if (player == null) continue;
-                player.StaminaCurrent = Math.Max(0d, player.StaminaCurrent - AllPlayersStaminaDrain);
+                player.StaminaCurrent = Math.Max(0d, player.StaminaCurrent - BenchStaminaDrain * unit);
             }
         }
 

@@ -108,6 +108,13 @@ namespace SoccerClub.UI
         static readonly Color NcDangerLine = Hex(0xB5654A);
         static readonly Color NcDangerText = Hex(0x9A3F2A);
         static readonly Color NcShadowColor = new Color(0x2E / 255f, 0x1C / 255f, 0x0A / 255f, 1f);
+        static readonly Color NcStaffRoleFill = Hex(0x3E8E8A);  // 詳細の役職の帯（チームスタッフ）
+        static readonly Color NcFrontRoleFill = Hex(0x3D4A6B);  // 詳細の役職の帯（フロント）
+
+        // ---- 詳細の見出しの帯（版 1.43〜1.45。一覧の POS と同じ形：行の左端、行と同じ高さ、左だけ角丸 12、白の太字）。
+        const float NcBandWidth = 80f;         // 左の列の短い見出し
+        const float NcBoxBandWidth = 120f;     // 顔の右の箱の見出し
+        const float NcPersonalBandWidth = 165f; // パーソナルデータ
 
         static Texture2D _ncPlankTexture;
         static Texture2D _ncPortraitTexture;
@@ -579,7 +586,7 @@ namespace SoccerClub.UI
         // ---- 詳細（選手とスタッフで共通の部分）
 
         /// <summary>1 行目（略号・名前・背番号）、2 行目（性別・誕生日・年齢）、顔、年俸。</summary>
-        void DrawNcDetailCommon(string id, string pos, string name, string number, Gender gender, int age, Texture2D portrait, string salary)
+        void DrawNcDetailCommon(string id, string pos, Color posFill, Color posText, string name, string number, Gender gender, int age, Texture2D portrait, string salary)
         {
             // 顔（160 角、角丸 20）。先に描いて、はみ出した角を詳細枠の色で消す。
             NcRound(NcPortraitBox, Color.white, 20f);
@@ -595,14 +602,17 @@ namespace SoccerClub.UI
             NcOutline(new Rect(NcPortraitBox.x - 20f, NcPortraitBox.y - 20f, NcPortraitBox.width + 40f, NcPortraitBox.height + 40f), NcPanel, 20f, 40f);
             NcOutline(NcPortraitBox, NcPanelLine, 3f, 20f);
 
-            NcRowBox(new Rect(NcDetailX, 355f, NcDetailWidth, 40f));
-            NcPill(new Rect(NcPillX, 359f, 63f, 32f), pos);
-            FitNcLabel(new Rect(320f, 355f, 300f, 40f), name ?? "", _ncSmall, 24);
+            var posRow = new Rect(NcDetailX, 355f, NcDetailWidth, 40f);
+            NcRowBox(posRow);
+            NcBand(posRow, NcBandWidth, pos, posFill, posText);
+            FitNcLabel(new Rect(NcDetailX + NcBandWidth + 8f, 355f, 300f, 40f), name ?? "", _ncSmall, 24);
             if (!string.IsNullOrEmpty(number))
                 GUI.Label(new Rect(NcRightX - 80f, 355f, 80f, 40f), number, _ncSmallRight);
 
-            NcRowBox(new Rect(NcDetailX, 403f, NcDetailWidth, 40f));
-            NcPill(new Rect(NcPillX, 407f, 63f, 32f), gender == Gender.Female ? "Female" : "Male");
+            var genderRow = new Rect(NcDetailX, 403f, NcDetailWidth, 40f);
+            NcRowBox(genderRow);
+            bool female = gender == Gender.Female;
+            NcBand(genderRow, NcBandWidth, female ? "Female" : "Male", female ? NcFemaleFill : NcMaleFill, female ? NcFemaleText : NcMaleText);
             int month;
             int day;
             CharacterLife.Birthday(id, out month, out day);
@@ -610,8 +620,9 @@ namespace SoccerClub.UI
             GUI.Label(new Rect(396f, 403f, 90f, 40f), month.ToString(CultureInfo.InvariantCulture) + "/" + day.ToString(CultureInfo.InvariantCulture), _ncSmall);
             GUI.Label(new Rect(NcRightX - 100f, 403f, 100f, 40f), age.ToString(CultureInfo.InvariantCulture) + "歳", _ncSmallRight);
 
-            NcRowBox(new Rect(NcDetailX, 619f, NcDetailWidth, 40f));
-            GUI.Label(new Rect(244f, 619f, 80f, 40f), "年俸", _ncSmall);
+            var salaryRow = new Rect(NcDetailX, 619f, NcDetailWidth, 40f);
+            NcRowBox(salaryRow);
+            NcBand(salaryRow, NcBandWidth, "年俸", NcBrown, Color.white);
             FitNcLabel(new Rect(330f, 619f, NcRightX - 330f, 40f), salary, _ncSmallRight, 24);
         }
 
@@ -621,12 +632,16 @@ namespace SoccerClub.UI
             NcBox(NcDetailPanel, NcPanel, NcPanelLine, 3f, 24f);
         }
 
-        /// <summary>顔の右の一番上の箱（黄色）。</summary>
-        void NcTopBox(string text)
+        /// <summary>
+        /// 顔の右の一番上の行（選手は総合力、スタッフとフロントは LV）。版 1.44 から、ボタンに見えないよう
+        /// ほかの行と同じ地と線にし、見出しの帯（120）と、28px の太字 #8B5A2B の値（709 に右寄せ）で目立たせる。
+        /// </summary>
+        void NcTopBox(string label, string value)
         {
             var box = new Rect(NcBoxX, 451f, NcBoxWidth, 40f);
-            NcBox(box, NcYellow, NcHeadBrown, 2f, 12f);
-            GUI.Label(box, text, _ncOverall);
+            NcRowBox(box);
+            NcBand(box, NcBoxBandWidth, label, NcBrown, Color.white);
+            NcLabel(new Rect(NcBoxX + NcBoxBandWidth, 451f, NcRightX - NcBoxX - NcBoxBandWidth, 40f), value, _ncOverall, NcBrown);
         }
 
         // ---- 選手の詳細
@@ -636,9 +651,12 @@ namespace SoccerClub.UI
             DrawNcDetailPanel();
             if (player == null) return;
 
+            var group = PositionUtility.GroupOf(player.BestPosition());
             DrawNcDetailCommon(
                 player.Id,
                 player.BestPosition().ToString(),
+                PositionUtility.GroupColor(group),
+                group == PositionGroup.MF ? NcText : Color.white,
                 player.Name,
                 player.ShirtNumber > 0 ? player.ShirtNumber.ToString(CultureInfo.InvariantCulture) : null,
                 player.Gender,
@@ -647,7 +665,7 @@ namespace SoccerClub.UI
                 MoneyText.Format(player.AnnualSalary));
 
             // 総合力と OFF・DEF・STA。
-            NcTopBox(player.DisplayOverall.ToString(CultureInfo.InvariantCulture));
+            NcTopBox("総合力", player.DisplayOverall.ToString(CultureInfo.InvariantCulture));
             NcStat(491f, "OFF", player.DisplayOffense);
             NcStat(531f, "DEF", player.DisplayDefense);
             NcStat(571f, "STA", player.DisplayStaminaMax);
@@ -657,8 +675,9 @@ namespace SoccerClub.UI
 
         void NcStat(float y, string label, int value)
         {
-            NcRowBox(new Rect(NcBoxX, y, NcBoxWidth, 40f));
-            GUI.Label(new Rect(413f, y, 60f, 40f), label, _ncSmall);
+            var row = new Rect(NcBoxX, y, NcBoxWidth, 40f);
+            NcRowBox(row);
+            NcBand(row, NcBoxBandWidth, label, NcBrown, Color.white);
             GUI.Label(new Rect(480f, y, NcRightX - 480f, 40f), value.ToString(CultureInfo.InvariantCulture), _ncSmallRight);
         }
 
@@ -672,6 +691,8 @@ namespace SoccerClub.UI
             DrawNcDetailCommon(
                 staff.Id,
                 NcRoleCode(staff.TeamRole),
+                NcStaffRoleFill,
+                Color.white,
                 staff.Name,
                 null,
                 staff.Gender,
@@ -680,7 +701,7 @@ namespace SoccerClub.UI
                 MoneyText.Format(staff.AnnualSalary));
 
             // LV と、役職ごとの 3 行（監督はシステム・タイプ・起用方針）。
-            NcTopBox("LV " + staff.Level.ToString(CultureInfo.InvariantCulture));
+            NcTopBox("LV", staff.Level.ToString(CultureInfo.InvariantCulture));
             string l1, v1, l2, v2, l3, v3;
             NcStaffTraits(staff, out l1, out v1, out l2, out v2, out l3, out v3);
             NcTrait(491f, l1, v1);
@@ -690,14 +711,13 @@ namespace SoccerClub.UI
             DrawNcInfo(session, staff.Id, staff.Children);
         }
 
-        /// <summary>左に茶色のラベル（120 幅）、右に値（193 幅）。</summary>
+        /// <summary>左に見出しの帯（120 幅）、右に値（193 幅）。帯と値の枠は 1 本の行につながる。</summary>
         void NcTrait(float y, string label, string value)
         {
             float valueX = NcBoxX + NcTraitLabelWidth;
-            NcRowBox(new Rect(valueX, y, NcBoxWidth - NcTraitLabelWidth, 40f));
-            NcRound(new Rect(NcBoxX, y, NcTraitLabelWidth, 40f), NcBrown, 16f);
-            if (!string.IsNullOrEmpty(label))
-                FitNcLabel(new Rect(413f, y, NcTraitLabelWidth - 14f, 40f), label, _ncPillText, 24);
+            var row = new Rect(NcBoxX, y, NcBoxWidth, 40f);
+            NcRowBox(row);
+            NcBand(row, NcTraitLabelWidth, label ?? "", NcBrown, Color.white);
             if (!string.IsNullOrEmpty(value))
                 FitNcLabel(new Rect(valueX + 7f, y, NcBoxWidth - NcTraitLabelWidth - 14f, 40f), value, _ncSmall, 24);
         }
@@ -824,9 +844,10 @@ namespace SoccerClub.UI
             float y = -_ncInfoScroll;
             for (int i = 0; i < _ncRelations.Count; i++, y += NcInfoStride)
             {
-                NcRowBox(new Rect(0f, y, NcDetailWidth, 40f));
-                NcPill(new Rect(5f, y + 4f, 63f, 32f), _ncRelations[i].Key);
-                FitNcLabel(new Rect(84f, y, NcDetailWidth - 96f, 40f), _ncRelations[i].Value, _ncSmall, 24);
+                var row = new Rect(0f, y, NcDetailWidth, 40f);
+                NcRowBox(row);
+                NcBand(row, NcBandWidth, _ncRelations[i].Key, NcBrown, Color.white);
+                FitNcLabel(new Rect(NcBandWidth + 8f, y, NcDetailWidth - NcBandWidth - 20f, 40f), _ncRelations[i].Value, _ncSmall, 24);
             }
 
             NcPersonal(y, "趣味", hobby);
@@ -853,9 +874,10 @@ namespace SoccerClub.UI
 
         void NcPersonal(float y, string label, string value)
         {
-            NcRowBox(new Rect(0f, y, NcDetailWidth, 40f));
-            NcPill(new Rect(5f, y + 4f, NcPersonalPillWidth, 32f), label);
-            FitNcLabel(new Rect(NcPersonalPillWidth + 13f, y, NcDetailWidth - NcPersonalPillWidth - 25f, 40f), value ?? "", _ncSmall, 24);
+            var row = new Rect(0f, y, NcDetailWidth, 40f);
+            NcRowBox(row);
+            NcBand(row, NcPersonalBandWidth, label, NcBrown, Color.white);
+            FitNcLabel(new Rect(NcPersonalBandWidth + 8f, y, NcDetailWidth - NcPersonalBandWidth - 20f, 40f), value ?? "", _ncSmall, 24);
         }
 
         void UpdateNcInfoScroll(float maxScroll, Rect infoArea, Rect infoTrack)
@@ -930,6 +952,20 @@ namespace SoccerClub.UI
             FitNcLabel(rect, text, _ncPillText, 24);
         }
 
+        /// <summary>
+        /// 詳細の見出しの帯（一覧の POS と同じ形）。行の左端に、行と同じ高さで、左の角だけ行と同じ角丸 12。
+        /// 文字は太字で中央。行の箱（NcRowBox）を描いたあとに重ねる。
+        /// </summary>
+        void NcBand(Rect row, float width, string text, Color fill, Color textColor)
+        {
+            var band = new Rect(row.x, row.y, width, row.height);
+            NcRound(band, fill, new Vector4(12f, 0f, 0f, 12f));
+            var previous = _ncPosText.normal.textColor;
+            _ncPosText.normal.textColor = textColor;
+            FitNcLabel(new Rect(band.x + 4f, band.y, band.width - 8f, band.height), text ?? "", _ncPosText, 24);
+            _ncPosText.normal.textColor = previous;
+        }
+
         /// <summary>詳細の行の箱（クリーム地、線 2、角丸 12）。</summary>
         static void NcRowBox(Rect rect)
         {
@@ -937,7 +973,7 @@ namespace SoccerClub.UI
         }
 
         /// <summary>枠：影、ダイアログ、ステッチ、看板の見出し。</summary>
-        void DrawNcFrame()
+        void DrawNcFrame(string title = "クラブハウス")
         {
             NcRound(new Rect(NcDialog.x, NcDialog.y + 10f, NcDialog.width, NcDialog.height), NcShade(0.3f), 36f);
             NcBox(NcDialog, NcCream, NcDarkBrown, 6f, 36f);
@@ -946,39 +982,39 @@ namespace SoccerClub.UI
             NcRound(new Rect(NcTitlePlank.x, NcTitlePlank.y + 5f, NcTitlePlank.width, NcTitlePlank.height), NcShade(0.4f), 38f);
             GUI.DrawTexture(NcTitlePlank, NcPlankTexture(), ScaleMode.StretchToFill, true, 0f, Color.white, 0f, 38f);
             NcOutline(NcTitlePlank, NcDarkBrown, 5f, 38f);
-            GUI.Label(NcTitlePlank, "クラブハウス", _ncTitle);
+            GUI.Label(NcTitlePlank, title, _ncTitle);
         }
 
-        static Color NcShade(float alpha)
+        internal static Color NcShade(float alpha)
         {
             return new Color(NcShadowColor.r, NcShadowColor.g, NcShadowColor.b, alpha);
         }
 
-        static void NcRound(Rect rect, Color color, float radius)
+        internal static void NcRound(Rect rect, Color color, float radius)
         {
             GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f, color, 0f, radius);
         }
 
         /// <summary>角ごとの丸み（左上、右上、右下、左下）。</summary>
-        static void NcRound(Rect rect, Color color, Vector4 radii)
+        internal static void NcRound(Rect rect, Color color, Vector4 radii)
         {
             GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f, color, Vector4.zero, radii);
         }
 
         /// <summary>内側に線だけを描く。</summary>
-        static void NcOutline(Rect rect, Color color, float width, float radius)
+        internal static void NcOutline(Rect rect, Color color, float width, float radius)
         {
             GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f, color, width, radius);
         }
 
-        static void NcBox(Rect rect, Color fill, Color line, float width, float radius)
+        internal static void NcBox(Rect rect, Color fill, Color line, float width, float radius)
         {
             NcRound(rect, fill, radius);
             if (width > 0f) NcOutline(rect, line, width, radius);
         }
 
         /// <summary>角丸の破線（ステッチ）。辺は破線、角は円弧のまま。</summary>
-        static void NcDashedRect(Rect rect, Color color, float width, float radius, float dash, float gap)
+        internal static void NcDashedRect(Rect rect, Color color, float width, float radius, float dash, float gap)
         {
             NcDashLine(rect.x + radius, rect.xMax - radius, rect.y, true, color, width, dash, gap);
             NcDashLine(rect.x + radius, rect.xMax - radius, rect.yMax - width, true, color, width, dash, gap);
@@ -1009,7 +1045,7 @@ namespace SoccerClub.UI
         }
 
         /// <summary>看板の縦グラデーション（上 #A8703A → 下 #7A4A22）。</summary>
-        static Texture2D NcPlankTexture()
+        internal static Texture2D NcPlankTexture()
         {
             if (_ncPlankTexture == null)
                 _ncPlankTexture = NcGradient(new[] { Hex(0xA8703A), Hex(0x7A4A22) }, new[] { 0f, 1f });
@@ -1017,7 +1053,7 @@ namespace SoccerClub.UI
         }
 
         /// <summary>顔の背景の縦グラデーション（空色 → 薄緑 → 緑）。</summary>
-        static Texture2D NcPortraitBackground()
+        internal static Texture2D NcPortraitBackground()
         {
             if (_ncPortraitTexture == null)
                 _ncPortraitTexture = NcGradient(new[] { Hex(0xBFE3F2), Hex(0xE8F5E0), Hex(0xA9D18E) }, new[] { 0f, 0.7f, 1f });
@@ -1062,7 +1098,7 @@ namespace SoccerClub.UI
         }
 
         /// <summary>幅に収まらないときだけ文字を小さくする。</summary>
-        static void FitNcLabel(Rect rect, string text, GUIStyle style, int size)
+        internal static void FitNcLabel(Rect rect, string text, GUIStyle style, int size)
         {
             int previous = style.fontSize;
             style.fontSize = size;
@@ -1073,7 +1109,7 @@ namespace SoccerClub.UI
             style.fontSize = previous;
         }
 
-        static Color Hex(int rgb)
+        internal static Color Hex(int rgb)
         {
             return new Color(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f, 1f);
         }
@@ -1107,7 +1143,8 @@ namespace SoccerClub.UI
             _ncSmall = new GUIStyle(label) { fontSize = 24, alignment = TextAnchor.MiddleLeft };
             _ncSmallCenter = new GUIStyle(label) { fontSize = 24 };
             _ncSmallRight = new GUIStyle(label) { fontSize = 24, alignment = TextAnchor.MiddleRight };
-            _ncOverall = new GUIStyle(label) { fontSize = 24 };
+            // 総合力・LV の値（28px の太字、右寄せ。色は NcTopBox で #8B5A2B にする）。
+            _ncOverall = new GUIStyle(bold) { fontSize = 28, alignment = TextAnchor.MiddleRight };
         }
     }
 }

@@ -142,6 +142,13 @@ namespace SoccerClub.Core
             return total;
         }
 
+        /// <summary>この選手を招待したときの費用（年俸の CostPercent%）。招待画面の詳細に出す。</summary>
+        public BigInteger PartyGuestCost(ClubStory story, Player player)
+        {
+            var party = story != null ? PartyCatalog.Find(PartyIdOf(story)) : null;
+            return party == null || player == null ? BigInteger.Zero : PartyCostOf(party, player);
+        }
+
         public bool CanAffordParty(ClubStory story)
         {
             return PlayerClub != null && PartyCost(story) <= PlayerClub.Coins;

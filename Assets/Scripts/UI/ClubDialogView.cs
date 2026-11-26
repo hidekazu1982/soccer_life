@@ -227,7 +227,7 @@ namespace SoccerClub.UI
 
         public Kind Current => _kind;
         public bool IsOpen => _kind != Kind.None;
-        public Rect ActiveBounds => _kind != Kind.Clubhouse ? Bounds : UsesNewClubhouse ? NcDialog : ClubhouseHitBounds;
+        public Rect ActiveBounds => _kind == Kind.Stadium ? NcDialog : _kind != Kind.Clubhouse ? Bounds : UsesNewClubhouse ? NcDialog : ClubhouseHitBounds;
 
         public void Load()
         {
@@ -263,7 +263,8 @@ namespace SoccerClub.UI
             _kind = kind;
             _scroll = Vector2.zero;
             _page = ClubPage.Players;
-            _stadiumPage = StadiumPage.Schedule;
+            _stadiumPage = StadiumPage.Table;
+            ResetNewStadium();
             _notice = "";
             _confirmReset = false;
             _selectedPlayerId = null;
@@ -311,6 +312,13 @@ namespace SoccerClub.UI
             if (_kind == Kind.Clubhouse)
             {
                 DrawClubhouseDialog(session, session.PlayerClub, setStatus, focusCharacter);
+                return;
+            }
+
+            // スタジアムは Figma の main_stadium_dialog（ClubDialogView.NewStadium.cs）。
+            if (_kind == Kind.Stadium)
+            {
+                DrawNewStadium(session, session.PlayerClub);
                 return;
             }
 

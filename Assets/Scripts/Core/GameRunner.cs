@@ -154,6 +154,8 @@ namespace SoccerClub.Core
             public int Delta;
         }
         readonly SponsorCutView _sponsorCutView = new SponsorCutView();
+        // スポンサー打ち切りの会議室（営業部の報告）を始めた時刻。
+        float _cutStarted;
         readonly ClubEventView _eventView = new ClubEventView();
         readonly DebugMenuView _debugMenu = new DebugMenuView();
         readonly MeetingRoomView _meeting = new MeetingRoomView();
@@ -313,6 +315,7 @@ namespace SoccerClub.Core
             {
                 _phase = DayPhase.SponsorCut;
                 _dayElapsed = -1f;
+                _cutStarted = UnityEngine.Time.unscaledTime;
                 _status = "スポンサー打ち切り";
             }
         }
@@ -526,7 +529,7 @@ namespace SoccerClub.Core
                 {
                     if (_dayElapsed < 0f) _dayElapsed = 0f;
                     _dayElapsed += UnityEngine.Time.deltaTime;
-                    if (_dayElapsed >= NextSeconds(DayAdvanceSeconds))
+                    if (_dayElapsed >= ReportWaitSeconds())
                         ContinuePostMatch();
                 }
             }
@@ -702,8 +705,8 @@ namespace SoccerClub.Core
             if (_phase == DayPhase.Stats && _liveFixture != null)
             {
                 UseUiScreen();
-                _matchScreenView.DrawStats(_liveFixture, club, _font);
-                DrawReviewChrome();
+                _dialogs.DrawPostMatchResult(Session, _liveFixture, club, _font);
+                DrawRankingChrome();
                 GUI.matrix = previousMatrix;
                 GUI.color = previousColor;
                 return;
@@ -712,7 +715,7 @@ namespace SoccerClub.Core
             if (_phase == DayPhase.Ranking && _liveFixture != null)
             {
                 UseUiScreen();
-                _rankingView.Draw(Session, _liveFixture, _clubSelect.EmblemTexture, _font);
+                _dialogs.DrawPostMatchRanking(Session, _liveFixture, club, _font);
                 DrawRankingChrome();
                 GUI.matrix = previousMatrix;
                 GUI.color = previousColor;
@@ -722,8 +725,8 @@ namespace SoccerClub.Core
             if (_phase == DayPhase.Settlement && _liveFixture != null)
             {
                 UseUiScreen();
-                _matchScreenView.DrawSettlement(_liveFixture, club, _coreDelta, _lightDelta, _font);
-                DrawReviewChrome();
+                _dialogs.DrawPostMatchInfo(Session, _liveFixture, club, _coreDelta, _lightDelta, _font);
+                DrawRankingChrome();
                 GUI.matrix = previousMatrix;
                 GUI.color = previousColor;
                 return;
@@ -742,7 +745,7 @@ namespace SoccerClub.Core
             if (_phase == DayPhase.SponsorCut && Session.PendingSponsorCut != null)
             {
                 UseUiScreen();
-                _sponsorCutView.Draw(Session.PendingSponsorCut, _font);
+                _meeting.DrawSponsorCut(Session.PendingSponsorCut, Session, _font, UnityEngine.Time.unscaledTime - _cutStarted);
                 DrawReviewChrome();
                 GUI.matrix = previousMatrix;
                 GUI.color = previousColor;
@@ -1677,6 +1680,7 @@ namespace SoccerClub.Core
             _phase = DayPhase.Stats;
             _matchScreen = false;
             _matchScreenView.ResetStatsScroll();
+            _dialogs.ResetPostMatch();
             _dayElapsed = _autoPlay ? 0f : -1f;
             _status = "試合スタッツ";
         }
@@ -1849,6 +1853,7 @@ namespace SoccerClub.Core
         void OpenSponsorCut()
         {
             _phase = DayPhase.SponsorCut;
+            _cutStarted = UnityEngine.Time.unscaledTime;
             _dayElapsed = _autoPlay ? 0f : -1f;
             _growthCursor = 0f;
             _matchScreen = false;
@@ -2061,45 +2066,195 @@ namespace SoccerClub.Core
             }
         }
 
+        // 頭上の吹き出しアイコン（施設・人事・スポンサー・関係イベント・居残り練習）。最大 4 つ。
+        readonly HeadBubbleView _bubbleView = new HeadBubbleView();
+        readonly List<Rect> _bubbleRects = new List<Rect>();
+        readonly HashSet<string> _bubbleHolders = new HashSet<string>();
+        // キャラが画面にいないとき（オフなど）だけ、今までどおり左下に担当者の吹き出しを出す。
+        bool _legacyCallout;
+
         /// <summary>
-        /// サポートキャラを出すか。メイン画面で、日送り前か日送り中（試合画面を除く）。
-        /// ダイアログ・キャラ詳細・イベント中とフルオートでは出さない。今日すでに対応済みなら Session 側で null になる。
-        /// 施設・人事の提案とスポンサーの提案は同じ場所に 1 人ずつ。施設・人事を先に出し、なければ営業部がスポンサーを持ってくる。
+        /// 頭上の吹き出しアイコンを出すか。メイン画面で、日送り前か日送り中（試合画面を除く）。
+        /// ダイアログ・キャラ詳細・イベント中とフルオートでは出さない（フルオートは施設・人事・スポンサーを自動で決め、
+        /// 関係イベントはタップしたものとして MiniEventDirector が始める）。
         /// </summary>
-        bool SupportCalloutVisible =>
+        bool HeadBubblesVisible =>
             Session != null
             && !_supportOpen
             && !_sponsorOpen
             && !_fullAuto
             && !_dialogs.IsOpen
             && !_miniEvents.Spotlight
+            && !_miniEvents.HoldsDay
             && (_phase == DayPhase.Idle || (_phase == DayPhase.Advancing && !_matchScreen))
             && (_crowd == null || _crowd.SelectedId == null)
             && Session.CurrentStory == null
-            && !Session.GameOver
-            && (Session.CurrentSupport != null || Session.HasSponsorOffer);
+            && !Session.GameOver;
 
         bool HitsSupportCallout(Vector2 mouse)
         {
-            return SupportCalloutVisible && SupportEventView.CalloutBounds(SupportCalloutOrigin).Contains(mouse);
+            if (!HeadBubblesVisible) return false;
+            if (_legacyCallout && SupportEventView.CalloutBounds(SupportCalloutOrigin).Contains(mouse)) return true;
+            for (int i = 0; i < _bubbleRects.Count; i++)
+                if (_bubbleRects[i].Contains(mouse)) return true;
+            return false;
         }
 
+        /// <summary>
+        /// 施設・人事は担当者（事業部、GM）、スポンサーは営業部、関係イベントは話しかけるほうの頭上にアイコンを出す。
+        /// タップでそれぞれのイベントを開く。担当者が画面にいなければ、画面にいるほかのフロントが代わりに出す。
+        /// フロントが誰も画面にいない（オフなど）ときは、今までどおり左下に担当者の吹き出しを出す。
+        /// </summary>
         void DrawSupportCallout()
         {
-            if (!SupportCalloutVisible) return;
-            var suggestion = Session.CurrentSupport;
-            if (suggestion != null)
+            _bubbleRects.Clear();
+            _bubbleHolders.Clear();
+            _legacyCallout = false;
+            if (!HeadBubblesVisible)
             {
-                if (_supportView.DrawCallout(suggestion, Session, _font, SupportCalloutOrigin))
-                    OpenSupport(suggestion);
+                if (_crowd != null) _crowd.SetSlow(null);
                 return;
             }
 
-            if (_supportView.DrawSponsorCallout(Session.PendingSponsorOffer, Session, _font, SupportCalloutOrigin))
+            var club = Session.PlayerClub;
+            bool castShown = _crowd != null && club != null && !Session.IsClosedPeriod(Session.Time.CurrentDate);
+            float now = UnityEngine.Time.unscaledTime;
+            int index = 0;
+            bool opened = false;
+
+            var suggestion = Session.CurrentSupport;
+            if (suggestion != null)
             {
-                if (_crowd != null) _crowd.ClearSelection();
-                OpenSponsorOffer();
+                string holder = castShown ? FrontHolder(club, SupportEventView.FindSpeaker(club, suggestion)) : null;
+                if (holder == null)
+                {
+                    _legacyCallout = true;
+                    if (_supportView.DrawCallout(suggestion, Session, _font, SupportCalloutOrigin))
+                    {
+                        OpenSupport(suggestion);
+                        opened = true;
+                    }
+                }
+                else
+                {
+                    var kind = suggestion.Kind == SupportKind.Facility ? HeadBubbleKind.Facility : HeadBubbleKind.Personnel;
+                    if (DrawHeadBubble(holder, kind, now, index++))
+                    {
+                        _crowd.ClearSelection();
+                        OpenSupport(suggestion);
+                        opened = true;
+                    }
+                }
             }
+
+            if (!opened && Session.HasSponsorOffer)
+            {
+                var offer = Session.PendingSponsorOffer;
+                string holder = castShown ? FrontHolder(club, SponsorOfferView.FindSpeaker(club, offer.StaffName)) : null;
+                if (holder == null)
+                {
+                    // 左下は 1 人ずつ。施設・人事が出ていれば、そちらを先に出す。
+                    if (!_legacyCallout)
+                    {
+                        _legacyCallout = true;
+                        if (_supportView.DrawSponsorCallout(offer, Session, _font, SupportCalloutOrigin))
+                        {
+                            if (_crowd != null) _crowd.ClearSelection();
+                            OpenSponsorOffer();
+                            opened = true;
+                        }
+                    }
+                }
+                else if (DrawHeadBubble(holder, HeadBubbleKind.Sponsor, now, index++))
+                {
+                    _crowd.ClearSelection();
+                    OpenSponsorOffer();
+                    opened = true;
+                }
+            }
+
+            var relation = Session.PendingRelation;
+            if (!opened && castShown && relation != null)
+            {
+                Vector2 unused;
+                if (_crowd.TryHeadPoint(relation.B, out unused)
+                    && DrawHeadBubble(relation.A, RelationBubbleKind(relation.Next), now, index++))
+                {
+                    _crowd.ClearSelection();
+                    if (!_miniEvents.PlayPendingRelation(Session, _crowd))
+                        _status = "2人がそろっていません。少し待ってから、もう一度タップしてください。";
+                }
+            }
+
+            // 居残り練習。その日のうちだけ出す。タップしなくても能力と親密度は日の締めで伸びる。
+            var practice = Session.TodayExtraPractice;
+            if (!opened && castShown && practice != null && _miniEvents.ExtraPracticeOffered(Session))
+            {
+                Vector2 unused;
+                if (_crowd.TryHeadPoint(practice.PlayerIdB, out unused)
+                    && DrawHeadBubble(practice.PlayerIdA, HeadBubbleKind.ExtraPractice, now, index++))
+                {
+                    _crowd.ClearSelection();
+                    if (!_miniEvents.PlayExtraPractice(Session, _crowd))
+                        _status = "2人がそろっていません。少し待ってから、もう一度タップしてください。";
+                }
+            }
+
+            if (_crowd != null) _crowd.SetSlow(_bubbleHolders);
+        }
+
+        bool DrawHeadBubble(string id, HeadBubbleKind kind, float now, int index)
+        {
+            if (_crowd == null || string.IsNullOrEmpty(id)) return false;
+            Vector2 head;
+            if (!_crowd.TryHeadPoint(id, out head)) return false;
+            var bounds = HeadBubbleView.BoundsAt(WorldToChrome(head), now, index);
+            _bubbleRects.Add(bounds);
+            _bubbleHolders.Add(id);
+            return _bubbleView.Draw(bounds, kind, _font);
+        }
+
+        static HeadBubbleKind RelationBubbleKind(RelationStage next)
+        {
+            switch (next)
+            {
+                case RelationStage.BestFriend: return HeadBubbleKind.BestFriend;
+                case RelationStage.Lover: return HeadBubbleKind.Lover;
+                case RelationStage.Married: return HeadBubbleKind.Spouse;
+                default: return HeadBubbleKind.Friend;
+            }
+        }
+
+        /// <summary>担当者が画面にいればその人。いなければ、画面にいてアイコンをまだ出していないフロントの誰か。</summary>
+        string FrontHolder(Club club, StaffMember preferred)
+        {
+            Vector2 unused;
+            if (preferred != null && !_bubbleHolders.Contains(preferred.Id) && _crowd.TryHeadPoint(preferred.Id, out unused))
+                return preferred.Id;
+            var front = club != null ? club.Front : null;
+            if (front == null) return null;
+            string pick = PickFront(front.Secretary) ?? PickFront(front.GeneralManager);
+            if (pick != null) return pick;
+            var groups = new[] { front.Business, front.Sales, front.PublicRelations, front.Strengthening, front.Academy };
+            for (int g = 0; g < groups.Length; g++)
+            {
+                var list = groups[g];
+                if (list == null) continue;
+                for (int i = 0; i < list.Length; i++)
+                {
+                    pick = PickFront(list[i]);
+                    if (pick != null) return pick;
+                }
+            }
+
+            return null;
+        }
+
+        string PickFront(StaffMember staff)
+        {
+            if (staff == null || _bubbleHolders.Contains(staff.Id)) return null;
+            Vector2 unused;
+            return _crowd.TryHeadPoint(staff.Id, out unused) ? staff.Id : null;
         }
 
         void OpenSupport(SupportSuggestion suggestion)
@@ -2150,6 +2305,15 @@ namespace SoccerClub.Core
             TryAutoSave();
         }
 
+        /// <summary>収支報告・スポンサー打ち切りをオートで閉じるまでの秒数。打ち切りは営業部の報告が終わるまで待つ。</summary>
+        float ReportWaitSeconds()
+        {
+            float wait = NextSeconds(DayAdvanceSeconds);
+            if (_phase == DayPhase.SponsorCut)
+                wait = Mathf.Max(wait, MeetingRoomView.SponsorCutDuration + 1.5f);
+            return wait;
+        }
+
         void DismissSponsorCut()
         {
             if (Session != null) Session.DismissSponsorCut();
@@ -2171,8 +2335,9 @@ namespace SoccerClub.Core
             DrawFullAutoButton(MainFullAutoAnchor);
         }
 
-        // ranking の auto。ゲージ 1557,1017 / 212×30.7、AUTO 1769,988（sponsor と同じ）。「次へ」は Figma にないので、ゲージの左 1386,988 に置く。
-        static Rect RankingNextRect => ShiftRight(PinBottom(new Rect(1386f, 988f, 155f, 60f)));
+        // 試合後の 3 画面の auto。ゲージ 1557,1017 / 212×30.7、AUTO 1769,988（sponsor と同じ）。
+        // 「次へ」（Figma の button_next）はゲージの左 1330,984 に置く。
+        static Rect RankingNextRect => ShiftRight(PinBottom(new Rect(1330f, 984f, 210f, 68f)));
 
         void DrawRankingChrome()
         {
@@ -2180,14 +2345,14 @@ namespace SoccerClub.Core
             DrawDayGauge(SponsorGaugeRect, _autoPlay && _dayElapsed >= 0f ? Mathf.Clamp01(_dayElapsed / wait) : 0f);
             DrawAutoButton(SponsorAutoRect);
             DrawFullAutoButton(SponsorFullAutoAnchor);
-            if (!_autoPlay && _rankingView.DrawNextButton(RankingNextRect, _font))
+            if (!_autoPlay && _dialogs.DrawPostMatchNext(RankingNextRect, _font))
                 ContinuePostMatch();
         }
 
         void DrawReviewChrome()
         {
             float wait = _phase == DayPhase.MonthReport || _phase == DayPhase.SponsorCut
-                ? NextSeconds(DayAdvanceSeconds)
+                ? ReportWaitSeconds()
                 : NextSeconds(ReviewSeconds);
             if (_autoPlay && _dayElapsed >= 0f)
                 DrawDayGauge(Mathf.Clamp01(_dayElapsed / wait));
@@ -2245,6 +2410,7 @@ namespace SoccerClub.Core
                 && !Session.IsClosedPeriod(Session.Time.CurrentDate);
             // 友達イベントは、メイン画面が見えているときだけ（操作中でも）割り込ませる。
             bool canShow = !CoveringScreen && !_dialogs.IsOpen;
+            _miniEvents.AutoPlayPending = _fullAuto;
             _miniEvents.Tick(Session, _crowd, castPresent, deltaTime, canShow);
 
             Vector2 focus;

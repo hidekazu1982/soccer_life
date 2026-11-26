@@ -100,6 +100,8 @@ namespace SoccerClub.UI
             DrawNcDetailCommon(
                 staff.Id,
                 NcFrontCode(staff.FrontRole),
+                NcFrontRoleFill,
+                Color.white,
                 staff.Name,
                 null,
                 staff.Gender,
@@ -108,7 +110,7 @@ namespace SoccerClub.UI
                 MoneyText.Format(staff.AnnualSalary));
 
             // LV と、部署人数・在籍・上限。
-            NcTopBox("LV " + staff.Level.ToString(CultureInfo.InvariantCulture));
+            NcTopBox("LV", staff.Level.ToString(CultureInfo.InvariantCulture));
             NcTrait(491f, "部署人数", NcFrontCount(club, staff.FrontRole).ToString(CultureInfo.InvariantCulture) + "人");
             NcTrait(531f, "在籍", _frontMarket ? "候補" : NcTenure(session, staff));
             NcTrait(571f, "上限", "Lv" + FrontLevelCap.Max().ToString(CultureInfo.InvariantCulture));
@@ -160,12 +162,14 @@ namespace SoccerClub.UI
             }
         }
 
-        /// <summary>左に 72 幅の札、右に文言（効果・次LV・契約金）。</summary>
+        /// <summary>左に見出しの帯（80 幅）、右に文言（効果・次LV・契約金）。</summary>
         void NcEffectRow(float y, string label, string value)
         {
-            NcRowBox(new Rect(NcDetailX, y, NcDetailWidth, 40f));
-            NcPill(new Rect(NcPillX, y + 4f, NcEffectPillWidth, 32f), label);
-            FitNcLabel(new Rect(NcPillX + NcEffectPillWidth + 12f, y, NcRightX - (NcPillX + NcEffectPillWidth + 12f), 40f), value ?? "", _ncSmall, 24);
+            var row = new Rect(NcDetailX, y, NcDetailWidth, 40f);
+            NcRowBox(row);
+            NcBand(row, NcBandWidth, label, NcBrown, Color.white);
+            float valueX = NcDetailX + NcBandWidth + 8f;
+            FitNcLabel(new Rect(valueX, y, NcRightX - valueX, 40f), value ?? "", _ncSmall, 24);
         }
 
         enum NcButtonKind

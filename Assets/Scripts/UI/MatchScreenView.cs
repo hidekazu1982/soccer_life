@@ -67,6 +67,8 @@ namespace SoccerClub.UI
         const float ScoreHeight = 155f;
         // 試合後の画面で、背景の絵に重ねる色の濃さ。
         const float BoardOverlayAlpha = 0.78f;
+        // 観客席のもやの濃さ。bg_match_stands に焼き込んだ値（make_bg.py の HAZE_A）と同じにする。
+        const float StandsHaze = 0.30f;
 
         const float WalkFrameSeconds = 0.1f;
         const float MatchLengthScale = 2f;
@@ -80,6 +82,11 @@ namespace SoccerClub.UI
         const float SettleEnd = 0.65f;
         const float BounceEnd = 0.80f;
         const float ScorePopLength = 0.5f;
+        // チャンスの切り替わりのトランジション（版 1.59）。回の最後の TransitionUnits で幕が左から覆い、
+        // 次の回の最初の TransitionUnits で右へ抜ける。単位は回の進み（1 回＝1、ゴールの回＝2）。
+        const float TransitionUnits = 0.09f;
+        const float TransitionTilt = -12f;
+        const float TransitionEdge = 26f;
 
         GUIStyle _title;
         GUIStyle _score;
@@ -94,6 +101,11 @@ namespace SoccerClub.UI
         Font _font;
         Vector2 _statsScroll;
         Texture2D _field;
+        Texture2D _stands;
+        Texture2D _standsTint1;
+        Texture2D _standsTint2;
+        // スタンドのサポーターの色。ホームクラブのユニフォーム（1st シャツ、2nd パンツ）。
+        UniformKit _standsKit = new UniformKit(new Color32(0xFF, 0x17, 0x00, 255), new Color32(0xFF, 0x17, 0x00, 255), new Color32(0xFF, 0x17, 0x00, 255));
         Texture2D _ball;
         Texture2D _ballFallback;
         readonly AvatarLibrary _avatars = new AvatarLibrary();
@@ -117,6 +129,7 @@ namespace SoccerClub.UI
             EnsureStyles(font);
             EnsureArt();
             if (fixture != null) RememberFixture(fixture);
+            if (fixture != null && fixture.Home != null) _standsKit = AvatarLibrary.Kit(fixture.Home.EmblemIndex);
             GUI.color = Color.white;
 
             var result = fixture != null ? fixture.Result : null;
@@ -165,6 +178,7 @@ namespace SoccerClub.UI
             float units = local * RoundWeight(duel);
             DrawField(attackLeft);
             DrawPlay(duel, attackLeft, units);
+            DrawTransition(events, round, units, progress);
 
             int homeGoals = GoalsBefore(result, round);
             int awayGoals = GoalsBefore(result, round, false);
@@ -185,6 +199,83 @@ namespace SoccerClub.UI
             bool popping = scored && pop < 1f;
             DrawHeader(fixture, homeGoals, awayGoals, popping && attackLeft, popping && !attackLeft, pop);
             DrawEleven(result, viewer, round, progress >= 1f);
+            DrawClock(fixture, events, round);
+            DrawGoalLists(fixture, result, round, scored);
+            DrawSubstitutions(fixture, result, round, units);
+            DrawGoalEffect(fixture, result, round, duel, units);
+            GUI.color = Color.white;
+        }
+
+        /// <summary>
+        /// チャンスの切り替わりに挟む幕。次に攻めるクラブのユニフォームの色（1st）の斜めの幕が左から画面を覆い、
+        /// 覆いきったところでそのクラブのエンブレムを出し、次の回の頭で右へ抜ける。
+        /// ピッチと選手の上、上部の 11 人とスコアの下に描く。最初の回の頭と最後の回の終わりには挟まない。
+        /// </summary>
+        void DrawTransition(List<DuelEvent> events, int round, float units, float progress)
+        {
+            if (events == null || events.Count < 2 || progress <= 0f || progress >= 1f) return;
+            float weight = RoundWeight(events[round]);
+            float cover;
+            bool closing;
+            Club club;
+            if (round < events.Count - 1 && units > weight - TransitionUnits)
+            {
+                cover = Mathf.Clamp01((units - (weight - TransitionUnits)) / TransitionUnits);
+                closing = true;
+                club = events[round + 1].AttackClub;
+            }
+            else if (round > 0 && units < TransitionUnits)
+            {
+                cover = 1f - Mathf.Clamp01(units / TransitionUnits);
+                closing = false;
+                club = events[round].AttackClub;
+            }
+            else
+            {
+                return;
+            }
+
+            float eased = Smooth(cover);
+            float inset = GameRunner.HorizontalEdgeInset;
+            float vertical = GameRunner.VerticalEdgeInset;
+            float width = GameRunner.ReferenceWidth + inset * 2f;
+            float height = GameRunner.ReferenceHeight + vertical * 2f;
+            // 傾けても画面の角が空かないよう、幕は画面より大きくとる。
+            float panelWidth = width + 700f;
+            float panelHeight = height + 900f;
+            float centerY = GameRunner.ReferenceHeight * 0.5f;
+            float leftEdge = closing
+                ? Mathf.Lerp(-inset - panelWidth - 200f, -inset - 350f, eased)
+                : Mathf.Lerp(-inset - 350f, width + 200f, 1f - eased);
+            var panel = new Rect(leftEdge, centerY - panelHeight * 0.5f, panelWidth, panelHeight);
+
+            var kit = club != null ? AvatarLibrary.Kit(club.EmblemIndex) : _standsKit;
+            Color main = kit.First;
+            main.a = 1f;
+            Color dark = new Color(main.r * 0.55f, main.g * 0.55f, main.b * 0.55f, 1f);
+
+            var matrix = GUI.matrix;
+            GUIUtility.RotateAroundPivot(TransitionTilt, matrix.MultiplyPoint3x4(panel.center));
+            GUI.color = dark;
+            GUI.DrawTexture(panel, Texture2D.whiteTexture);
+            GUI.color = main;
+            GUI.DrawTexture(new Rect(panel.x + TransitionEdge * 2f, panel.y, panel.width - TransitionEdge * 4f, panel.height), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+            GUI.DrawTexture(new Rect(panel.xMax - TransitionEdge * 2f, panel.y, TransitionEdge * 0.5f, panel.height), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(panel.x + TransitionEdge * 1.5f, panel.y, TransitionEdge * 0.5f, panel.height), Texture2D.whiteTexture);
+            GUI.matrix = matrix;
+
+            // 覆いきる前後だけ、次に攻めるクラブのエンブレムを出す。
+            float emblemAlpha = Mathf.Clamp01((cover - 0.7f) / 0.3f);
+            var emblem = Emblem(club);
+            if (emblem != null && emblemAlpha > 0f)
+            {
+                float size = 260f + 40f * emblemAlpha;
+                var rect = new Rect(GameRunner.ReferenceWidth * 0.5f - size * 0.5f, 560f - size * 0.5f, size, size);
+                GUI.color = new Color(1f, 1f, 1f, emblemAlpha);
+                GUI.DrawTexture(rect, emblem, ScaleMode.ScaleToFit, true);
+            }
+
             GUI.color = Color.white;
         }
 
@@ -197,15 +288,14 @@ namespace SoccerClub.UI
 
         /// <summary>
         /// field は攻撃側が左の絵。攻撃側が右のときは左右を反転する。画面の端まで覆う。
-        /// 絵の上半分（空）は透明なので、先に白で塗る（Figma の game2 の地の色）。
+        /// 絵の上半分（空）は透明なので、先に観客席（スタンド）の絵を描く。スタンドは反転しない（広告の文字があるため）。
         /// </summary>
         void DrawField(bool attackLeft)
         {
             float x = GameRunner.HorizontalEdgeInset;
             float y = GameRunner.VerticalEdgeInset;
             var canvas = new Rect(-x, -y, GameRunner.ReferenceWidth + x * 2f, GameRunner.ReferenceHeight + y * 2f);
-            GUI.color = Color.white;
-            GUI.DrawTexture(canvas, Texture2D.whiteTexture);
+            DrawStands(canvas);
             if (_field == null)
             {
                 GUI.color = new Color(0.55f, 0.72f, 0.42f, 1f);
@@ -217,8 +307,40 @@ namespace SoccerClub.UI
             DrawMaybeFlipped(canvas, _field, !attackLeft, ScaleMode.ScaleAndCrop);
         }
 
+        /// <summary>
+        /// 観客席。bg_match_stands はサポーターの服・旗などが白い絵（もや込み）。
+        /// その上に tint1（シャツの色）と tint2（パンツの色）を重ねて、ホームクラブの色に塗る。
+        /// tint は白〜灰の陰影なので、GUI.color を掛けると影が残る。不透明度はもやの分だけ下げる。
+        /// 絵が無いときは今までどおり白で塗る。
+        /// </summary>
+        void DrawStands(Rect canvas)
+        {
+            GUI.color = Color.white;
+            if (_stands == null)
+            {
+                GUI.DrawTexture(canvas, Texture2D.whiteTexture);
+                return;
+            }
+
+            GUI.DrawTexture(canvas, _stands, ScaleMode.ScaleAndCrop, false);
+            DrawStandsTint(canvas, _standsTint1, _standsKit.First);
+            DrawStandsTint(canvas, _standsTint2, _standsKit.Second);
+            GUI.color = Color.white;
+        }
+
+        static void DrawStandsTint(Rect canvas, Texture2D tint, Color32 color)
+        {
+            if (tint == null) return;
+            Color c = color;
+            c.a = 1f - StandsHaze;
+            GUI.color = c;
+            GUI.DrawTexture(canvas, tint, ScaleMode.ScaleAndCrop, true);
+        }
+
         void DrawHeader(Fixture fixture, int home, int away, bool homePop, bool awayPop, float pop)
         {
+            // スコアの後ろの枠（版 1.60。観客席の上でも読めるように）。
+            DrawScoreFrame();
             if (fixture != null)
             {
                 var homeEmblem = Emblem(fixture.Home);
@@ -286,7 +408,7 @@ namespace SoccerClub.UI
             }
 
             for (int i = 0; i < _eleven.Length; i++)
-                DrawElevenCard(i, _eleven[i], club);
+                DrawPlayerCard(i, _eleven[i], club);
         }
 
         void DrawElevenCard(int index, LineupSlot slot, Club club)
@@ -717,6 +839,9 @@ namespace SoccerClub.UI
         void EnsureArt()
         {
             if (_field == null) _field = Resources.Load<Texture2D>("MainScreen/field");
+            if (_stands == null) _stands = Resources.Load<Texture2D>("MainScreen/bg_match_stands");
+            if (_standsTint1 == null) _standsTint1 = Resources.Load<Texture2D>("MainScreen/bg_match_stands_tint1");
+            if (_standsTint2 == null) _standsTint2 = Resources.Load<Texture2D>("MainScreen/bg_match_stands_tint2");
             if (_ball == null) _ball = Resources.Load<Texture2D>("MainScreen/ball");
             if (_ball != null || _ballFallback != null) return;
 

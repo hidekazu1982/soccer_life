@@ -72,6 +72,12 @@ namespace SoccerClub.Core
         /// <summary>最後に関係イベント（友達・恋人・夫婦・親友）が起きた日。0 は未発生。名前は互換のため据え置き。</summary>
         public long LastFriendEventTicks;
 
+        /// <summary>頭上に吹き出しアイコンを出して待っている関係イベント。A が空なら無し。</summary>
+        public string RelationBubbleA;
+        public string RelationBubbleB;
+        public int RelationBubbleNext;
+        public long RelationBubbleTicks;
+
         /// <summary>居残り練習を抽選した週（月曜）。0 は未抽選。</summary>
         public long ExtraPracticeWeekTicks;
 

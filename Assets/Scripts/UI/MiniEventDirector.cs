@@ -214,6 +214,13 @@ namespace SoccerClub.UI
                 _nextAttempted = false;
             }
 
+            // フルオートでは、関係イベントのアイコンをタップしたものとして始める。
+            if (AutoPlayPending && canShow && !Active && !_gathering)
+            {
+                if (ExtraPracticeWaiting(session)) PlayExtraPractice(session, crowd);
+                else if (session.PendingRelation != null) PlayPendingRelation(session, crowd);
+            }
+
             if (_gathering && _play.Armed && _play.Relation)
             {
                 // 関係イベントは歩み寄りを待たずにすぐ始める。2人はそのまま歩かせる。
@@ -292,7 +299,7 @@ namespace SoccerClub.UI
                 if (_friendCheck <= 0f)
                 {
                     _friendCheck = FriendCheckSeconds;
-                    if ((session.RelationEventReady || ExtraPracticeWaiting(session)) && TryFill(session, crowd, _play, true))
+                    if (session.RelationEventReady && TryFill(session, crowd, _play, true))
                     {
                         _gathering = true;
                         _gatherTime = 0f;
@@ -390,8 +397,8 @@ namespace SoccerClub.UI
             _fill = cue;
             cue.Clear();
             bool started = friendOnly
-                ? TryExtraPractice(session) || TryRelation(session, crowd)
-                : TryExtraPractice(session) || TryStart(session, crowd);
+                ? TryRelation(session, crowd)
+                : TryStart(session, crowd);
             _fill = null;
             if (started && cue.Armed) return true;
             cue.Clear();
@@ -627,14 +634,14 @@ namespace SoccerClub.UI
 
         /// <summary>
         /// 関係イベント（友達・親友・恋人・夫婦）。段階が進む条件を満たした自クラブの2人が画面に映っていれば、
-        /// 隣に並んで話し、段階が進む。全種類まとめて、前回から2日たつまでは起きない（GameSession.RelationEventReady）。
-        /// 結婚 → 恋人 → 親友 → 友達 の順に優先する。
+        /// その場では始めず、頭上に吹き出しアイコンを出して待つ（GameSession.OfferRelationBubble）。
+        /// タップされたら PlayPendingRelation で始める。全種類まとめて、前回から2日たつまでは起きない
+        /// （GameSession.RelationEventReady）。アイコンが出ている間は次を抽選しない。
+        /// 結婚 → 恋人 → 親友 → 友達 の順に優先する。ここでは会話を始めないので、常に false を返す。
         /// </summary>
         bool TryRelation(GameSession session, GroundCrowd crowd)
         {
-            if (_visible.Count < 2 || !session.RelationEventReady) return false;
-            // 再生中・待機中の関係イベントがあれば重ねない。
-            if ((_fill != _play && _play.Relation) || (_fill != _next && _next.Relation)) return false;
+            if (_visible.Count < 2 || !session.RelationEventReady || session.PendingRelation != null) return false;
             var candidates = session.RelationEventCandidates();
             if (candidates.Count == 0) return false;
             var visible = new HashSet<string>(_visible);
@@ -654,34 +661,109 @@ namespace SoccerClub.UI
                     if (GameSession.RelationEventPriority(next) != priority) continue;
                     var rel = candidates[i].Rel;
                     if (!visible.Contains(rel.PlayerIdA) || !visible.Contains(rel.PlayerIdB)) continue;
-                    if (!Free(rel.PlayerIdA) || !Free(rel.PlayerIdB)) continue;
                     Player a;
                     Player b;
                     StaffMember unused;
                     if (!session.TryClubPerson(rel.PlayerIdA, out a, out unused) || a == null) continue;
                     if (!session.TryClubPerson(rel.PlayerIdB, out b, out unused) || b == null) continue;
-                    // 話しかけるほうを入れ替えて、毎回同じ人から始まらないようにする。
-                    if (UnityEngine.Random.value < 0.5f)
-                    {
-                        var swap = a;
-                        a = b;
-                        b = swap;
-                    }
-
-                    string nameA = NameOf(a, null);
-                    string nameB = NameOf(b, null);
-                    // 台詞は Resources/Master/RelationEvents.csv（RelationEventCatalog）から、2人が満たす条件で選ぶ。
+                    // 台詞が用意できない組は選ばない。
                     string lineA;
                     string lineB;
                     string result;
                     if (!RelationEventCatalog.TryPick(next, a, b, n => UnityEngine.Random.Range(0, n), out lineA, out lineB, out result))
                         continue;
-
-                    if (BeginRelation(crowd, a.Id, nameA, lineA, b.Id, nameB, lineB, result, next)) return true;
+                    // 話しかけるほう（アイコンを出す人）を入れ替えて、毎回同じ人にならないようにする。
+                    if (UnityEngine.Random.value < 0.5f) session.OfferRelationBubble(a.Id, b.Id, next);
+                    else session.OfferRelationBubble(b.Id, a.Id, next);
+                    return false;
                 }
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// フルオートのとき true。タップを待たずに、関係イベントのアイコンをすぐ始める。
+        /// </summary>
+        public bool AutoPlayPending { get; set; }
+
+        /// <summary>関係イベントのアイコンがタップされた。2人が画面にいれば、立ち絵の画面で始める。</summary>
+        public bool PlayPendingRelation(GameSession session, GroundCrowd crowd)
+        {
+            if (session == null || crowd == null) return false;
+            var pending = session.PendingRelation;
+            if (pending == null) return false;
+            if (Active && _talkFriend) return false;
+            ReleaseCues(crowd);
+            End();
+            _crowd = crowd;
+            crowd.CopyVisibleIds(_visible);
+            if (!_visible.Contains(pending.A) || !_visible.Contains(pending.B)) return false;
+            Player a;
+            Player b;
+            StaffMember unused;
+            if (!session.TryClubPerson(pending.A, out a, out unused) || a == null) return false;
+            if (!session.TryClubPerson(pending.B, out b, out unused) || b == null) return false;
+            string lineA;
+            string lineB;
+            string result;
+            if (!RelationEventCatalog.TryPick(pending.Next, a, b, n => UnityEngine.Random.Range(0, n), out lineA, out lineB, out result))
+                return false;
+            _fill = _play;
+            _play.Clear();
+            bool begun = BeginRelation(crowd, a.Id, NameOf(a, null), lineA, b.Id, NameOf(b, null), lineB, result, pending.Next);
+            _fill = null;
+            if (!begun || !_play.Armed)
+            {
+                _play.Clear();
+                return false;
+            }
+
+            _gathering = true;
+            _gatherTime = 0f;
+            _meetPause = -1f;
+            _nextAttempted = false;
+            _idle = 0f;
+            _retry = 0f;
+            return true;
+        }
+
+        /// <summary>
+        /// 居残り練習の吹き出しアイコンを出すか（今日の居残り練習があり、まだ見せていない）。
+        /// 居残り練習はその場で始めず、アイコンのタップ（PlayExtraPractice）で始める。
+        /// タップしなくても、能力と親密度は日の締めで今までどおり伸びる。アイコンはその日の終わりで消える。
+        /// </summary>
+        public bool ExtraPracticeOffered(GameSession session)
+        {
+            return session != null && ExtraPracticeWaiting(session);
+        }
+
+        /// <summary>居残り練習のアイコンがタップされた。2人が画面にいれば、立ち絵の画面で始める。</summary>
+        public bool PlayExtraPractice(GameSession session, GroundCrowd crowd)
+        {
+            if (session == null || crowd == null || !ExtraPracticeWaiting(session)) return false;
+            if (Active && _talkFriend) return false;
+            ReleaseCues(crowd);
+            End();
+            _crowd = crowd;
+            crowd.CopyVisibleIds(_visible);
+            _fill = _play;
+            _play.Clear();
+            bool begun = TryExtraPractice(session);
+            _fill = null;
+            if (!begun || !_play.Armed)
+            {
+                _play.Clear();
+                return false;
+            }
+
+            _gathering = true;
+            _gatherTime = 0f;
+            _meetPause = -1f;
+            _nextAttempted = false;
+            _idle = 0f;
+            _retry = 0f;
+            return true;
         }
 
         /// <summary>今日の居残り練習があり、まだ見せていない。</summary>

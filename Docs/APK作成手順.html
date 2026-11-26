@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>SCS-OPS-01 APK 作成手順書</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 18mm 15mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #fff; color: #1c1c1c;
+    font-family: "Yu Gothic", "Yu Gothic UI", "Meiryo", sans-serif; font-size: 10.5pt; line-height: 1.65; }
+  body { max-width: 190mm; margin: 0 auto; padding: 10mm 0; }
+  h1 { font-size: 18pt; line-height: 1.35; margin: 0 0 4mm; letter-spacing: 0.02em; }
+  h2 { font-size: 13.5pt; margin: 8mm 0 3mm; padding-bottom: 1.2mm; border-bottom: 0.6pt solid #1f3a5f;
+    break-after: avoid; page-break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 5mm 0 2mm; color: #1f3a5f; break-after: avoid; page-break-after: avoid; }
+  p { margin: 0 0 2.5mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin: 0.4mm 0; }
+  li > ul { margin: 0.5mm 0 1mm; }
+  a { color: #1f3a5f; }
+  code { font-family: "Consolas", "BIZ UDGothic", monospace; font-size: 9.5pt; background: #f3f6f9;
+    padding: 0 1mm; border-radius: 1mm; }
+  pre { background: #f3f6f9; border: 0.4pt solid #c5cdd6; padding: 2.5mm 3mm; margin: 2mm 0 4mm;
+    font-size: 9.5pt; line-height: 1.5; overflow-x: auto; break-inside: avoid; }
+  pre code { background: none; padding: 0; }
+  .meta { width: 100%; border-collapse: collapse; margin: 0 0 4mm; }
+  .meta th, .meta td { border: 0.4pt solid #c5cdd6; padding: 1.4mm 2.4mm; text-align: left; vertical-align: top; }
+  .meta th { width: 28mm; background: #f3f6f9; font-weight: 600; }
+  table.data { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; break-inside: avoid;
+    page-break-inside: avoid; font-size: 10pt; }
+  table.data th, table.data td { border: 0.4pt solid #c5cdd6; padding: 1.5mm 2.2mm; text-align: left; vertical-align: top; }
+  table.data th { background: #eef3f8; font-weight: 600; }
+  .lead { margin-bottom: 4mm; }
+</style>
+</head>
+<body>
+
+<h1>APK 作成手順書</h1>
+
+<table class="meta">
+  <tr><th>文書</th><td>SCS-OPS-01</td></tr>
+  <tr><th>版</th><td>1.0（初版）</td></tr>
+  <tr><th>日付</th><td>2026-11-26</td></tr>
+  <tr><th>関連</th><td><a href="仕様書.html">SCS-SPEC-01</a>、<a href="仕様書-クラブ.html">SCS-SPEC-02</a>、<a href="仕様書-リーグ.html">SCS-SPEC-03</a>。Claude プロジェクトの claude/apk-build-release-flow.md（同じ内容）</td></tr>
+  <tr><th>範囲</th><td>APK の作り方、バージョンの決まり方、リリースノートと Google ドライブへの置き方、困ったときの対処</td></tr>
+</table>
+
+<p class="lead">人が読む手順（第1〜6章）と、Claude が実行するときの手順（第7章）に分かれている。内容を変えるときは、Claude プロジェクトの claude/apk-build-release-flow.md と一緒に直す。</p>
+
+<h2>1. 全体の流れ</h2>
+<pre><code>変更を入れる
+  └ CHANGES_NEXT.md に変更メモを1行ずつ書く
+APK を作る（3つの方法のどれか）
+  ├ Unity が変更を取り込み、コンパイルを待つ
+  ├ 変更メモからバージョンを自動で決める（新機能 +0.1.0 / 機能修正 +0.0.1）
+  ├ ビルド → Builds\soccer_life.apk
+  ├ ドライブへ APK をコピー（soccer_life_v{版}_{日時}.apk）
+  ├ 14日を過ぎた古い APK をドライブから削除（最新版は残す）
+  └ リリースノートを作ってドライブへコピー、変更メモを空に戻す
+</code></pre>
+<h2>2. 前提条件</h2>
+<table class="data">
+<thead>
+<tr>
+<th>項目</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PC</td>
+<td>起動していて、スリープしていない</td>
+</tr>
+<tr>
+<td>Unity</td>
+<td><code>C:\project\soccer_life</code> を開いている（Unity 6000.3.26f1、ビルド対象は Android）</td>
+</tr>
+<tr>
+<td>Google ドライブ</td>
+<td>パソコン版 Google ドライブが動いていて、<code>G:\マイドライブ</code> が見える</td>
+</tr>
+<tr>
+<td>Claude に頼む場合</td>
+<td>Claude デスクトップアプリが開いていて、この会話が PC につながっている。<code>C:\project\soccer_life</code> フォルダが接続済み</td>
+</tr>
+<tr>
+<td>注意</td>
+<td>この PC の Unity は <strong>Auto Refresh がオフ</strong>。手で変更したスクリプトは Ctrl+R で取り込む（自動ビルドと依頼ビルドは自分で取り込む）</td>
+</tr>
+</tbody>
+</table>
+<h2>3. APK の作り方（3つの方法）</h2>
+<h3>方法A：Claude に頼む（いちばん簡単）</h3>
+<ol>
+<li>チャットで「APK作って」と送る</li>
+<li>Claude が依頼ファイルを置き、ビルドの完了まで見届けて、結果（ファイル名・バージョン・更新内容）を返す</li>
+<li>バージョンは聞かれない。変更メモから自動で決まる（2026-11-18 ユーザー指示）</li>
+<li>音声通話からは PC を操作できないので、テキストのチャットで頼む</li>
+</ol>
+<h3>方法B：依頼ファイルを置く（自分で、画面操作なし）</h3>
+<ol>
+<li><code>C:\project\soccer_life\Builds\</code> に、<code>request-soccer_life.build</code> という名前のテキストファイルを作る</li>
+<li>中身に1語だけ書く<ul>
+<li><code>auto</code> … 変更メモから自動で決める（ふつうはこれ）</li>
+<li><code>minor</code> … 新機能 +0.1.0</li>
+<li><code>patch</code> … 機能修正 +0.0.1</li>
+<li><code>none</code> … バージョンを上げない</li>
+</ul>
+</li>
+<li>5秒ほどで Unity がファイルを見つけて消し、ビルドが始まる（3〜11分）</li>
+<li>結果は <code>Builds\nightly-status.txt</code> の最後の行で確認する（<code>SUCCESS v0.x.y</code> なら成功）</li>
+</ol>
+<h3>方法C：Unity の画面から手動で作る</h3>
+<ol>
+<li>Unity のメニュー「File → Build Profiles」を開く（Ctrl+Shift+B）</li>
+<li>Android が Active になっていることを確かめ、「Build」を押す</li>
+<li>保存先は <code>C:\project\soccer_life\Builds\soccer_life.apk</code>（上書きしてよい）</li>
+<li>「APK のバージョン」ダイアログで、機能修正 / 新機能 / 上げない を選ぶ</li>
+<li>終わると、ステータスバーに「Build completed with a result of 'Succeeded'」と出る</li>
+</ol>
+<h3>自動：毎朝 4:00〜4:30</h3>
+<ul>
+<li>Unity が開いていて、前回の APK のあとに <code>Assets</code> / <code>Packages</code> / <code>ProjectSettings</code> に変更がある日だけ、自動でビルドする</li>
+<li>バージョンは変更メモから自動で決まる</li>
+<li>PC が切れている、スリープしている、Unity が閉じている日は何もしない（4:30 を過ぎたらその日は飛ばす）</li>
+<li>止めたいときは、メニュー「SoccerClubSim → APKアップロード → 毎日4時に自動ビルド」のチェックを外す</li>
+</ul>
+<h2>4. 変更メモとバージョン</h2>
+<h3>変更メモ（CHANGES_NEXT.md）</h3>
+<ul>
+<li>場所：<code>C:\project\soccer_life\CHANGES_NEXT.md</code>（メニュー「SoccerClubSim → APKアップロード → 変更メモを開く」でも開ける）</li>
+<li>変更を入れたら「- 」で始まる1行で追記する（全スレッド共通ルール）</li>
+<li>APK ができると、内容がリリースノートの【更新内容】に移り、ファイルは空のひな形に戻る</li>
+</ul>
+<h3>バージョンの決まり方</h3>
+<ul>
+<li>形式：メジャー.マイナー.パッチ（開発中なのでメジャーは 0。リリース時に 1.0.0 へ手動で上げる）</li>
+<li>自動判定（変更メモの「- 」行を見る）<ul>
+<li>「追加」「新設」「導入」「新機能」を含む行が1つでもある → <strong>新機能 +0.1.0</strong></li>
+<li>ただし「台詞」「セリフ」「文言」「テキスト」「パターン」「翻訳」を含む行は数えない</li>
+<li>それ以外、またはメモが空 → <strong>機能修正 +0.0.1</strong></li>
+</ul>
+</li>
+<li>書き方のコツ：新しい機能・画面・イベントは「〜を追加」、直しは「〜を修正／変更／調整」</li>
+<li>versionCode（Android の内部番号）＝ メジャー×1000000 ＋ マイナー×1000 ＋ パッチ（例：0.8.1 → 8001）</li>
+<li>自動ビルド・依頼ビルドが失敗したら、バージョンは元に戻る（手動ビルドの失敗は戻らない）</li>
+</ul>
+<h2>5. できるもの</h2>
+<table class="data">
+<thead>
+<tr>
+<th>場所</th>
+<th>ファイル</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PC</td>
+<td><code>C:\project\soccer_life\Builds\soccer_life.apk</code></td>
+<td>最新の APK（毎回上書き）</td>
+</tr>
+<tr>
+<td>PC</td>
+<td><code>Builds\RELEASE_NOTES.txt</code></td>
+<td>リリースノート（新しい版が先頭）</td>
+</tr>
+<tr>
+<td>PC</td>
+<td><code>Builds\nightly-status.txt</code></td>
+<td>自動ビルド・依頼ビルドの記録（開始・判定理由・成功／失敗）</td>
+</tr>
+<tr>
+<td>ドライブ</td>
+<td><code>G:\マイドライブ\game\soccer_life\APK\soccer_life_v{版}_{年月日_時分}.apk</code></td>
+<td>APK（版ごとに1ファイル）</td>
+</tr>
+<tr>
+<td>ドライブ</td>
+<td><code>G:\マイドライブ\game\soccer_life\APK\RELEASE_NOTES.txt</code></td>
+<td>PC と同じリリースノート</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>リリースノートの1版ぶん：版と日時、versionCode、【更新内容】（変更メモ）、【変更ファイル】（前回の APK のあとに更新されたファイルを種類別に）</li>
+<li><strong>古い APK の削除</strong>：APK をドライブに置くたびに、作ってから 14 日を過ぎた APK を消す。最新版は必ず残す。消したものは Google ドライブのゴミ箱に 30 日残る。日数は <code>ApkDriveUploader.cs</code> の <code>KeepDays</code></li>
+</ul>
+<h2>6. 困ったとき</h2>
+<table class="data">
+<thead>
+<tr>
+<th>症状</th>
+<th>原因</th>
+<th>対処</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>依頼ファイルが消えずに残る</td>
+<td>Unity が閉じている／止まっている</td>
+<td>Unity Hub から soccer_life を開く。開けば依頼ファイルを見つけてビルドする</td>
+</tr>
+<tr>
+<td>Unity を開くと「Enter Safe Mode?」が出る</td>
+<td>スクリプトにコンパイルエラーがある</td>
+<td>Safe Mode に入り Console のエラーを直す。直って Ctrl+R で取り込むと Safe Mode が自動で終わる</td>
+</tr>
+<tr>
+<td><code>FAIL ... errors=N</code>（記録の最後の行）</td>
+<td>コンパイルエラー、または取り込み前の変更</td>
+<td>Console を開いて（Ctrl+Shift+C）エラーを見る。直したらもう一度依頼する（バージョンは戻っているので <code>auto</code> のままでよい）</td>
+</tr>
+<tr>
+<td>「script class layout is incompatible」</td>
+<td>変更したスクリプトが未コンパイルのままビルドした</td>
+<td>Ctrl+R で取り込んでから作り直す（依頼ビルドは自動で取り込むので通常は起きない）</td>
+</tr>
+<tr>
+<td>手動ビルドでバージョンのダイアログが見えない</td>
+<td>別のモニターや隠れた位置に出ている</td>
+<td>依頼ファイル方式（方法B）を使う</td>
+</tr>
+<tr>
+<td>Build Profiles が外したモニターに開いて押せない</td>
+<td>ウィンドウの位置が残っている</td>
+<td>依頼ファイル方式（方法B）を使う</td>
+</tr>
+<tr>
+<td>朝4時に作られていない</td>
+<td>PC のスリープ、Unity が閉じていた、変更がなかった</td>
+<td><code>nightly-status.txt</code> に SKIP の記録があるか見る。記録がなければ Unity が動いていなかった</td>
+</tr>
+<tr>
+<td>【更新内容】が「メモなし」</td>
+<td>変更メモに書き忘れ</td>
+<td>リリースノートは手で書き足せる。新機能だった場合はバージョンが機能修正になっているので、次の依頼を <code>minor</code> にする</td>
+</tr>
+</tbody>
+</table>
+<h2>7. Claude が実行するときの手順</h2>
+<p>ユーザーに「APK作って」と頼まれたら、<strong>バージョンは聞かずに</strong>次の順で進める。</p>
+<ol>
+<li><strong>依頼ファイルを置く</strong><ul>
+<li>作業フォルダに毎回 <strong>新しいサブフォルダ</strong> を作り（例：<code>/mnt/user-data/outputs/v{年月日}/</code>）、中身 <code>auto</code> の <code>request-soccer_life.build</code> を書く</li>
+<li><code>device_commit_files</code> で <code>C:\project\soccer_life\Builds\request-soccer_life.build</code> に書き込む</li>
+<li>注意：同じパスのファイルを使い回すと、古い内容が送られることがあった（2026-11-09、11-13）。スクリプトを書き換えるときも新しいフォルダから送り、送ったあと <code>device_stage_files</code> で読み直して中身を確認する</li>
+</ul>
+</li>
+<li><strong>受け付けを確認する</strong>（30〜45秒後）<ul>
+<li><code>Builds\nightly-status.txt</code> を読み、最後の行が <code>START 依頼ビルド（…）</code> になっているか見る。判定（新機能／機能修正）と理由もここに出る</li>
+<li>依頼ファイルが残っていたら Unity が動いていない → コンピューター操作で Unity Hub から soccer_life を開く（Safe Mode が出たらエラーを直す。第6章）</li>
+</ul>
+</li>
+<li><strong>完了を待つ</strong>（3〜11分）<ul>
+<li><code>nightly-status.txt</code> の最後の行が <code>SUCCESS v0.x.y</code> になるまで待つ。<code>FAIL</code> なら Console でエラーを見る</li>
+</ul>
+</li>
+<li><strong>結果を確かめる</strong><ul>
+<li><code>Builds\RELEASE_NOTES.txt</code> の先頭の版を読む</li>
+<li><code>G:\マイドライブ\game\soccer_life\APK</code> を一覧し、新しい APK と、削除された古い APK を確認する</li>
+</ul>
+</li>
+<li><strong>報告する</strong>（🛠ケンジ）<ul>
+<li>ドライブの APK のファイル名とサイズ、リリースノートの場所</li>
+<li>バージョン（前 → 後）と判定の理由</li>
+<li>更新内容の要約、変更ファイルの件数</li>
+<li>古い APK を削除したかどうか</li>
+<li>気になる点（メモが空なのにファイルが多く変わっている、など）</li>
+</ul>
+</li>
+</ol>
+<h2>8. 関係するスクリプト（Assets/Editor）</h2>
+<table class="data">
+<thead>
+<tr>
+<th>ファイル</th>
+<th>役割</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NightlyApkBuilder.cs</code></td>
+<td>毎朝4時の自動ビルド、依頼ファイル、ビルド前の取り込み、バージョンの自動判定、失敗時に番号を戻す</td>
+</tr>
+<tr>
+<td><code>ApkVersionBumper.cs</code></td>
+<td>ビルド直前にバージョンを上げる（手動ビルドではダイアログで選ぶ）</td>
+</tr>
+<tr>
+<td><code>ApkDriveUploader.cs</code></td>
+<td>APK をドライブにコピー（名前は <code>soccer_life_</code> で固定）、14日を過ぎた APK を削除</td>
+</tr>
+<tr>
+<td><code>ReleaseNotesWriter.cs</code></td>
+<td>リリースノートを作ってドライブにコピー、変更メモを空に戻す</td>
+</tr>
+<tr>
+<td><code>AndroidApkBuild.cs</code></td>
+<td>旧方式（<code>request-apk.build</code>）。Development ビルドで PlayerSettings を書き換えるので使わない</td>
+</tr>
+</tbody>
+</table>
+
+</body>
+</html>
