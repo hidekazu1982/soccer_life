@@ -271,7 +271,14 @@ namespace SoccerClub.UI
         /// <summary>BeginGroup の中。x は NcListX を 0 にした座標。</summary>
         void DrawNcPlayerRow(Player player, float y)
         {
-            DrawNcRowBase(y, player.Id == _selectedPlayerId, player.BestPosition().ToString(), NcPlayerPos, player.Gender, player.Name, player.Age);
+            // 版 1.63：ポジション別に色分けする（POS の札はポジションカラー、行の地にもうっすら同じ色）。
+            var group = PositionUtility.GroupOf(player.BestPosition());
+            var groupColor = PositionUtility.GroupColor(group);
+            _ncRowTint = groupColor;
+            _ncPosTextColor = group == PositionGroup.MF ? NcText : Color.white;
+            DrawNcRowBase(y, player.Id == _selectedPlayerId, player.BestPosition().ToString(), groupColor, player.Gender, player.Name, player.Age);
+            _ncRowTint = null;
+            _ncPosTextColor = null;
             FitNcLabel(new Rect(NcRowParam, y, NcHeadW[4], NcRowHeight), player.DisplayOverall.ToString(CultureInfo.InvariantCulture), _ncCell, 24);
             FitNcLabel(NcSalaryCell(y), MoneyText.Format(player.AnnualSalary), _ncCellRight, 24);
             DrawTex(new Rect(NcRowCondition, y + 26f, 48f, 49f), ConditionIcon(player));
@@ -284,15 +291,24 @@ namespace SoccerClub.UI
         }
 
         /// <summary>行の地（選択中は白地に黄色の線）。左に POS の札。</summary>
+        // 選手の行だけ使う（DrawNcPlayerRow が描く間だけ入れる）。
+        Color? _ncRowTint;
+        Color? _ncPosTextColor;
+        const float NcRowTintAlpha = 0.14f;
+
         void DrawNcRowFrame(float y, bool selected, Color posColor, string pos)
         {
             var row = new Rect(0f, y, NcListWidth, NcRowHeight);
             if (selected) NcRound(row, Color.white, 16f);
+            else if (_ncRowTint.HasValue) NcRound(row, Color.Lerp(NcListRow, _ncRowTint.Value, NcRowTintAlpha), 16f);
             else NcRound(row, NcListRow, 16f);
             NcRound(new Rect(0f, y, 100f, NcRowHeight), posColor, new Vector4(16f, 0f, 0f, 16f));
             if (selected) NcOutline(row, NcYellow, 4f, 16f);
             else NcOutline(row, NcRowLine, 2f, 16f);
+            var previous = _ncPosText.normal.textColor;
+            if (_ncPosTextColor.HasValue) _ncPosText.normal.textColor = _ncPosTextColor.Value;
             FitNcLabel(new Rect(0f, y, 100f, NcRowHeight), pos, _ncPosText, 24);
+            _ncPosText.normal.textColor = previous;
         }
 
         /// <summary>行の地、POS、M/F、名前、年齢（選手・スタッフ・フロントで共通）。</summary>
@@ -586,7 +602,8 @@ namespace SoccerClub.UI
         // ---- 詳細（選手とスタッフで共通の部分）
 
         /// <summary>1 行目（略号・名前・背番号）、2 行目（性別・誕生日・年齢）、顔、年俸。</summary>
-        void DrawNcDetailCommon(string id, string pos, Color posFill, Color posText, string name, string number, Gender gender, int age, Texture2D portrait, string salary)
+        /// appearances は選手の今シーズンの出場数。スタッフとフロントは -1（出さない）。
+        void DrawNcDetailCommon(string id, string pos, Color posFill, Color posText, string name, string number, Gender gender, int age, Texture2D portrait, string salary, int appearances = -1)
         {
             // 顔（160 角、角丸 20）。先に描いて、はみ出した角を詳細枠の色で消す。
             NcRound(NcPortraitBox, Color.white, 20f);
@@ -620,10 +637,28 @@ namespace SoccerClub.UI
             GUI.Label(new Rect(396f, 403f, 90f, 40f), month.ToString(CultureInfo.InvariantCulture) + "/" + day.ToString(CultureInfo.InvariantCulture), _ncSmall);
             GUI.Label(new Rect(NcRightX - 100f, 403f, 100f, 40f), age.ToString(CultureInfo.InvariantCulture) + "歳", _ncSmallRight);
 
-            var salaryRow = new Rect(NcDetailX, 619f, NcDetailWidth, 40f);
-            NcRowBox(salaryRow);
-            NcBand(salaryRow, NcBandWidth, "年俸", NcBrown, Color.white);
-            FitNcLabel(new Rect(330f, 619f, NcRightX - 330f, 40f), salary, _ncSmallRight, 24);
+            if (appearances < 0)
+            {
+                var salaryRow = new Rect(NcDetailX, 619f, NcDetailWidth, 40f);
+                NcRowBox(salaryRow);
+                NcBand(salaryRow, NcBandWidth, "年俸", NcBrown, Color.white);
+                FitNcLabel(new Rect(330f, 619f, NcRightX - 330f, 40f), salary, _ncSmallRight, 24);
+                return;
+            }
+
+            // 版 1.64：選手は年俸の行を左 280 に縮め、右に見出し「試合数」付きの別の枠で今シーズンの出場数を出す。
+            const float salaryWidth = 280f;
+            const float appsGap = 8f;
+            const float appsBand = 96f;
+            var salaryBox = new Rect(NcDetailX, 619f, salaryWidth, 40f);
+            NcRowBox(salaryBox);
+            NcBand(salaryBox, NcBandWidth, "年俸", NcBrown, Color.white);
+            FitNcLabel(new Rect(NcDetailX + NcBandWidth + 6f, 619f, salaryWidth - NcBandWidth - 18f, 40f), salary, _ncSmallRight, 24);
+            var appsBox = new Rect(NcDetailX + salaryWidth + appsGap, 619f, NcDetailWidth - salaryWidth - appsGap, 40f);
+            NcRowBox(appsBox);
+            NcBand(appsBox, appsBand, "試合数", NcBrown, Color.white);
+            FitNcLabel(new Rect(appsBox.x + appsBand + 6f, 619f, appsBox.width - appsBand - 18f, 40f),
+                appearances.ToString(CultureInfo.InvariantCulture) + "試合", _ncSmallRight, 24);
         }
 
         /// <summary>詳細枠（角丸 24、線 3）。</summary>
@@ -662,7 +697,8 @@ namespace SoccerClub.UI
                 player.Gender,
                 player.Age,
                 PortraitOf(player, club),
-                MoneyText.Format(player.AnnualSalary));
+                MoneyText.Format(player.AnnualSalary),
+                player.SeasonRatedMatches);
 
             // 総合力と OFF・DEF・STA。
             NcTopBox("総合力", player.DisplayOverall.ToString(CultureInfo.InvariantCulture));
@@ -670,7 +706,8 @@ namespace SoccerClub.UI
             NcStat(531f, "DEF", player.DisplayDefense);
             NcStat(571f, "STA", player.DisplayStaminaMax);
 
-            DrawNcInfo(session, player.Id, player.Children);
+            // 版 1.70：一覧の先頭に本人の「ひとこと」を出す。
+            DrawNcInfo(session, player.Id, player.Children, voice: NcVoiceFor(session, player));
         }
 
         void NcStat(float y, string label, int value)
@@ -820,7 +857,7 @@ namespace SoccerClub.UI
         // ---- 関係とパーソナルデータ
 
         /// <summary>関係（夫婦・恋人・親友・友達）と、パーソナルデータ（趣味・好きな食べ物・苦手な食べ物・子ども）。多いときはスクロールする。</summary>
-        void DrawNcInfo(GameSession session, string id, int childCount, float top = 667f, float bottom = 899f)
+        void DrawNcInfo(GameSession session, string id, int childCount, float top = 667f, float bottom = 899f, string voice = null)
         {
             var area = new Rect(NcInfoArea.x, top, NcInfoArea.width, bottom - top);
             var track = new Rect(NcInfoTrack.x, top, NcInfoTrack.width, bottom - top);
@@ -836,12 +873,19 @@ namespace SoccerClub.UI
             if (CharacterLife.IsMovie(hobby)) hobby = "映画（" + CharacterLife.Movie(id) + "）";
             bool children = childCount > 0;
             int rows = _ncRelations.Count + 3 + (children ? 1 : 0);
-            float content = rows * NcInfoStride - (NcInfoStride - 40f);
+            bool hasVoice = !string.IsNullOrEmpty(voice);
+            float content = rows * NcInfoStride - (NcInfoStride - 40f) + (hasVoice ? NcVoiceHeight : 0f);
             float maxScroll = Mathf.Max(0f, content - area.height);
             UpdateNcInfoScroll(maxScroll, area, track);
 
             GUI.BeginGroup(area);
             float y = -_ncInfoScroll;
+            if (hasVoice)
+            {
+                DrawNcVoice(y, voice);
+                y += NcVoiceHeight;
+            }
+
             for (int i = 0; i < _ncRelations.Count; i++, y += NcInfoStride)
             {
                 var row = new Rect(0f, y, NcDetailWidth, 40f);

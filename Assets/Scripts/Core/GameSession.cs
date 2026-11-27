@@ -990,6 +990,7 @@ namespace SoccerClub.Core
             else if (reason == "gate") _month.Gate += amount;
             else if (reason == "broadcast") _month.Broadcast += amount;
             else if (reason == "prize") _month.Prize += amount;
+            else if (reason == "pickup") _month.Other += amount;
             else if (reason == "operating" || reason == "party") _month.Operating -= amount;
             else if (reason == "advertising") _month.Advertising -= amount;
             else if (reason == "development") _month.Development -= amount;
@@ -1696,14 +1697,10 @@ namespace SoccerClub.Core
         /// <summary>自クラブが続けて優勝を逃しているシーズン数。</summary>
         public int DroughtSeasons;
 
-        /// <summary>
-        /// 連覇が続くと、1シーズンごとに他クラブの強さをこの割合だけ上げる（打倒王者の機運）。
-        /// 優勝を逃すと元に戻る。0 で無効（既定 3%）。シミュレーターから変えられる。
-        /// </summary>
-        public const double DefaultRivalStreakBoost = 0.03d;
-        public static double RivalStreakBoost = DefaultRivalStreakBoost;
+        // 版 1.66：連覇で他クラブを強くする補正（RivalStreakBoost）は廃止。連覇が難しくなりすぎるため。
+        // 優勝で上がる相手の強さは、リーグLV（リーグLV＝施設LV）だけで決める。
 
-        /// <summary>自クラブの連覇数（直前のシーズンまで）。</summary>
+        /// <summary>自クラブの連覇数（直前のシーズンまで）。会議室の台詞などに使う。</summary>
         public int TitleStreak;
 
         /// <summary>
@@ -1792,10 +1789,7 @@ namespace SoccerClub.Core
                 double scale = RivalStrengthScale > 0d ? RivalStrengthScale : DefaultRivalStrengthScale;
                 double relief = RivalDroughtRelief > 0d && RivalDroughtRelief < 1d
                     ? Math.Pow(1d - RivalDroughtRelief, DroughtSeasons) : 1d;
-                // 1回目の優勝は対象外。2連覇目から1シーズンごとに強くする。
-                double boost = RivalStreakBoost > 0d && TitleStreak > 1
-                    ? Math.Pow(1d + RivalStreakBoost, TitleStreak - 1) : 1d;
-                double target = standard * scale * grade * jitter * relief * boost;
+                double target = standard * scale * grade * jitter * relief;
                 double current = TopElevenAverage(club.Squad);
                 if (current <= 0d) continue;
                 double factor = target / current;

@@ -9,7 +9,7 @@ namespace SoccerClub.UI
     /// <summary>
     /// 操作がないまま 5 秒たつと、立ち止まってから吹き出しを出す。
     /// 1 人はその場で止まり、2 人は歩み寄って止まる。話のあいだに次の候補が位置について待つ。
-    /// ズームと吹き出しだけで、能力やお金は変えない。
+    /// 吹き出しだけで、能力やお金は変えない。版 1.66 からカメラは寄らない（引きの画面のまま話す）。
     /// </summary>
     public sealed class MiniEventDirector
     {
@@ -103,8 +103,6 @@ namespace SoccerClub.UI
         float _meetPause = -1f;
         bool _gathering;
         string _lastSpeaker;
-        Vector2 _heldFocus;
-        bool _hasFocus;
         Font _font;
         GUIStyle _messageStyle;
         GUIStyle _nameStyle;
@@ -120,6 +118,16 @@ namespace SoccerClub.UI
         /// 歩いているキャラにはズームも吹き出しも出さず、GameRunner が立ち絵の画面を重ねる。
         /// </summary>
         public bool Spotlight => Active && _talkFriend;
+
+        /// <summary>
+        /// 関係イベント・居残り練習（立ち絵の画面）の台詞を、待たずに次へ進める（版 1.66、画面タップ）。
+        /// 最後の台詞なら、次の Tick でイベントを終える。
+        /// </summary>
+        public void SkipLine()
+        {
+            if (!Spotlight) return;
+            _shown = TalkSeconds;
+        }
 
         /// <summary>mini_event_sp に渡す中身。</summary>
         public sealed class SpotlightCue
@@ -263,13 +271,6 @@ namespace SoccerClub.UI
                     return;
                 }
 
-                Vector2 live;
-                if (crowd.TryFocusPoint(_speakerId, out live))
-                {
-                    _heldFocus = live;
-                    _hasFocus = true;
-                }
-
                 // 関係イベントは最後の「〜になった！」の吹き出しが出た時点で段階を進める。途中で止まれば進まない。
                 // 居残り練習は Next = None。結果は日送りの締めで反映済みの扱いなので、ここでは何もしない。
                 if (_talkFriend && !_friendDone && _beat == _beatCount - 1)
@@ -350,7 +351,6 @@ namespace SoccerClub.UI
             _speakerName = null;
             _line = null;
             _shown = 0f;
-            _hasFocus = false;
             _gathering = false;
             if (_next.Armed)
             {
@@ -391,6 +391,7 @@ namespace SoccerClub.UI
                 string id = _visible[i];
                 if (cue != _play && _play.Uses(id)) _visible.RemoveAt(i);
                 else if (cue != _next && _next.Uses(id)) _visible.RemoveAt(i);
+                else if (Reserved != null && Reserved.Contains(id)) _visible.RemoveAt(i);
             }
 
             if (_visible.Count == 0) return false;
@@ -462,23 +463,6 @@ namespace SoccerClub.UI
 
             if (_beatCount > 0) _lastSpeaker = _play.Id[_beatCount - 1];
             ShowBeat(0);
-        }
-
-        /// <summary>話しているあいだの注視点。姿が隠れても、直前の位置でズームを保つ。</summary>
-        public bool TryCameraFocus(GroundCrowd crowd, out Vector2 focus)
-        {
-            focus = _heldFocus;
-            if (!Active || _talkFriend) return false;
-            Vector2 live;
-            if (crowd != null && crowd.TryFocusPoint(_speakerId, out live))
-            {
-                _heldFocus = live;
-                _hasFocus = true;
-                focus = live;
-                return true;
-            }
-
-            return _hasFocus;
         }
 
         /// <summary>head は UI 座標。frame_name はクラブカラー、character_name は背番号カラー。</summary>
@@ -686,6 +670,12 @@ namespace SoccerClub.UI
         /// フルオートのとき true。タップを待たずに、関係イベントのアイコンをすぐ始める。
         /// </summary>
         public bool AutoPlayPending { get; set; }
+
+        /// <summary>
+        /// 頭上に吹き出しアイコンを出しているキャラ（GameRunner が渡す）。版 1.62 から、ふつうの会話には選ばない
+        /// （会話の吹き出しでアイコンが隠れ、提案が消えたように見えていたため）。
+        /// </summary>
+        public HashSet<string> Reserved { get; set; }
 
         /// <summary>関係イベントのアイコンがタップされた。2人が画面にいれば、立ち絵の画面で始める。</summary>
         public bool PlayPendingRelation(GameSession session, GroundCrowd crowd)
@@ -1133,7 +1123,6 @@ namespace SoccerClub.UI
             _gathering = false;
             _gatherTime = 0f;
             _meetPause = -1f;
-            _hasFocus = false;
         }
 
         void ShuffleVisible()

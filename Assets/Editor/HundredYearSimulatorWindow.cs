@@ -192,8 +192,6 @@ namespace SoccerClub.EditorTools
                     ? "_base" + s.BaseScale.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "")
                 + (Math.Abs(s.Relief - SoccerClub.Core.GameSession.DefaultRivalDroughtRelief) > 1e-9
                     ? "_relief" + s.Relief.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "")
-                + (Math.Abs(s.Streak - SoccerClub.Core.GameSession.DefaultRivalStreakBoost) > 1e-9
-                    ? "_streak" + s.Streak.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "")
                 + (s.Allowance != SoccerClub.Data.Facility.DefaultLeagueLevelAllowance
                     ? "_allow" + s.Allowance.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")
                 + (s.FollowSupport ? "_support" : "")

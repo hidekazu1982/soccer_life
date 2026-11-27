@@ -14,8 +14,28 @@ namespace SoccerClubSim.EditorTools
     /// 設定はメニュー「SoccerClubSim > APKアップロード」から。
     /// 設定値は EditorPrefs（PC ごと）に保存するので、リポジトリには入らない。
     /// </summary>
+    [InitializeOnLoad]
     public class ApkDriveUploader : IPreprocessBuildWithReport, IPostprocessBuildWithReport
     {
+        // Builds\request-prune-apk.build を置くと、確認なしで「最新版以外のAPKを削除」を行う（Claude から頼むとき用。2026-11-27）
+        static string PruneRequestPath =>
+            Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Builds", "request-prune-apk.build");
+        static double nextPruneCheck;
+
+        static ApkDriveUploader()
+        {
+            EditorApplication.update += PollPruneRequest;
+        }
+
+        static void PollPruneRequest()
+        {
+            if (EditorApplication.timeSinceStartup < nextPruneCheck) return;
+            nextPruneCheck = EditorApplication.timeSinceStartup + 5;
+            if (!File.Exists(PruneRequestPath)) return;
+            try { File.Delete(PruneRequestPath); } catch (Exception) { return; }
+            PruneAllButNewest(false);
+        }
+
         const string PrefKeyFolder = "SoccerClubSim.ApkDriveUploader.Folder";
         const string PrefKeyEnabled = "SoccerClubSim.ApkDriveUploader.Enabled";
         const string SessionKeyStart = "SoccerClubSim.ApkDriveUploader.BuildStartTicks";
@@ -189,6 +209,58 @@ namespace SoccerClubSim.EditorTools
                 return;
             }
             EditorUtility.RevealInFinder(DriveFolder);
+        }
+
+        // 日数に関係なく、ドライブの APK を最新版（いちばん新しい 1 つ）だけ残して消す（2026-11-27 追加）。
+        // パソコン版 Google ドライブで消したファイルは、ドライブのゴミ箱に 30 日間残る。
+        [MenuItem(MenuRoot + "最新版以外のAPKを削除", priority = 3)]
+        static void DeleteAllButNewest() => PruneAllButNewest(true);
+
+        static void PruneAllButNewest(bool ask)
+        {
+            string folder = DriveFolder;
+            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
+            {
+                Debug.LogWarning("[ApkDriveUploader] コピー先フォルダが見つかりません: " + folder);
+                if (ask) EditorUtility.DisplayDialog("APKアップロード", "コピー先フォルダが見つかりません。", "OK");
+                return;
+            }
+
+            string[] files = Directory.GetFiles(folder, "*.apk");
+            if (files.Length <= 1)
+            {
+                Debug.Log("[ApkDriveUploader] 消せる古い APK はありません");
+                if (ask) EditorUtility.DisplayDialog("APKアップロード", "消せる古い APK はありません。", "OK");
+                return;
+            }
+
+            string newest = files[0];
+            foreach (string file in files)
+            {
+                if (File.GetLastWriteTime(file) > File.GetLastWriteTime(newest)) newest = file;
+            }
+
+            if (ask && !EditorUtility.DisplayDialog("APKアップロード",
+                    $"最新版の {Path.GetFileName(newest)} だけ残して、ほかの APK {files.Length - 1} 件を削除します。\n" +
+                    "（ドライブのゴミ箱に 30 日間残ります）", "削除する", "やめる"))
+                return;
+
+            int deleted = 0;
+            foreach (string file in files)
+            {
+                if (file == newest) continue;
+                try
+                {
+                    File.Delete(file);
+                    deleted++;
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[ApkDriveUploader] APK を削除できませんでした: {Path.GetFileName(file)} ({e.Message})");
+                }
+            }
+
+            Debug.Log($"[ApkDriveUploader] 最新版（{Path.GetFileName(newest)}）以外の APK を {deleted} 件削除しました");
         }
 
         [MenuItem(MenuEnabled, priority = 20)]

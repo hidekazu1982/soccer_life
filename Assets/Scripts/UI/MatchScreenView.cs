@@ -82,9 +82,11 @@ namespace SoccerClub.UI
         const float SettleEnd = 0.65f;
         const float BounceEnd = 0.80f;
         const float ScorePopLength = 0.5f;
-        // チャンスの切り替わりのトランジション（版 1.59）。回の最後の TransitionUnits で幕が左から覆い、
-        // 次の回の最初の TransitionUnits で右へ抜ける。単位は回の進み（1 回＝1、ゴールの回＝2）。
-        const float TransitionUnits = 0.09f;
+        // チャンスの切り替わりのトランジション（版 1.59、タメは版 1.61）。回の終わりに TransitionUnits かけて幕が左から覆い、
+        // 覆いきったまま TransitionHold だけ止めてエンブレムを見せ、次の回の最初の TransitionUnits で右へ抜ける。
+        // 単位は回の進み（1 回＝1、ゴールの回＝2。どちらにもタメの分 TransitionHold を足す）。1 単位はおよそ 2 秒。
+        const float TransitionUnits = 0.12f;
+        const float TransitionHold = 0.30f;
         const float TransitionTilt = -12f;
         const float TransitionEdge = 26f;
 
@@ -138,7 +140,7 @@ namespace SoccerClub.UI
             {
                 DrawField(true);
                 DrawHeader(fixture, 0, 0, false, false, 0f);
-                DrawEleven(result, viewer, 0, false);
+                DrawEleven(result, viewer, 0, false, 0f);
                 return;
             }
 
@@ -178,7 +180,6 @@ namespace SoccerClub.UI
             float units = local * RoundWeight(duel);
             DrawField(attackLeft);
             DrawPlay(duel, attackLeft, units);
-            DrawTransition(events, round, units, progress);
 
             int homeGoals = GoalsBefore(result, round);
             int awayGoals = GoalsBefore(result, round, false);
@@ -198,18 +199,20 @@ namespace SoccerClub.UI
             float pop = scored ? Mathf.Clamp01((units - ShotEnd) / ScorePopLength) : 1f;
             bool popping = scored && pop < 1f;
             DrawHeader(fixture, homeGoals, awayGoals, popping && attackLeft, popping && !attackLeft, pop);
-            DrawEleven(result, viewer, round, progress >= 1f);
+            DrawEleven(result, viewer, round, progress >= 1f, units);
             DrawClock(fixture, events, round);
             DrawGoalLists(fixture, result, round, scored);
             DrawSubstitutions(fixture, result, round, units);
             DrawGoalEffect(fixture, result, round, duel, units);
+            // 版 1.62 から幕はいちばん上に描き、覆っている間はエンブレム以外（上部のカード・スコア・時計など）をすべて隠す。
+            DrawTransition(events, round, units, progress);
             GUI.color = Color.white;
         }
 
         /// <summary>
         /// チャンスの切り替わりに挟む幕。次に攻めるクラブのユニフォームの色（1st）の斜めの幕が左から画面を覆い、
         /// 覆いきったところでそのクラブのエンブレムを出し、次の回の頭で右へ抜ける。
-        /// ピッチと選手の上、上部の 11 人とスコアの下に描く。最初の回の頭と最後の回の終わりには挟まない。
+        /// 版 1.62 から画面のいちばん上に描き、覆っている間はエンブレムだけを見せる。最初の回の頭と最後の回の終わりには挟まない。
         /// </summary>
         void DrawTransition(List<DuelEvent> events, int round, float units, float progress)
         {
@@ -218,9 +221,10 @@ namespace SoccerClub.UI
             float cover;
             bool closing;
             Club club;
-            if (round < events.Count - 1 && units > weight - TransitionUnits)
+            float holdStart = weight - TransitionHold;
+            if (round < events.Count - 1 && units > holdStart - TransitionUnits)
             {
-                cover = Mathf.Clamp01((units - (weight - TransitionUnits)) / TransitionUnits);
+                cover = Mathf.Clamp01((units - (holdStart - TransitionUnits)) / TransitionUnits);
                 closing = true;
                 club = events[round + 1].AttackClub;
             }
@@ -265,13 +269,16 @@ namespace SoccerClub.UI
             GUI.DrawTexture(new Rect(panel.x + TransitionEdge * 1.5f, panel.y, TransitionEdge * 0.5f, panel.height), Texture2D.whiteTexture);
             GUI.matrix = matrix;
 
-            // 覆いきる前後だけ、次に攻めるクラブのエンブレムを出す。
+            // 覆いきる前後とタメの間だけ、次に攻めるクラブのエンブレムを出す。タメの頭で少し弾ませる。
             float emblemAlpha = Mathf.Clamp01((cover - 0.7f) / 0.3f);
+            float hold = closing ? Mathf.Clamp01((units - holdStart) / TransitionHold) : 1f;
+            float bump = closing && hold > 0f ? Mathf.Sin(Mathf.Clamp01(hold / 0.35f) * Mathf.PI) * 0.12f : 0f;
             var emblem = Emblem(club);
             if (emblem != null && emblemAlpha > 0f)
             {
-                float size = 260f + 40f * emblemAlpha;
-                var rect = new Rect(GameRunner.ReferenceWidth * 0.5f - size * 0.5f, 560f - size * 0.5f, size, size);
+                // 版 1.62 で 260〜300 角から 480〜540 角に拡大し、画面の真ん中に置く。
+                float size = (480f + 60f * emblemAlpha) * (1f + bump);
+                var rect = new Rect(GameRunner.ReferenceWidth * 0.5f - size * 0.5f, GameRunner.ReferenceHeight * 0.5f - size * 0.5f, size, size);
                 GUI.color = new Color(1f, 1f, 1f, emblemAlpha);
                 GUI.DrawTexture(rect, emblem, ScaleMode.ScaleToFit, true);
             }
@@ -380,7 +387,13 @@ namespace SoccerClub.UI
         /// 自クラブ（viewer）のピッチ上の 11 人を上端に並べる。並びは先発の枠の順。
         /// 交代は抽選の回のあとに起きるので、round 回目より前の交代を当てはめる。試合が終わったら全部当てはめる。
         /// </summary>
-        void DrawEleven(MatchResult result, Club viewer, int round, bool finished)
+        // 交代のカードの入れ替え（版 1.62。回の進みの単位）。交代の次の回の SwapStart から SwapLength かけて、
+        // 前半で OUT の選手のカードが上へ抜け、後半で IN の選手のカードが上から入る。
+        const float SwapStart = 0.12f;
+        const float SwapLength = 0.40f;
+        readonly Player[] _swapOut = new Player[11];
+
+        void DrawEleven(MatchResult result, Club viewer, int round, bool finished, float units)
         {
             if (result == null) return;
             bool home = viewer == null || viewer != result.Away;
@@ -394,6 +407,9 @@ namespace SoccerClub.UI
                 _eleven[i] = slot == null ? null : new LineupSlot { Slot = slot.Slot, Player = slot.Player };
             }
 
+            for (int i = 0; i < _swapOut.Length; i++)
+                _swapOut[i] = null;
+
             var subs = result.Substitutions;
             if (subs != null)
             {
@@ -403,12 +419,37 @@ namespace SoccerClub.UI
                     if (sub == null || sub.Home != home) continue;
                     if (!finished && sub.Round >= round) continue;
                     if (sub.SlotIndex < 0 || sub.SlotIndex >= _eleven.Length || _eleven[sub.SlotIndex] == null) continue;
+                    // 直前の回のあとの交代は、この回の頭でカードを入れ替える。
+                    if (!finished && sub.Round == round - 1)
+                        _swapOut[sub.SlotIndex] = _eleven[sub.SlotIndex].Player;
                     _eleven[sub.SlotIndex].Player = sub.In;
                 }
             }
 
+            float t = Mathf.Clamp01((units - SwapStart) / SwapLength);
             for (int i = 0; i < _eleven.Length; i++)
-                DrawPlayerCard(i, _eleven[i], club);
+            {
+                var slot = _eleven[i];
+                var outPlayer = _swapOut[i];
+                if (outPlayer == null || slot == null || t >= 1f)
+                {
+                    DrawPlayerCard(i, slot, club, 0f);
+                    continue;
+                }
+
+                // 抜ける距離はカードの下端が画面の上の外へ出るまで。
+                float travel = ElevenTop + CardHeight + GameRunner.VerticalEdgeInset + 20f;
+                if (t < 0.5f)
+                {
+                    float k = Smooth(t / 0.5f);
+                    DrawPlayerCard(i, new LineupSlot { Slot = slot.Slot, Player = outPlayer }, club, -travel * k, OutPink);
+                }
+                else
+                {
+                    float k = Smooth((t - 0.5f) / 0.5f);
+                    DrawPlayerCard(i, slot, club, -travel * (1f - k), InGreen);
+                }
+            }
         }
 
         void DrawElevenCard(int index, LineupSlot slot, Club club)
@@ -737,7 +778,8 @@ namespace SoccerClub.UI
 
         static float RoundWeight(DuelEvent duel)
         {
-            return duel != null && duel.Goal ? GoalRoundWeight : 1f;
+            // 回の終わりに、トランジションのタメの分を足す（最後の回は試合終了の余韻になる）。
+            return (duel != null && duel.Goal ? GoalRoundWeight : 1f) + TransitionHold;
         }
 
         static void Locate(List<DuelEvent> events, float progress, out int round, out float local)

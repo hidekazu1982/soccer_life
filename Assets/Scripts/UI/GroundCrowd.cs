@@ -186,6 +186,15 @@ namespace SoccerClub.UI
         readonly HashSet<string> _slow = new HashSet<string>();
 
         /// <summary>吹き出しアイコンを出している人。毎フレーム入れ直す。</summary>
+        // 版 1.68：カメラが注視しているキャラは立ち止まる（画面の外に出て吹き出しが消えないように）。
+        string _frozen;
+
+        /// <summary>立ち止まらせるキャラ。null で解く。登場・退場の途中は止めない。</summary>
+        public void SetFrozen(string id)
+        {
+            _frozen = id;
+        }
+
         public void SetSlow(HashSet<string> ids)
         {
             _slow.Clear();
@@ -373,8 +382,10 @@ namespace SoccerClub.UI
                 var walker = pair.Value;
                 bool absent = absentees != null && absentees.Contains(walker.Id);
                 UpdatePresence(walker, absent);
-                bool slow = !walker.Leaving && !walker.Arriving && _slow.Contains(walker.Id);
-                Step(walker, slow ? deltaTime * BubbleWalkScale : deltaTime);
+                bool steady = !walker.Leaving && !walker.Arriving;
+                bool frozen = steady && _frozen != null && walker.Id == _frozen;
+                bool slow = steady && _slow.Contains(walker.Id);
+                Step(walker, frozen ? 0f : slow ? deltaTime * BubbleWalkScale : deltaTime);
                 if (!walker.Leaving && walker != _dragged)
                     KeepInZone(walker);
             }

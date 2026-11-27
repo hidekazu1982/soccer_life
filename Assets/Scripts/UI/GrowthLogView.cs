@@ -31,8 +31,15 @@ namespace SoccerClub.UI
         // 一番上に着いてからこの秒数で消す。
         const float TopSeconds = 1f;
 
-        static readonly Color PlusColor = new Color(0f, 0f, 1f, 1f);
-        static readonly Color MinusColor = new Color(1f, 0x38 / 255f, 0x3C / 255f, 1f);
+        // 版 1.65 から main_redesign の log_row：1 行ずつクリームの角丸の札（線 #E2CFA5）に、
+        // アイコン 36、値（伸びは青 #2E5E9E、下がりは赤 #BF335E、26px）、名前（濃い茶色、22px）。
+        static readonly Color PlusColor = new Color(0.18f, 0.37f, 0.62f, 1f);
+        static readonly Color MinusColor = new Color(0.75f, 0.2f, 0.37f, 1f);
+        static readonly Color RowFill = new Color(1f, 0.992f, 0.965f, 0.94f);
+        static readonly Color RowLine = new Color(0.886f, 0.812f, 0.647f, 1f);
+        static readonly Color NameColor = new Color(0.29f, 0.18f, 0.078f, 1f);
+        const float RowHeight = 42f;
+        const float RowIcon = 36f;
 
         sealed class Entry
         {
@@ -128,14 +135,26 @@ namespace SoccerClub.UI
                 alpha *= Mathf.Clamp01(entry.Age / FadeInSeconds);
                 if (alpha <= 0.01f) continue;
 
+                string value = entry.Delta > 0 ? "+" + entry.Delta : entry.Delta.ToString();
+                float valueW = _value.CalcSize(new GUIContent(value)).x;
+                float nameW = Mathf.Min(260f, _name.CalcSize(new GUIContent(entry.Name)).x);
+                var row = new Rect(origin.x, y, 8f + RowIcon + 10f + valueW + 10f + nameW + 18f, RowHeight);
+                GUI.DrawTexture(new Rect(row.x, row.y + 2f, row.width, row.height), Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f,
+                    new Color(0f, 0f, 0f, 0.2f * alpha), 0f, RowHeight * 0.5f);
+                GUI.DrawTexture(row, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f,
+                    new Color(RowFill.r, RowFill.g, RowFill.b, RowFill.a * alpha), 0f, RowHeight * 0.5f);
+                GUI.DrawTexture(row, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f,
+                    new Color(RowLine.r, RowLine.g, RowLine.b, alpha), 2f, RowHeight * 0.5f);
                 GUI.color = new Color(1f, 1f, 1f, alpha);
                 var icon = Icon(entry.Stat);
                 if (icon != null)
-                    GUI.DrawTexture(new Rect(origin.x, y, IconWidth, IconHeight), icon, ScaleMode.ScaleToFit, true);
+                    GUI.DrawTexture(new Rect(row.x + 8f, row.y + (RowHeight - RowIcon) * 0.5f, RowIcon, RowIcon), icon, ScaleMode.ScaleToFit, true);
+                float x = row.x + 8f + RowIcon + 10f;
                 _value.normal.textColor = entry.Delta > 0 ? PlusColor : MinusColor;
-                string value = entry.Delta > 0 ? "+" + entry.Delta : entry.Delta.ToString();
-                GUI.Label(new Rect(origin.x + ValueX, y, NameX - ValueX, IconHeight), value, _value);
-                GUI.Label(new Rect(origin.x + NameX, y, 260f, IconHeight), entry.Name, _name);
+                GUI.Label(new Rect(x, row.y, valueW + 2f, RowHeight), value, _value);
+                x += valueW + 10f;
+                _name.normal.textColor = NameColor;
+                GUI.Label(new Rect(x, row.y, nameW + 2f, RowHeight), entry.Name, _name);
             }
 
             GUI.color = previous;
@@ -161,13 +180,14 @@ namespace SoccerClub.UI
             _value = new GUIStyle(GUI.skin.label)
             {
                 font = font,
-                fontSize = 32,
+                fontSize = 26,
+                fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleLeft,
                 clipping = TextClipping.Overflow,
                 wordWrap = false,
                 padding = new RectOffset(0, 0, 0, 0)
             };
-            _name = new GUIStyle(_value) { fontSize = 24, normal = { textColor = Color.black } };
+            _name = new GUIStyle(_value) { fontSize = 22, normal = { textColor = NameColor } };
         }
     }
 }

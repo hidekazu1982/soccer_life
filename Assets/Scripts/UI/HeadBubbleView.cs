@@ -25,12 +25,15 @@ namespace SoccerClub.UI
     /// </summary>
     public sealed class HeadBubbleView
     {
-        public const float Size = 72f;
-        const float TailHeight = 16f;
+        // 版 1.61 で 72 → 108 に拡大（触りやすくする）。タップの判定はさらに HitPad だけ外へ広げる。
+        public const float Size = 108f;
+        const float TailHeight = 24f;
+        const float TailWidth = 33f;
         const float Lift = 8f;
-        const float BobPixels = 5f;
+        const float BobPixels = 6f;
         const float BobSpeed = 3f;
-        const float Border = 5f;
+        const float Border = 7f;
+        const float HitPad = 24f;
 
         Texture2D _disc;
         Texture2D _tail;
@@ -54,35 +57,38 @@ namespace SoccerClub.UI
             float cx = disc.center.x;
 
             GUI.color = new Color(0f, 0f, 0f, 0.25f);
-            GUI.DrawTexture(new Rect(disc.x + 2f, disc.y + 4f, Size, Size), _disc);
-            GUI.DrawTexture(new Rect(cx - 9f, disc.yMax - 4f, 22f, TailHeight + 4f), _tail);
+            GUI.DrawTexture(new Rect(disc.x + 3f, disc.y + 6f, Size, Size), _disc);
+            GUI.DrawTexture(new Rect(cx - TailWidth * 0.5f + 3f, disc.yMax - 6f, TailWidth, TailHeight + 6f), _tail);
 
             GUI.color = edge;
             GUI.DrawTexture(disc, _disc);
-            GUI.DrawTexture(new Rect(cx - 11f, disc.yMax - 8f, 22f, TailHeight + 8f), _tail);
+            GUI.DrawTexture(new Rect(cx - TailWidth * 0.5f, disc.yMax - 12f, TailWidth, TailHeight + 12f), _tail);
 
             GUI.color = Color.white;
             var inner = new Rect(disc.x + Border, disc.y + Border, Size - Border * 2f, Size - Border * 2f);
             GUI.DrawTexture(inner, _disc);
-            GUI.DrawTexture(new Rect(cx - 6f, disc.yMax - Border - 4f, 12f, TailHeight - 2f), _tail);
+            GUI.DrawTexture(new Rect(cx - 9f, disc.yMax - Border - 6f, 18f, TailHeight - 3f), _tail);
 
             _glyph.normal.textColor = edge;
             GUI.Label(inner, Glyph(kind), _glyph);
             GUI.color = previous;
-            return GUI.Button(bounds, GUIContent.none, _hit);
+            var hit = new Rect(bounds.x - HitPad, bounds.y - HitPad, bounds.width + HitPad * 2f, bounds.height + HitPad * 2f);
+            return GUI.Button(hit, GUIContent.none, _hit);
         }
 
         static string Glyph(HeadBubbleKind kind)
         {
+            // 版 1.62：スタッフやフロントの提案と練習は汎用の「！」、友達と親友は「♪」、恋人と夫婦は「♡」。
             switch (kind)
             {
-                case HeadBubbleKind.Facility: return "▲";
-                case HeadBubbleKind.Personnel: return "人";
-                case HeadBubbleKind.Sponsor: return "¥";
-                case HeadBubbleKind.Friend: return "♪";
-                case HeadBubbleKind.BestFriend: return "★";
-                case HeadBubbleKind.ExtraPractice: return "練";
-                default: return "♥";
+                case HeadBubbleKind.Friend:
+                case HeadBubbleKind.BestFriend:
+                    return "♪";
+                case HeadBubbleKind.Lover:
+                case HeadBubbleKind.Spouse:
+                    return "♡";
+                default:
+                    return "！";
             }
         }
 
@@ -115,7 +121,7 @@ namespace SoccerClub.UI
             _glyph = new GUIStyle(GUI.skin.label)
             {
                 font = font,
-                fontSize = 40,
+                fontSize = 60,
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
                 clipping = TextClipping.Overflow,

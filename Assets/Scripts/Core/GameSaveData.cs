@@ -154,6 +154,7 @@ namespace SoccerClub.Core
         public string Gate;
         public string Broadcast;
         public string Prize;
+        public string Other;
         public string Operating;
         public string Advertising;
         public string Development;

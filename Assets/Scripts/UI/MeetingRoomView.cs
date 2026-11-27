@@ -133,6 +133,45 @@ namespace SoccerClub.UI
             return marks;
         }
 
+        /// <summary>
+        /// 画面タップで台詞を飛ばすとき（版 1.66）の行き先。time より後にある区切り（台詞や出入りの終わり）のうち、いちばん近いもの。
+        /// なければ End。
+        /// </summary>
+        public static float NextMark(Marks marks, float time)
+        {
+            float best = marks.End;
+            float[] all =
+            {
+                marks.ScoutInEnd, marks.ScoutTalkEnd, marks.GmTalkEnd, marks.ScoutOutEnd, marks.PlayerInEnd,
+                marks.GreetEnd, marks.EllipsisEnd, marks.NegotiateEnd, marks.ResultEnd, marks.PlayerExitStart,
+                marks.GmGreetEnd, marks.GmResultEnd, marks.PlayerReactEnd, marks.GmReactEnd
+            };
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] > time + 0.01f && all[i] < best) best = all[i];
+            }
+
+            return best;
+        }
+
+        /// <summary>季節のイベントの区切り（会話の数で変わる）。</summary>
+        public static Marks SeasonalMarks(ClubStory story)
+        {
+            int index;
+            var script = SeasonalScript(story, out index);
+            return SeasonalTimeline(script != null ? script.LineCount : 2);
+        }
+
+        /// <summary>季節のパーティの区切り。会話は季節イベントと同じで、そのあと結果を出して End。</summary>
+        public static Marks PartyTimeline(ClubStory story)
+        {
+            int index;
+            var script = SeasonalScript(story, out index);
+            var marks = script != null ? SeasonalTimeline(script.LineCount) : new Marks { PlayerInEnd = SlideSeconds, ResultEnd = SlideSeconds };
+            marks.End = PartyDuration(story);
+            return marks;
+        }
+
         /// <summary>結果の文字が出る時刻。成否で変わらない。</summary>
         public static float ResultAt => Timeline(false).NegotiateEnd;
 

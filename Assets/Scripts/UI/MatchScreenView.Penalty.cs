@@ -71,7 +71,7 @@ namespace SoccerClub.UI
             int shown = index < 0 ? 0 : index >= kicks.Count ? kicks.Count : index + (local >= KickShotEnd ? 1 : 0);
             DrawHeader(fixture, result.HomeGoals, result.AwayGoals, false, false, 1f);
             DrawPenaltyTally(result, shown);
-            DrawEleven(result, viewer, result.Events != null ? result.Events.Count : 0, true);
+            DrawEleven(result, viewer, result.Events != null ? result.Events.Count : 0, true, 0f);
 
             if (index < 0)
             {

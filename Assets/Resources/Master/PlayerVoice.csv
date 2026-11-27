@@ -1,0 +1,52 @@
+﻿# 選手詳細の「ひとこと」（版 1.70）。1行=1つの台詞。条件に合う行から、選手と日付で1つ選ぶ（同じ日は同じ台詞）。
+# condition: any（いつでも）/ hobby / hobby_movie（趣味が映画）/ food / dislike / dream / season_goal / birthday（今日が誕生日）
+#            young（20歳以下）/ veteran（32歳以上）/ injured（けが中）/ tired（調子40未満）/ fresh（調子90以上）
+#            bench（今季の出場2試合以下で、30日以上出ていない）/ regular（今季10試合以上）/ scorer（今季3得点以上）
+#            married / lover / best_friend / friend / children（子どもがいる）
+# weight: 選ばれやすさ（1が標準。0で無効）。その時の状況を表す行は大きめにしている。
+# 使える差し込み: {me}（一人称）{hobby} {movie} {food} {dislike} {job} {goal} {partner}（恋人・配偶者）{friend}（親友か友達）{goals}（今季の得点）{age} {children}
+# 台詞の中では半角カンマを使わない（読点「、」を使う）
+condition,weight,line
+any,1,今日もいい天気だね。練習日和だ！
+any,1,{me}、このクラブのユニフォームが好きなんだ。
+any,1,サポーターの声、ちゃんと聞こえてるよ。
+any,1,次の試合、絶対に勝とう！
+any,1,監督の指示、今日こそ完璧にこなしてみせる。
+any,1,ロッカールームの空気、最近いい感じだよね。
+hobby,2,休みの日は{hobby}をして過ごしてるんだ。
+hobby,1,{hobby}の話なら、いくらでもできるよ。
+hobby_movie,2,この前、{movie}の映画を観たんだ。泣いちゃった。
+food,2,{food}を食べると元気が出るんだ！
+food,1,試合に勝ったら{food}を食べに行くって決めてる。
+dislike,1,{dislike}だけは、どうしても苦手で……。
+dream,2,引退したら{job}になりたいんだ。内緒だよ。
+dream,1,{me}が{job}になったら、お店に来てくれる？
+season_goal,2,今季の目標は「{goal}」。見ててね。
+season_goal,1,「{goal}」って決めたからには、やりきるよ。
+birthday,6,今日は{me}の誕生日なんだ！　覚えててくれた？
+birthday,4,{age}歳になったよ。今年もよろしくね！
+young,2,早くトップチームで活躍したい！
+young,1,先輩たちの背中、ずっと見てるんだ。
+veteran,2,まだまだ若い者には負けないよ。
+veteran,1,この歳になると、体のケアが一番大事なんだ。
+injured,6,早くけがを治して、ピッチに戻りたい……。
+injured,3,リハビリ、思ったよりきついね。でも負けない。
+tired,4,ちょっと疲れがたまってるかも……。
+tired,2,一日休めたら、また全力で走れるんだけどな。
+fresh,2,体が軽い！　今ならなんでもできそう。
+bench,5,なかなか試合に出られなくて、悔しいな。
+bench,3,次のチャンスが来たら、絶対に逃さない。
+regular,3,毎試合出られて、充実してるよ。
+regular,2,信頼して使ってもらえるのが、本当にうれしい。
+scorer,5,今季はもう{goals}点！　まだまだ取るよ。
+scorer,3,ゴールの瞬間の歓声、何度聞いても最高だね。
+married,5,{partner}と家族になれて、毎日が楽しいんだ。
+married,3,家に帰ると{partner}が待っててくれるんだ。
+lover,5,{partner}とのこと、みんなには内緒だよ……！
+lover,3,次の休み、{partner}とどこに行こうかな。
+best_friend,4,{friend}とは、なんでも話せる仲なんだ。
+best_friend,2,{friend}がいるから、きつい練習も乗り越えられる。
+friend,3,最近、{friend}とよく話すんだ。
+friend,2,{friend}と一緒にご飯に行く約束をしたよ。
+children,5,子どもに、かっこいいところを見せたいんだ。
+children,3,子どもが{me}のユニフォームを着てくれたんだ！

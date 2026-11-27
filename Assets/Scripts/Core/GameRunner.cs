@@ -13,7 +13,7 @@ namespace SoccerClub.Core
     /// <summary>
     /// Play 開始時にクラブを選び、メイン画面とオーナー操作を出す。
     /// </summary>
-    public sealed class GameRunner : MonoBehaviour
+    public sealed partial class GameRunner : MonoBehaviour
     {
         public const int ReferenceWidth = 1920;
         public const int ReferenceHeight = 1080;
@@ -56,10 +56,11 @@ namespace SoccerClub.Core
         const float InfoFrameGap = 10f;
         const float InfoFrameTop = 32f;
         const float InfoRowX = 247f;
-        static Rect DatePlateRect => PinTop(new Rect(InfoRowX, InfoFrameTop, InfoFrameWidth, InfoFrameHeight));
-        static Rect RatingPlateRect => PinTop(new Rect(InfoRowX + InfoFrameWidth + InfoFrameGap, InfoFrameTop, InfoFrameWidth, InfoFrameHeight));
-        static Rect FundsPlateRect => PinTop(new Rect(InfoRowX + (InfoFrameWidth + InfoFrameGap) * 2f, InfoFrameTop, InfoFrameWidth, InfoFrameHeight));
-        static Rect SalaryPlateRect => PinTop(new Rect(InfoRowX + (InfoFrameWidth + InfoFrameGap) * 3f, InfoFrameTop, InfoFrameWidth, InfoFrameHeight));
+        // 版 1.65 から main_redesign の info_bar（GameRunner.MainChrome.cs の CardRect）。
+        static Rect DatePlateRect => CardRect(0);
+        static Rect RatingPlateRect => CardRect(1);
+        static Rect FundsPlateRect => CardRect(2);
+        static Rect SalaryPlateRect => CardRect(3);
         static Rect MenuButtonRect => PinTop(new Rect(ReferenceWidth - 48f - 156f, 36f, 156f, 156f));
         const float DayChromeScale = 0.5f;
         const float DayButtonWidth = 599f * DayChromeScale;
@@ -79,9 +80,10 @@ namespace SoccerClub.Core
         static Rect DayButtonRect => PinBottom(DayButtonDesign);
         // main2 の日送り。1557,865 / 1557,918 / 1422,988。試合画面とリザルトは DayButtonRect のまま。
         // main の auto（176:44）。ゲージ 1557,879 / 212×30.7、AUTO はその右 1769,850。
-        static Rect MainGaugeRect => ShiftRight(PinBottom(new Rect(1557f, 879f, 212f, 30.74f)));
-        static Rect MainDayButtonRect => ShiftRight(PinBottom(new Rect(1557f, 918f, 331f, 130f)));
-        static Rect MainAutoRect => ShiftRight(PinBottom(new Rect(1769f, 850f, 119f, 60f)));
+        // 版 1.65 の main_redesign：黄色の札 1557,930 / 331×112、その上にゲージ 1557,887 と AUTO 1769,858。
+        static Rect MainGaugeRect => ShiftRight(PinBottom(new Rect(1557f, 887f, 212f, 30.74f)));
+        static Rect MainDayButtonRect => ShiftRight(PinBottom(new Rect(1557f, 930f, 331f, 112f)));
+        static Rect MainAutoRect => ShiftRight(PinBottom(new Rect(1769f, 858f, 119f, 60f)));
         // デバッグビルドだけの「フル」と「デバッグ」。どの画面でも左下に並べる（フル 36,992、デバッグはその右）。
         static Rect DebugFullAutoRect => ShiftLeft(PinBottom(new Rect(36f, 992f, 119f, 60f)));
         static Rect DebugButtonRect => ShiftLeft(PinBottom(new Rect(36f + 119f + AutoDesignGap, 992f, 119f, 60f)));
@@ -98,9 +100,10 @@ namespace SoccerClub.Core
         static Rect SponsorAutoRect => ShiftRight(PinBottom(new Rect(1769f, 988f, 119f, 60f)));
         static Rect SponsorFullAutoAnchor => ShiftRight(PinBottom(new Rect(1557f, 988f, 119f, 60f)));
         // match_preparation の日送り。Figma の 1573,879 / 1573,932 / 1438,1002。
-        static Rect LineupGaugeRect => PinBottom(new Rect(1573f, 879f, 331f, 48f));
-        static Rect LineupDayButtonRect => PinBottom(new Rect(1573f, 932f, 331f, 130f));
-        static Rect LineupAutoRect => PinBottom(new Rect(1438f, 1002f, 119f, 60f));
+        // 版 1.65 の match_preparation_redesign：キックオフ 1588,966 / 300×84、AUTO 1453,978、ゲージ 1225,984。
+        static Rect LineupGaugeRect => ShiftRight(PinBottom(new Rect(1225f, 984f, 212f, 30.74f)));
+        static Rect LineupDayButtonRect => ShiftRight(PinBottom(new Rect(1588f, 966f, 300f, 84f)));
+        static Rect LineupAutoRect => ShiftRight(PinBottom(new Rect(1453f, 978f, 119f, 60f)));
         static Rect DayBarRect => new Rect(DayButtonRect.x, DayButtonRect.y - 8f * DayChromeScale - DayGaugeHeight, DayGaugeWidth, DayGaugeHeight);
         // button_gameday の中身。枠そのものは日送りボタンと同じ DayButtonRect。
         const float GameDayDesignWidth = 331f;
@@ -110,7 +113,9 @@ namespace SoccerClub.Core
         const float AutoDesignHeight = 60f;
         const float AutoDesignGap = 16f;
         static readonly Color GameDayTextColor = new Color(58f / 255f, 6f / 255f, 0f, 1f);
-        static readonly Rect DetailDesign = new Rect(36f, 220f, 460f, 680f);
+        // キャラ詳細（版 1.61 からクラブハウスの詳細枠 568×596）。上と右の 24〜30 は ✕ ボタンのはみ出し分。
+        static readonly Rect DetailDesign = new Rect(36f, 196f, 598f, 620f);
+        const float DetailPanelTop = 24f;
         static Rect DetailRect => KeepOnScreen(DetailDesign);
 
         public GameSession Session { get; private set; }
@@ -133,6 +138,8 @@ namespace SoccerClub.Core
         readonly MatchScreenView _matchScreenView = new MatchScreenView();
         readonly MatchPreparationView _lineupView = new MatchPreparationView();
         TeamSheet _lineupSheet;
+        // 試合前の画面で相手のスタメン総合力を出すための、相手の監督が組むスタメン。
+        TeamSheet _opponentSheet;
         readonly MonthReportView _monthReportView = new MonthReportView();
         readonly SponsorOfferView _sponsorOfferView = new SponsorOfferView();
         readonly RankingView _rankingView = new RankingView();
@@ -143,6 +150,8 @@ namespace SoccerClub.Core
         // スポンサーの提案も同じ吹き出しで営業部が出てくる。タップで sponsor（契約書）を開き、開いている間は日送りを止める。
         bool _sponsorOpen;
         readonly GrowthLogView _growthLog = new GrowthLogView();
+        readonly MainPickupView _pickups = new MainPickupView();
+        bool _pickupHooked;
         // その日のうちにログへ出す予定。グラウンドの増減ポップと同じ時刻に出す。
         readonly List<GrowthLogItem> _growthLogQueue = new List<GrowthLogItem>();
 
@@ -452,6 +461,7 @@ namespace SoccerClub.Core
                     bool down = Input.GetMouseButtonDown(0);
                     bool held = Input.GetMouseButton(0);
                     bool up = Input.GetMouseButtonUp(0);
+                    UpdateFocusTap(chrome, down, up);
                     if (down)
                         _suppressOwnerOpen = ShouldSuppressOwnerOpen(chrome, world);
                     else if (!held && !up)
@@ -501,7 +511,10 @@ namespace SoccerClub.Core
                                 : Session.SigningJoined());
                     }
 
-                    if (_dayElapsed >= MeetingDuration())
+                    // パーティは、AUTO でなければ最後の場面で止めて「次へ」を待つ（版 1.62）。
+                    if (IsPartyMeeting() && !_autoPlay)
+                        _dayElapsed = Mathf.Min(_dayElapsed, MeetingDuration());
+                    else if (_dayElapsed >= MeetingDuration())
                         FinishMeeting();
                 }
                 else if (_autoPlay)
@@ -510,7 +523,12 @@ namespace SoccerClub.Core
                     _dayElapsed += UnityEngine.Time.deltaTime;
                     float wait = _fullAuto && NeedsManualNext() ? FullAutoNextSeconds : StorySeconds();
                     if (_dayElapsed >= wait)
+                    {
+                        // パーティの招待で誰も選んでいなければ、おまかせで選んでから決める（版 1.62）。
+                        if (IsPartyInvite() && Session.CurrentStory.Invited.Count == 0)
+                            Session.RecommendPartyGuests(Session.CurrentStory);
                         AdvanceAutoStory();
+                    }
                 }
             }
             else if (_phase == DayPhase.Stats || _phase == DayPhase.Ranking || _phase == DayPhase.Settlement)
@@ -694,8 +712,8 @@ namespace SoccerClub.Core
             if (_phase == DayPhase.Lineup)
             {
                 UseUiScreen();
-                var emblem = _clubSelect.EmblemTexture(club.EmblemIndex - 1);
-                _lineupView.Draw(club, _lineupSheet, _crowd, emblem, _font);
+                // 版 1.65 から Figma の match_preparation_redesign（試合後の画面と同じ枠）。
+                _dialogs.DrawMatchPreparation(Session, PlayerFixtureToday(), club, _lineupSheet, _opponentSheet, _crowd, _font);
                 DrawLineupChrome();
                 GUI.matrix = previousMatrix;
                 GUI.color = previousColor;
@@ -735,8 +753,9 @@ namespace SoccerClub.Core
             if (_phase == DayPhase.MonthReport && Session.PendingMonthReport != null)
             {
                 UseUiScreen();
-                _monthReportView.Draw(Session.PendingMonthReport, _font);
-                DrawReviewChrome();
+                // 版 1.65 から Figma の month_report（試合後の画面と同じ枠）。
+                _dialogs.DrawMonthReport(Session, Session.PendingMonthReport, _font);
+                DrawMonthReportChrome();
                 GUI.matrix = previousMatrix;
                 GUI.color = previousColor;
                 return;
@@ -745,8 +764,16 @@ namespace SoccerClub.Core
             if (_phase == DayPhase.SponsorCut && Session.PendingSponsorCut != null)
             {
                 UseUiScreen();
-                _meeting.DrawSponsorCut(Session.PendingSponsorCut, Session, _font, UnityEngine.Time.unscaledTime - _cutStarted);
+                float cutElapsed = UnityEngine.Time.unscaledTime - _cutStarted;
+                _meeting.DrawSponsorCut(Session.PendingSponsorCut, Session, _font, cutElapsed);
                 DrawReviewChrome();
+                // 版 1.66：ボタン以外をタップしたら、台詞を待たずに次へ（最後の台詞のあとは「次へ」で閉じる）。
+                if (TakeScreenTap())
+                {
+                    var cutMarks = MeetingRoomView.SponsorCutTimeline();
+                    float next = MeetingRoomView.NextMark(cutMarks, cutElapsed);
+                    if (next > cutElapsed) _cutStarted -= next - cutElapsed;
+                }
                 GUI.matrix = previousMatrix;
                 GUI.color = previousColor;
                 return;
@@ -778,6 +805,12 @@ namespace SoccerClub.Core
                     DrawDayGauge(MeetingGaugeRect, duration <= 0f ? 1f : Mathf.Clamp01(elapsed / duration));
                     DrawAutoButton(MeetingAutoRect);
                     DrawFullAutoButton(MeetingAutoRect);
+                    // パーティは、AUTO でないときゲージの左に「次へ」を出す（試合後の画面と同じ）。
+                    if (IsPartyMeeting() && !_autoPlay && _dialogs.DrawPostMatchNext(RankingNextRect, _font))
+                        FinishMeeting();
+                    // 版 1.66：ボタン以外をタップしたら、台詞を待たずに次へ。
+                    else if (TakeScreenTap())
+                        SkipMeetingLine();
                     GUI.matrix = previousMatrix;
                     GUI.color = previousColor;
                     return;
@@ -787,7 +820,8 @@ namespace SoccerClub.Core
                     UseUiScreen();
                     if (_eventView.Draw(Session.CurrentStory, Session, _font))
                         AdvanceOpenStory();
-                    if (CanAutoStory())
+                    // パーティの招待画面にも AUTO とゲージを出す（版 1.62）。AUTO でないときは「決定」で進む。
+                    if (CanAutoStory() || IsPartyInvite())
                         DrawPersonnelAuto();
                     GUI.matrix = previousMatrix;
                     GUI.color = previousColor;
@@ -847,7 +881,7 @@ namespace SoccerClub.Core
                 || overPlayer
                 || overDetail
                 || overDialog;
-            if (!dialogOpen && !_suppressOwnerOpen && !overChrome)
+            if (!dialogOpen && !_suppressOwnerOpen && !overChrome && !MiniEventBlocksWorld)
             {
                 UseMainWorld();
                 if (_mainScreen.DrawBuildingHits(club, out var picked))
@@ -869,6 +903,7 @@ namespace SoccerClub.Core
             if (!hideCast)
                 DrawCharacterMessage(club);
             DrawSupportCallout();
+            DrawPickups();
             if (!clubhouseDialog)
                 DrawInfoPlates(club);
             DrawMenuButton();
@@ -1029,6 +1064,41 @@ namespace SoccerClub.Core
             }
 
             _spotlight.Draw(Session, cue, _font);
+            // 版 1.66：ボタン以外をタップしたら、台詞を待たずに次へ。
+            if (TakeScreenTap()) _miniEvents.SkipLine();
+        }
+
+        /// <summary>
+        /// ボタンなどに使われなかった画面タップ（左ボタンを離した）を 1 回受け取る。台詞を飛ばすのに使う（版 1.66）。
+        /// ボタンは先に描いた順にイベントを使うので、ボタンを描いたあとに呼ぶ。
+        /// </summary>
+        static bool TakeScreenTap()
+        {
+            var e = Event.current;
+            if (e == null || e.type != EventType.MouseUp || e.button != 0) return false;
+            e.Use();
+            return true;
+        }
+
+        /// <summary>会議室の今の区切り。MeetingDuration と同じ分け方。</summary>
+        MeetingRoomView.Marks MeetingMarks()
+        {
+            var story = Session.CurrentStory;
+            if (IsPartyMeeting()) return MeetingRoomView.PartyTimeline(story);
+            if (IsNoticeMeeting()) return MeetingRoomView.NoticeTimeline();
+            if (IsSeasonalMeeting()) return MeetingRoomView.SeasonalMarks(story);
+
+            if (IsNewYearMeeting()) return MeetingRoomView.NewYearTimeline();
+            if (IsExpiryMeeting()) return MeetingRoomView.ExpiryTimeline();
+            bool outcome = _meetingClock ? _meetingSuccess : PredictedMeetingOutcome();
+            return IsTransferMeeting() ? MeetingRoomView.TransferTimeline(outcome) : MeetingRoomView.Timeline(outcome);
+        }
+
+        /// <summary>会議室の台詞を飛ばして、次の区切りまで時計を進める。最後なら次の Update で終わる。</summary>
+        void SkipMeetingLine()
+        {
+            BeginMeetingClock();
+            _dayElapsed = MeetingRoomView.NextMark(MeetingMarks(), _dayElapsed < 0f ? 0f : _dayElapsed);
         }
 
         void DrawCharacterMessage(Club club)
@@ -1036,8 +1106,13 @@ namespace SoccerClub.Core
             if (club == null || _crowd == null || !_miniEvents.Active || _miniEvents.Spotlight) return;
             Vector2 head;
             if (!_crowd.TryHeadPoint(_miniEvents.SpeakerId, out head)) return;
+            // 版 1.67：提案などの吹き出しにカメラが寄って、話している人が画面の外に出たら、吹き出しは出さない。
+            // 出すと画面の端に寄せて描くため、キャラから離れた場所に浮いてしまう。話はそのまま進み、カメラが戻れば見える。
+            var chromeHead = WorldToChrome(head);
+            float edge = HorizontalEdgeInset;
+            if (chromeHead.x < -edge || chromeHead.x > ReferenceWidth + edge || chromeHead.y < 0f || chromeHead.y > ReferenceHeight) return;
             _miniEvents.Draw(
-                WorldToChrome(head),
+                chromeHead,
                 _font,
                 AvatarLibrary.UniformColor(club.EmblemIndex),
                 AvatarLibrary.NumberColor(club.EmblemIndex));
@@ -1177,34 +1252,25 @@ namespace SoccerClub.Core
             bool winterBreak = WinterBreak.Contains(Session.CurrentSeasonStart, date);
             string heading = winterBreak ? "ウィンターブレイク" : ClubYear(date) + "年目";
             heading += "  LV" + Session.LeagueLevel;
-            DrawInfoFrame(DatePlateRect);
-            DrawInfoFrameText(DatePlateRect, heading, GameSession.FormatCalendarDate(date));
+            DrawInfoCard(DatePlateRect, heading, GameSession.FormatCalendarDate(date));
         }
 
         void DrawRatingPlate(Club club)
         {
-            DrawInfoFrame(RatingPlateRect);
-            var plate = RatingPlateRect;
             int count = SquadSize(club);
-            GUI.Label(new Rect(plate.x + 64f, plate.y + 10f, 90f, 29f), "総合力", _plateLabelRight);
-            GUI.Label(new Rect(plate.x + 154f, plate.y + 10f, 40f, 29f), count.ToString(CultureInfo.InvariantCulture), _plateLabelRight);
-            GUI.Label(new Rect(plate.x + 194f, plate.y + 10f, 120f, 29f), " / " + ClubMath.SquadLimit.ToString(CultureInfo.InvariantCulture) + "人", _plateLabelLeft);
-            GUI.Label(new Rect(plate.x + 22f, plate.y + 44f, 305f, 39f), ClubDialogView.FormatRating(club), _plateValueStyle);
+            string label = "総合力  " + count.ToString(CultureInfo.InvariantCulture) + " / " + ClubMath.SquadLimit.ToString(CultureInfo.InvariantCulture) + "人";
+            DrawInfoCard(RatingPlateRect, label, ClubDialogView.FormatRating(club));
         }
 
         void DrawFundsPlate(Club club)
         {
-            DrawInfoFrame(FundsPlateRect);
-            DrawInfoFrameText(FundsPlateRect, "資金", MoneyText.Format(club.Coins));
+            DrawInfoCard(FundsPlateRect, "資金", MoneyText.Format(club.Coins));
         }
 
         void DrawSalaryPlate(Club club)
         {
-            DrawInfoFrame(SalaryPlateRect);
-            var plate = SalaryPlateRect;
-            GUI.Label(new Rect(plate.x + 22f, plate.y + 10f, 305f, 29f), "総年俸", _plateLabelStyle);
             var payroll = _holdPayroll ? _payrollBeforeGrowth : ClubMath.RenewalAnnual(club);
-            GUI.Label(new Rect(plate.x + 22f, plate.y + 44f, 305f, 39f), MoneyText.Format(payroll), _plateValueStyle);
+            DrawInfoCard(SalaryPlateRect, "総年俸", MoneyText.Format(payroll));
         }
 
         static int SquadSize(Club club)
@@ -1293,28 +1359,14 @@ namespace SoccerClub.Core
             }
         }
 
+        /// <summary>試合の日の日送り。黄色の丸い札に、相手のエンブレムと「試合開始」「GAME DAY」（版 1.65）。</summary>
         void DrawGameDayButton(Fixture fixture)
         {
-            var button = MainDayButtonRect;
-            if (_gameDayButton != null)
-                GUI.DrawTexture(button, _gameDayButton, ScaleMode.StretchToFill, true);
-
-            float sx = button.width / GameDayDesignWidth;
-            float sy = button.height / GameDayDesignHeight;
-            var emblemRect = new Rect(button.x, button.y, 147f * sx, 110f * sy);
             var club = Session.PlayerClub;
             var opponent = fixture.Home == club ? fixture.Away : fixture.Home;
-            if (opponent != null)
-            {
-                var emblem = _clubSelect.EmblemTexture(opponent.EmblemIndex - 1);
-                if (emblem != null)
-                    GUI.DrawTexture(emblemRect, emblem, ScaleMode.StretchToFill, true);
-            }
-
-            _gameDayTitleStyle.fontSize = Mathf.RoundToInt(40f * sy);
-            _gameDaySubtitleStyle.fontSize = Mathf.RoundToInt(32f * sy);
-            GUI.Label(new Rect(button.x + 147f * sx, button.y + 22f * sy, 160f * sx, 48f * sy), "試合開始", _gameDayTitleStyle);
-            GUI.Label(new Rect(button.x + 143f * sx, button.y + 66f * sy, 169f * sx, 39f * sy), "GAME DAY", _gameDaySubtitleStyle);
+            Texture2D emblem = opponent != null ? _clubSelect.EmblemTexture(opponent.EmblemIndex - 1) : null;
+            float aspect = emblem != null && emblem.height > 0 ? emblem.width / (float)emblem.height : 1f;
+            DrawDayPill(MainDayButtonRect, emblem, aspect, "試合開始", "GAME DAY", _autoPlay);
         }
 
         Fixture PlayerFixtureToday()
@@ -1495,14 +1547,11 @@ namespace SoccerClub.Core
             DrawAutoButton(AutoButtonRect());
         }
 
+        /// <summary>版 1.65 から黄色の丸い札（左にボールとカレンダーのイラスト）。AUTO 中は暗くする。</summary>
         void DrawNextDayButton(Rect rect)
         {
-            if (_nextDayButton == null) return;
-            var previous = GUI.color;
-            if (_autoPlay)
-                GUI.color = new Color(0.45f, 0.45f, 0.45f, 1f);
-            GUI.DrawTexture(rect, _nextDayButton, ScaleMode.StretchToFill, true);
-            GUI.color = previous;
+            EnsureChromeStyles();
+            DrawDayPill(rect, _nextDayIcon, 1f, "1日進める", "NEXT DAY", _autoPlay);
         }
 
         void DrawAutoButton(Rect rect)
@@ -1559,7 +1608,7 @@ namespace SoccerClub.Core
         {
             float progress = _dayElapsed < 0f ? 0f : Mathf.Clamp01(_dayElapsed / NextSeconds(ReviewSeconds));
             DrawDayGauge(LineupGaugeRect, progress);
-            DrawNextDayButton(LineupDayButtonRect);
+            DrawDayPill(LineupDayButtonRect, null, 1f, "キックオフ", null, _autoPlay);
             DrawAutoButton(LineupAutoRect);
             DrawFullAutoButton(LineupAutoRect);
 
@@ -1643,6 +1692,9 @@ namespace SoccerClub.Core
             _growthCursor = 0f;
             _matchScreen = false;
             _lineupSheet = new ManagerLineupAi().BuildSheet(Session.PlayerClub);
+            var fixture = PlayerFixtureToday();
+            var opponent = fixture == null ? null : fixture.Home == Session.PlayerClub ? fixture.Away : fixture.Home;
+            _opponentSheet = opponent != null ? new ManagerLineupAi().BuildSheet(opponent) : null;
             _status = "スタメン紹介";
         }
 
@@ -1930,6 +1982,13 @@ namespace SoccerClub.Core
             return story != null && story.Kind == ClubStoryKind.Party && story.FinalStep;
         }
 
+        /// <summary>パーティの招待を選ぶ画面（会議室の場面の前）。</summary>
+        bool IsPartyInvite()
+        {
+            var story = Session != null ? Session.CurrentStory : null;
+            return story != null && story.Kind == ClubStoryKind.Party && !story.FinalStep;
+        }
+
         bool IsMeetingRoom() => IsSigningMeeting() || IsTransferMeeting() || IsExpiryMeeting() || IsNewYearMeeting() || IsSeasonalMeeting() || IsNoticeMeeting() || IsPartyMeeting();
 
         bool PredictedMeetingOutcome()
@@ -2070,8 +2129,194 @@ namespace SoccerClub.Core
         readonly HeadBubbleView _bubbleView = new HeadBubbleView();
         readonly List<Rect> _bubbleRects = new List<Rect>();
         readonly HashSet<string> _bubbleHolders = new HashSet<string>();
-        // キャラが画面にいないとき（オフなど）だけ、今までどおり左下に担当者の吹き出しを出す。
+        // 版 1.61 から左下の担当者の吹き出しは出さない（休日などでフロントが画面にいなければ提案も出さない）。
+        // 当たり判定のコードは残しておく。
         bool _legacyCallout;
+
+        // 吹き出しが出たら、そのキャラをカメラで少し注視する（版 1.61）。出た順に 1 つずつ見せる。
+        // 版 1.66：対象は頭上の吹き出しすべて（施設・人事・スポンサー・関係イベント・居残り練習）と、お金・能力の拾えるアイコン。
+        // 寄っている間は、画面のどこをタップしてもそのキャラの吹き出し（アイコン）をタップした扱いにする（タッチミス対策）。
+        const float BubbleFocusSeconds = 2.2f;
+        /// <summary>選ぶまで残る提案（施設・人事・スポンサー）を映す長さ（版 1.68）。</summary>
+        const float ProposalFocusSeconds = 4f;
+        /// <summary>このズーム以上に寄ったら、画面タップを吹き出しのタップとみなす。</summary>
+        const float FocusTapZoom = 1.5f;
+
+        struct FocusTarget
+        {
+            public string Id;
+            public bool Pickup;
+            public HeadBubbleKind Kind;
+            public float Seconds;
+        }
+
+        // 版 1.68：選ぶまで残る提案（施設・人事・スポンサー）を先に、時間で消えるもの（関係・居残り練習・アイコン）をあとに映す。
+        readonly Queue<FocusTarget> _bubbleFocusQueue = new Queue<FocusTarget>();
+        readonly Queue<FocusTarget> _bubbleFocusLater = new Queue<FocusTarget>();
+        /// <summary>列に並んでいるもの（種類とキャラ）。同じものは 1 つだけ並べる。</summary>
+        readonly HashSet<string> _bubbleFocusQueued = new HashSet<string>();
+        /// <summary>提案の吹き出しを出すキャラ。一度決めたら、そのキャラが画面から消えるまで変えない（版 1.68）。</summary>
+        readonly Dictionary<string, string> _holderLock = new Dictionary<string, string>();
+        readonly HashSet<string> _bubbleFocusSeen = new HashSet<string>();
+        /// <summary>カメラが寄る対象の吹き出しを出しているキャラ。毎回描くときに数え直す。</summary>
+        readonly HashSet<string> _focusBubbleHolders = new HashSet<string>();
+        long _bubbleFocusDay = -1;
+        FocusTarget _bubbleFocus;
+        bool _hasBubbleFocus;
+        Vector2 _bubbleFocusPoint;
+        float _bubbleFocusLeft;
+        bool _focusTapReady;
+        bool _focusTapArmed;
+        bool _focusTapFire;
+
+        // 版 1.66：友達・親友・恋人・夫婦と居残り練習の吹き出しでも寄る（いったん外したが戻した）。
+        static bool FocusesCamera(HeadBubbleKind kind) => true;
+
+        static bool IsProposal(HeadBubbleKind kind) =>
+            kind == HeadBubbleKind.Facility || kind == HeadBubbleKind.Personnel || kind == HeadBubbleKind.Sponsor;
+
+        static string FocusKey(FocusTarget target) => (target.Pickup ? "p" : ((int)target.Kind).ToString()) + ":" + target.Id;
+
+        void EnqueueFocus(FocusTarget target, bool first)
+        {
+            if (!_bubbleFocusQueued.Add(FocusKey(target))) return;
+            (first ? _bubbleFocusQueue : _bubbleFocusLater).Enqueue(target);
+        }
+
+        /// <summary>吹き出しが新しく出たら注視の列に入れる。同じキャラの同じ吹き出しは 1 日 1 回だけ。</summary>
+        void NoteBubbleForFocus(string id, HeadBubbleKind kind)
+        {
+            if (Session == null || string.IsNullOrEmpty(id) || !FocusesCamera(kind)) return;
+            _focusBubbleHolders.Add(id);
+            long today = Session.Time.CurrentDate.Date.Ticks;
+            if (_bubbleFocusDay != today)
+            {
+                _bubbleFocusDay = today;
+                _bubbleFocusSeen.Clear();
+            }
+
+            if (_bubbleFocusSeen.Add((int)kind + ":" + id))
+            {
+                bool proposal = IsProposal(kind);
+                EnqueueFocus(new FocusTarget { Id = id, Kind = kind, Seconds = proposal ? ProposalFocusSeconds : BubbleFocusSeconds }, proposal);
+            }
+        }
+
+        /// <summary>拾えるアイコンが出たら注視の列に入れる（フルオートでは寄らない）。</summary>
+        void NotePickupForFocus(string id)
+        {
+            if (string.IsNullOrEmpty(id) || _fullAuto) return;
+            EnqueueFocus(new FocusTarget { Id = id, Pickup = true, Seconds = BubbleFocusSeconds }, false);
+        }
+
+        void ClearBubbleFocus()
+        {
+            _bubbleFocusQueue.Clear();
+            _bubbleFocusLater.Clear();
+            _bubbleFocusQueued.Clear();
+            _hasBubbleFocus = false;
+            _bubbleFocusLeft = 0f;
+            _focusTapReady = false;
+            _focusTapArmed = false;
+            _focusTapFire = false;
+        }
+
+        bool FocusTargetAlive(FocusTarget target) =>
+            // 拾えるアイコンは「まだあるか」で見る。出た直後は描く前（Shown が false）なので、Shown で見ると即座に捨ててしまう（版 1.66 の不具合）。
+            target.Pickup ? _pickups.Has(target.Id) : _focusBubbleHolders.Contains(target.Id);
+
+        /// <summary>
+        /// カメラが寄っている間の画面タップ。UI のボタンとほかの吹き出しの上は除く（そちらは普段どおり）。
+        /// 押したら構え、離したら次の OnGUI で寄っているキャラの吹き出しをタップした扱いにする。
+        /// </summary>
+        void UpdateFocusTap(Vector2 chrome, bool down, bool up)
+        {
+            if (!_focusTapReady)
+            {
+                _focusTapArmed = false;
+                return;
+            }
+
+            if (down) _focusTapArmed = FocusTapCovers(chrome);
+            if (up && _focusTapArmed)
+            {
+                _focusTapArmed = false;
+                _focusTapFire = true;
+            }
+        }
+
+        /// <summary>寄っている間、その位置のタップを吹き出しのタップとして受けるか。</summary>
+        bool FocusTapCovers(Vector2 chrome)
+        {
+            if (!_focusTapReady || HitsMainControls(chrome)) return false;
+            for (int i = 0; i < _bubbleRects.Count; i++)
+                if (_bubbleRects[i].Contains(chrome)) return false;
+            return true;
+        }
+
+        /// <summary>寄っている吹き出しへの画面タップを 1 回だけ受け取る。Layout のときに渡す（同じフレームの描画とずれないように）。</summary>
+        bool ConsumeFocusTap(string id, bool pickup)
+        {
+            if (!_focusTapFire || !_hasBubbleFocus || Event.current == null || Event.current.type != EventType.Layout) return false;
+            if (_bubbleFocus.Pickup != pickup || _bubbleFocus.Id != id) return false;
+            _focusTapFire = false;
+            return true;
+        }
+
+        bool HitsMainControls(Vector2 chrome) =>
+            EmblemRect.Contains(chrome)
+            || HitsInfoPlate(chrome)
+            || MenuButtonRect.Contains(chrome)
+            || HitsMainDayButton(chrome)
+            || HitsMainAutoButton(chrome)
+            || HitsMainFullAutoButton(chrome)
+            || HitsDebugMenu(chrome)
+            || HitsMainDayGauge(chrome);
+
+        /// <summary>
+        /// 吹き出しの注視。ミニイベントがカメラを使っている間や吹き出しが出せない間は待つ（時間も減らさない）。
+        /// 注視中のキャラの吹き出しが消えたら（タップした、期限切れなど）次へ進む。
+        /// </summary>
+        bool TryBubbleFocus(float deltaTime, bool miniBusy, out Vector2 focus)
+        {
+            focus = default;
+            if (_crowd == null || _fullAuto || miniBusy || !HeadBubblesVisible) return false;
+            for (int guard = 0; guard < 16; guard++)
+            {
+                if (!_hasBubbleFocus)
+                {
+                    if (_bubbleFocusQueue.Count == 0 && _bubbleFocusLater.Count == 0) return false;
+                    var next = _bubbleFocusQueue.Count > 0 ? _bubbleFocusQueue.Dequeue() : _bubbleFocusLater.Dequeue();
+                    _bubbleFocusQueued.Remove(FocusKey(next));
+                    // 始めるときだけ、吹き出し（アイコン）が残っていてキャラが映っているかを見る。
+                    if (!FocusTargetAlive(next) || !_crowd.TryFocusPoint(next.Id, out _bubbleFocusPoint)) continue;
+                    _bubbleFocus = next;
+                    _hasBubbleFocus = true;
+                    _bubbleFocusLeft = next.Seconds > 0f ? next.Seconds : BubbleFocusSeconds;
+                }
+
+                // 版 1.67：いったん映し始めたら、決めた時間（約 2.2 秒）が過ぎるまでほかの吹き出しに移らない。
+                // 吹き出しが消えたりキャラが隠れたりしても、最後に映した位置で待つ。
+                // 拾えるアイコンを拾ったときは、「＋」の文字が上がり終わるまで引かない（時間が過ぎていても待つ）。
+                bool gainHold = _bubbleFocus.Pickup && _pickups.GainActive(_bubbleFocus.Id);
+                if (_bubbleFocusLeft > 0f || gainHold)
+                {
+                    // 拾ったあとは位置を止める（「＋」の文字は拾った場所の画面位置に出るので、カメラが動くとずれる）。
+                    bool collected = _bubbleFocus.Pickup && !_pickups.Has(_bubbleFocus.Id);
+                    Vector2 live;
+                    if (!collected && _crowd.TryFocusPoint(_bubbleFocus.Id, out live)) _bubbleFocusPoint = live;
+                    _bubbleFocusLeft -= deltaTime;
+                    focus = _bubbleFocusPoint;
+                    return true;
+                }
+
+                // 版 1.69：注視の時間が終わっても拾われなかったアイコンは消す（カメラが離れたあとに残らないように）。
+                if (_bubbleFocus.Pickup) _pickups.Expire(_bubbleFocus.Id);
+                _hasBubbleFocus = false;
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// 頭上の吹き出しアイコンを出すか。メイン画面で、日送り前か日送り中（試合画面を除く）。
@@ -2094,6 +2339,8 @@ namespace SoccerClub.Core
         bool HitsSupportCallout(Vector2 mouse)
         {
             if (!HeadBubblesVisible) return false;
+            // カメラが寄っている間は、ボタン以外の画面全体が吹き出しの当たり（キャラや建物のタップに渡さない）。
+            if (FocusTapCovers(mouse)) return true;
             if (_legacyCallout && SupportEventView.CalloutBounds(SupportCalloutOrigin).Contains(mouse)) return true;
             for (int i = 0; i < _bubbleRects.Count; i++)
                 if (_bubbleRects[i].Contains(mouse)) return true;
@@ -2105,10 +2352,49 @@ namespace SoccerClub.Core
         /// タップでそれぞれのイベントを開く。担当者が画面にいなければ、画面にいるほかのフロントが代わりに出す。
         /// フロントが誰も画面にいない（オフなど）ときは、今までどおり左下に担当者の吹き出しを出す。
         /// </summary>
+        /// <summary>
+        /// 拾えるアイコンを出してよいとき（版 1.65）。吹き出しと同じ条件で、フルオートでも出す（自動で拾う）。
+        /// </summary>
+        bool PickupsVisible =>
+            Session != null
+            && !_supportOpen
+            && !_sponsorOpen
+            && !_dialogs.IsOpen
+            && !_miniEvents.Spotlight
+            && !_miniEvents.HoldsDay
+            && (_phase == DayPhase.Idle || (_phase == DayPhase.Advancing && !_matchScreen))
+            && (_crowd == null || _crowd.SelectedId == null)
+            && Session.CurrentStory == null
+            && !Session.GameOver;
+
+        void TickPickups(float deltaTime, bool castShown)
+        {
+            if (!_pickupHooked)
+            {
+                _pickupHooked = true;
+                _pickups.StatCollected += (name, stat, delta) => _growthLog.Add(name, stat, delta);
+                _pickups.Spawned += NotePickupForFocus;
+            }
+
+            _pickups.Tick(deltaTime, castShown && PickupsVisible, _fullAuto, Session, _crowd, _bubbleHolders);
+        }
+
+        void DrawPickups()
+        {
+            if (Session == null || _crowd == null) return;
+            // 吹き出しと同じく、当たりを _bubbleRects に足してキャラのタップと重ならないようにする。
+            _pickups.Draw(Session, _crowd, WorldToChrome, _bubbleRects, _bubbleHolders, PickupsVisible, _font);
+            if (_hasBubbleFocus && _bubbleFocus.Pickup && PickupsVisible && ConsumeFocusTap(_bubbleFocus.Id, true))
+                _pickups.CollectFor(_bubbleFocus.Id, Session);
+            // 受け取る相手がいなかった画面タップは捨てる（あとで別の吹き出しに効かないように）。
+            if (Event.current != null && Event.current.type == EventType.Layout) _focusTapFire = false;
+        }
+
         void DrawSupportCallout()
         {
             _bubbleRects.Clear();
             _bubbleHolders.Clear();
+            _focusBubbleHolders.Clear();
             _legacyCallout = false;
             if (!HeadBubblesVisible)
             {
@@ -2125,17 +2411,9 @@ namespace SoccerClub.Core
             var suggestion = Session.CurrentSupport;
             if (suggestion != null)
             {
-                string holder = castShown ? FrontHolder(club, SupportEventView.FindSpeaker(club, suggestion)) : null;
-                if (holder == null)
-                {
-                    _legacyCallout = true;
-                    if (_supportView.DrawCallout(suggestion, Session, _font, SupportCalloutOrigin))
-                    {
-                        OpenSupport(suggestion);
-                        opened = true;
-                    }
-                }
-                else
+                // フロントが画面にいない（休日など）ときは出さない。提案は残り、期限は平日だけ数える。
+                string holder = castShown ? LockedFrontHolder("support:" + suggestion.Kind, club, SupportEventView.FindSpeaker(club, suggestion)) : null;
+                if (holder != null)
                 {
                     var kind = suggestion.Kind == SupportKind.Facility ? HeadBubbleKind.Facility : HeadBubbleKind.Personnel;
                     if (DrawHeadBubble(holder, kind, now, index++))
@@ -2150,22 +2428,8 @@ namespace SoccerClub.Core
             if (!opened && Session.HasSponsorOffer)
             {
                 var offer = Session.PendingSponsorOffer;
-                string holder = castShown ? FrontHolder(club, SponsorOfferView.FindSpeaker(club, offer.StaffName)) : null;
-                if (holder == null)
-                {
-                    // 左下は 1 人ずつ。施設・人事が出ていれば、そちらを先に出す。
-                    if (!_legacyCallout)
-                    {
-                        _legacyCallout = true;
-                        if (_supportView.DrawSponsorCallout(offer, Session, _font, SupportCalloutOrigin))
-                        {
-                            if (_crowd != null) _crowd.ClearSelection();
-                            OpenSponsorOffer();
-                            opened = true;
-                        }
-                    }
-                }
-                else if (DrawHeadBubble(holder, HeadBubbleKind.Sponsor, now, index++))
+                string holder = castShown ? LockedFrontHolder("sponsor", club, SponsorOfferView.FindSpeaker(club, offer.StaffName)) : null;
+                if (holder != null && DrawHeadBubble(holder, HeadBubbleKind.Sponsor, now, index++))
                 {
                     _crowd.ClearSelection();
                     OpenSponsorOffer();
@@ -2176,9 +2440,8 @@ namespace SoccerClub.Core
             var relation = Session.PendingRelation;
             if (!opened && castShown && relation != null)
             {
-                Vector2 unused;
-                if (_crowd.TryHeadPoint(relation.B, out unused)
-                    && DrawHeadBubble(relation.A, RelationBubbleKind(relation.Next), now, index++))
+                // 版 1.62 から、相手（B）が画面にいなくても話しかけるほうの頭上にアイコンを出し続ける（期限まで消さない）。
+                if (DrawHeadBubble(relation.A, RelationBubbleKind(relation.Next), now, index++))
                 {
                     _crowd.ClearSelection();
                     if (!_miniEvents.PlayPendingRelation(Session, _crowd))
@@ -2190,9 +2453,7 @@ namespace SoccerClub.Core
             var practice = Session.TodayExtraPractice;
             if (!opened && castShown && practice != null && _miniEvents.ExtraPracticeOffered(Session))
             {
-                Vector2 unused;
-                if (_crowd.TryHeadPoint(practice.PlayerIdB, out unused)
-                    && DrawHeadBubble(practice.PlayerIdA, HeadBubbleKind.ExtraPractice, now, index++))
+                if (DrawHeadBubble(practice.PlayerIdA, HeadBubbleKind.ExtraPractice, now, index++))
                 {
                     _crowd.ClearSelection();
                     if (!_miniEvents.PlayExtraPractice(Session, _crowd))
@@ -2200,7 +2461,28 @@ namespace SoccerClub.Core
                 }
             }
 
+            // 版 1.68：注視している間は吹き出しを消さない。元の出来事が終わった（期限切れ・日が変わったなど）あとも、
+            // 注視の時間が終わるまで同じ吹き出しを出し続ける。タップしても何も起きず、注視が終わる。
+            if (!opened && castShown && _hasBubbleFocus && !_bubbleFocus.Pickup && !_bubbleHolders.Contains(_bubbleFocus.Id))
+                DrawHeadBubble(_bubbleFocus.Id, _bubbleFocus.Kind, now, index++);
+
             if (_crowd != null) _crowd.SetSlow(_bubbleHolders);
+        }
+
+        /// <summary>
+        /// 提案の吹き出しを出すキャラ（版 1.68）。前に決めたキャラが画面にいるうちは変えない。
+        /// いなくなったときだけ FrontHolder で選び直す（以前は毎回選び直していたので、キャラの出入りで吹き出しが飛んでいた）。
+        /// </summary>
+        string LockedFrontHolder(string key, Club club, StaffMember preferred)
+        {
+            string locked;
+            Vector2 unused;
+            if (_holderLock.TryGetValue(key, out locked) && !_bubbleHolders.Contains(locked) && _crowd.TryHeadPoint(locked, out unused))
+                return locked;
+            string pick = FrontHolder(club, preferred);
+            if (pick != null) _holderLock[key] = pick;
+            else _holderLock.Remove(key);
+            return pick;
         }
 
         bool DrawHeadBubble(string id, HeadBubbleKind kind, float now, int index)
@@ -2211,7 +2493,11 @@ namespace SoccerClub.Core
             var bounds = HeadBubbleView.BoundsAt(WorldToChrome(head), now, index);
             _bubbleRects.Add(bounds);
             _bubbleHolders.Add(id);
-            return _bubbleView.Draw(bounds, kind, _font);
+            NoteBubbleForFocus(id, kind);
+            bool tapped = _bubbleView.Draw(bounds, kind, _font);
+            if (!tapped && FocusesCamera(kind) && ConsumeFocusTap(id, false)) tapped = true;
+            if (tapped) ClearBubbleFocus();
+            return tapped;
         }
 
         static HeadBubbleKind RelationBubbleKind(RelationStage next)
@@ -2349,6 +2635,17 @@ namespace SoccerClub.Core
                 ContinuePostMatch();
         }
 
+        /// <summary>収支報告のゲージ・AUTO・「次へ」（試合後の画面と同じ並び）。</summary>
+        void DrawMonthReportChrome()
+        {
+            float wait = ReportWaitSeconds();
+            DrawDayGauge(SponsorGaugeRect, _autoPlay && _dayElapsed >= 0f ? Mathf.Clamp01(_dayElapsed / wait) : 0f);
+            DrawAutoButton(SponsorAutoRect);
+            DrawFullAutoButton(SponsorFullAutoAnchor);
+            if (!_autoPlay && _dialogs.DrawPostMatchNext(RankingNextRect, _font))
+                ContinuePostMatch();
+        }
+
         void DrawReviewChrome()
         {
             float wait = _phase == DayPhase.MonthReport || _phase == DayPhase.SponsorCut
@@ -2358,15 +2655,8 @@ namespace SoccerClub.Core
                 DrawDayGauge(Mathf.Clamp01(_dayElapsed / wait));
             DrawAutoButton();
             DrawFullAutoButton(AutoButtonRect());
-            DrawNextDayButton(DayButtonRect);
-            if (!_autoPlay)
-            {
-                var caption = new Rect(DayButtonRect.x, DayButtonRect.y - 44f, DayButtonRect.width, 36f);
-                GUI.color = new Color(1f, 0.97f, 0.9f, 0.94f);
-                GUI.DrawTexture(caption, Texture2D.whiteTexture);
-                GUI.color = Color.white;
-                GUI.Label(caption, "次へ", _dayButtonStyle);
-            }
+            // 版 1.65 から、上に「次へ」の札を足す代わりに、黄色の札そのものを「次へ」にする。
+            DrawDayPill(DayButtonRect, null, 1f, "次へ", null, _autoPlay);
 
             var click = Event.current;
             if (!_autoPlay && HitsDayButton(MouseInReference()) && click.type == EventType.MouseUp && click.button == 0)
@@ -2411,10 +2701,22 @@ namespace SoccerClub.Core
             // 友達イベントは、メイン画面が見えているときだけ（操作中でも）割り込ませる。
             bool canShow = !CoveringScreen && !_dialogs.IsOpen;
             _miniEvents.AutoPlayPending = _fullAuto;
+            _miniEvents.Reserved = _bubbleHolders;
             _miniEvents.Tick(Session, _crowd, castPresent, deltaTime, canShow);
+            TickPickups(deltaTime, castPresent && canShow);
 
-            Vector2 focus;
-            bool follow = _miniEvents.TryCameraFocus(_crowd, out focus);
+            // 版 1.66：喋るだけのミニイベントではカメラを寄せない。寄るのは頭上の吹き出しと、
+            // お金・能力の拾えるアイコンが出たキャラだけ。関係イベント（立ち絵の画面）の間は待つ。
+            Vector2 focus = default;
+            bool follow = canShow && TryBubbleFocus(deltaTime, _miniEvents.Spotlight || _miniEvents.HoldsDay, out focus);
+            _focusTapReady = follow && _viewZoom >= FocusTapZoom;
+            if (!_focusTapReady) _focusTapArmed = false;
+            // 版 1.68：注視しているキャラは立ち止まり、アイコンは時間切れで消さない（画面が覆われて待っている間も同じ）。
+            string held = _hasBubbleFocus ? _bubbleFocus.Id : null;
+            if (_crowd != null) _crowd.SetFrozen(held);
+            _pickups.HoldId = _hasBubbleFocus && _bubbleFocus.Pickup ? held : null;
+            // 版 1.69：注視中・注視待ちがある間は新しいアイコンを出さない。出たアイコンはすぐ注視の番になる。
+            _pickups.SpawnPaused = _hasBubbleFocus || _bubbleFocusQueue.Count > 0 || _bubbleFocusLater.Count > 0;
 
             float want = follow ? 2f : 1f;
             _viewZoom = Mathf.MoveTowards(_viewZoom, want, deltaTime * 1.4f);
@@ -2442,9 +2744,12 @@ namespace SoccerClub.Core
             }
         }
 
+        /// <summary>友達系のイベント（立ち絵の画面）の間は、背景の施設とキャラに触れないようにする（版 1.62）。</summary>
+        bool MiniEventBlocksWorld => _miniEvents.Spotlight || _miniEvents.HoldsDay;
+
         bool PointerBlocked(Vector2 chrome, Vector2 world)
         {
-            if (_dialogs.IsOpen) return true;
+            if (_dialogs.IsOpen || MiniEventBlocksWorld) return true;
             if (EmblemRect.Contains(chrome) || HitsInfoPlate(chrome) || MenuButtonRect.Contains(chrome) || HitsMainDayButton(chrome) || HitsMainAutoButton(chrome) || HitsMainFullAutoButton(chrome))
                 return true;
             if (HitsMainDayGauge(chrome)) return true;
@@ -2460,7 +2765,7 @@ namespace SoccerClub.Core
         /// </summary>
         bool ShouldSuppressOwnerOpen(Vector2 chrome, Vector2 world)
         {
-            if (_dialogs.IsOpen) return true;
+            if (_dialogs.IsOpen || MiniEventBlocksWorld) return true;
             if (EmblemRect.Contains(chrome) || MenuButtonRect.Contains(chrome) || HitsInfoPlate(chrome) || HitsMainAutoButton(chrome) || HitsMainFullAutoButton(chrome) || HitsMainDayButton(chrome)) return true;
             if (HitsSupportCallout(chrome)) return true;
             if (_crowd == null) return false;
@@ -2468,18 +2773,29 @@ namespace SoccerClub.Core
             return _crowd.SelectedId != null;
         }
 
+        /// <summary>
+        /// メイン画面でタップしたキャラの詳細。クラブハウスの一覧の左に出している詳細枠と同じもの（版 1.61）。
+        /// 事業部には枠の下に「施設のレベルアップを相談する」を出す。
+        /// </summary>
         void DrawCharacterDetail(Club club, string id)
         {
             var player = FindPlayer(club, id);
-            if (player != null)
-            {
-                DrawPlayerDetail(player);
-                return;
-            }
+            var staff = player == null ? FindStaff(club, id) : null;
+            if (player == null && staff == null) return;
 
-            var staff = FindStaff(club, id);
-            if (staff != null)
-                DrawStaffDetail(staff);
+            string action = staff != null && CanConsultBusiness(staff) ? "施設のレベルアップを相談する" : null;
+            var rect = DetailRect;
+            bool close;
+            bool acted;
+            _dialogs.DrawMainDetail(Session, _font, club, player, staff, new Vector2(rect.x, rect.y + DetailPanelTop), action, out close, out acted);
+            if (close)
+            {
+                if (_crowd != null) _crowd.ClearSelection();
+            }
+            else if (acted)
+            {
+                ConsultBusiness();
+            }
         }
 
         static Player FindPlayer(Club club, string playerId)

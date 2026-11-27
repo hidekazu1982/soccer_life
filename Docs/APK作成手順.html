@@ -39,8 +39,8 @@
 
 <table class="meta">
   <tr><th>文書</th><td>SCS-OPS-01</td></tr>
-  <tr><th>版</th><td>1.0（初版）</td></tr>
-  <tr><th>日付</th><td>2026-11-26</td></tr>
+  <tr><th>版</th><td>1.1（最新版以外の APK をまとめて消す方法を追加）</td></tr>
+  <tr><th>日付</th><td>2026-11-27</td></tr>
   <tr><th>関連</th><td><a href="仕様書.html">SCS-SPEC-01</a>、<a href="仕様書-クラブ.html">SCS-SPEC-02</a>、<a href="仕様書-リーグ.html">SCS-SPEC-03</a>。Claude プロジェクトの claude/apk-build-release-flow.md（同じ内容）</td></tr>
   <tr><th>範囲</th><td>APK の作り方、バージョンの決まり方、リリースノートと Google ドライブへの置き方、困ったときの対処</td></tr>
 </table>
@@ -185,6 +185,7 @@ APK を作る（3つの方法のどれか）
 <ul>
 <li>リリースノートの1版ぶん：版と日時、versionCode、【更新内容】（変更メモ）、【変更ファイル】（前回の APK のあとに更新されたファイルを種類別に）</li>
 <li><strong>古い APK の削除</strong>：APK をドライブに置くたびに、作ってから 14 日を過ぎた APK を消す。最新版は必ず残す。消したものは Google ドライブのゴミ箱に 30 日残る。日数は <code>ApkDriveUploader.cs</code> の <code>KeepDays</code></li>
+<li><strong>最新版以外をまとめて消す</strong>（版 1.1）：日数に関係なく、いちばん新しい APK だけ残してほかを消す。メニュー「SoccerClubSim → APKアップロード → 最新版以外のAPKを削除」（確認あり）か、<code>Builds\request-prune-apk.build</code> を置く（確認なし、5秒ほどで実行）。消したものはドライブのゴミ箱に 30 日残る。結果は Console に「最新版（…）以外の APK を N 件削除しました」と出る</li>
 </ul>
 <h2>6. 困ったとき</h2>
 <table class="data">
@@ -270,6 +271,8 @@ APK を作る（3つの方法のどれか）
 </ul>
 </li>
 </ol>
+<p>「古い APK を消して」と頼まれたら、中身 <code>prune</code> の <code>request-prune-apk.build</code> を新しいサブフォルダに作って <code>C:\project\soccer_life\Builds\</code> に書き込み、15 秒ほどあとに <code>G:\マイドライブ\game\soccer_life\APK</code> を一覧して最新版だけ残ったことを確かめる。Google ドライブのコネクタではこれらの APK をゴミ箱に移せない（canTrash が false）ので使わない。</p>
+
 <h2>8. 関係するスクリプト（Assets/Editor）</h2>
 <table class="data">
 <thead>
@@ -289,7 +292,7 @@ APK を作る（3つの方法のどれか）
 </tr>
 <tr>
 <td><code>ApkDriveUploader.cs</code></td>
-<td>APK をドライブにコピー（名前は <code>soccer_life_</code> で固定）、14日を過ぎた APK を削除</td>
+<td>APK をドライブにコピー（名前は <code>soccer_life_</code> で固定）、14日を過ぎた APK を削除、最新版以外の APK をまとめて削除（メニューと <code>request-prune-apk.build</code>）</td>
 </tr>
 <tr>
 <td><code>ReleaseNotesWriter.cs</code></td>

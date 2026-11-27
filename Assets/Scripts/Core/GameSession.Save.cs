@@ -307,6 +307,7 @@ namespace SoccerClub.Core
                 Gate = Money(ledger.Gate),
                 Broadcast = Money(ledger.Broadcast),
                 Prize = Money(ledger.Prize),
+                Other = Money(ledger.Other),
                 Operating = Money(ledger.Operating),
                 Advertising = Money(ledger.Advertising),
                 Development = Money(ledger.Development),
@@ -328,6 +329,7 @@ namespace SoccerClub.Core
             ledger.Gate = ReadMoney(save.Gate);
             ledger.Broadcast = ReadMoney(save.Broadcast);
             ledger.Prize = ReadMoney(save.Prize);
+            ledger.Other = ReadMoney(save.Other);
             ledger.Operating = ReadMoney(save.Operating);
             ledger.Advertising = ReadMoney(save.Advertising);
             ledger.Development = ReadMoney(save.Development);

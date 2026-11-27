@@ -30,6 +30,8 @@ namespace SoccerClub.UI
         static readonly Color AccentYellow = new Color(1f, 0.82f, 0.18f, 1f);
         static readonly Color InGreen = new Color(0.22f, 0.68f, 0.32f, 1f);
         static readonly Color OutPink = new Color(0.88f, 0.25f, 0.33f, 1f);
+        // 試合中の文字は黒（版 1.62。白やチームカラーの文字は背景で見えにくかった）。
+        static readonly Color TextBlack = new Color(0.08f, 0.08f, 0.10f, 1f);
 
         // ---- 上部の 11 人のカード（party_player_card） ----
         const float CardWidth = 144f;
@@ -55,6 +57,7 @@ namespace SoccerClub.UI
         const float SubSlide = 0.10f;
 
         GUIStyle _ovClock;
+        GUIStyle _ovClockCenter;
         GUIStyle _ovSmall;
         GUIStyle _ovGoal;
         GUIStyle _ovCardName;
@@ -144,12 +147,14 @@ namespace SoccerClub.UI
             float minuteWidth = _ovClock.CalcSize(new GUIContent(minute)).x;
             float width = 24f + halfWidth + 12f + minuteWidth + 28f;
             var pill = new Rect(960f - width * 0.5f, ScoreFrame.y - 24f, width, 50f);
-            RoundRect(pill, ClockInk, 25f);
-            RoundOutline(pill, new Color(1f, 1f, 1f, 0.6f), 2f, 25f);
+            // 版 1.62 から地をクリーム、文字を黒にする（観客席の上でも読めるように）。
+            RoundRect(new Rect(pill.x, pill.y + 3f, pill.width, pill.height), new Color(0f, 0f, 0f, 0.25f), 25f);
+            RoundRect(pill, CardCream, 25f);
+            RoundOutline(pill, CardLine, 3f, 25f);
             var halfRect = new Rect(pill.x + 24f, pill.y + 11f, halfWidth, 28f);
             RoundRect(halfRect, AccentYellow, 12f);
-            Label(halfRect, half, _ovSmall, new Color(0.11f, 0.11f, 0.14f, 1f));
-            Label(new Rect(halfRect.xMax + 12f, pill.y, minuteWidth + 4f, pill.height), minute, _ovClock, Color.white);
+            Label(halfRect, half, _ovSmall, TextBlack);
+            Label(new Rect(halfRect.xMax + 12f, pill.y, minuteWidth + 4f, pill.height), minute, _ovClock, TextBlack);
         }
 
         // =========================================================== ゴールの記録
@@ -189,12 +194,14 @@ namespace SoccerClub.UI
             float width = 12f + 20f + 10f + minuteWidth + 10f + nameWidth + 16f;
             float x = home ? 40f : GameRunner.ReferenceWidth - 40f - width;
             var row = new Rect(x, y, width, GoalRowHeight);
-            RoundRect(row, new Color(0f, 0f, 0f, 0.5f), GoalRowHeight * 0.5f);
+            RoundRect(new Rect(row.x, row.y + 2f, row.width, row.height), new Color(0f, 0f, 0f, 0.25f), GoalRowHeight * 0.5f);
+            RoundRect(row, new Color(CardCream.r, CardCream.g, CardCream.b, 0.95f), GoalRowHeight * 0.5f);
+            RoundOutline(row, CardLine, 2f, GoalRowHeight * 0.5f);
             var ball = new Rect(row.x + 12f, row.y + 7f, 20f, 20f);
             RoundRect(ball, Color.white, 10f);
-            RoundOutline(ball, new Color(0.11f, 0.11f, 0.14f, 1f), 3f, 10f);
-            Label(new Rect(ball.xMax + 10f, row.y, minuteWidth + 2f, row.height), minute, _ovGoal, AccentYellow);
-            Label(new Rect(ball.xMax + 20f + minuteWidth, row.y, nameWidth + 2f, row.height), name, _ovGoal, Color.white);
+            RoundOutline(ball, TextBlack, 3f, 10f);
+            Label(new Rect(ball.xMax + 10f, row.y, minuteWidth + 2f, row.height), minute, _ovGoal, TextBlack);
+            Label(new Rect(ball.xMax + 20f + minuteWidth, row.y, nameWidth + 2f, row.height), name, _ovGoal, TextBlack);
         }
 
         // =========================================================== 交代演出
@@ -247,11 +254,14 @@ namespace SoccerClub.UI
 
             RoundRect(new Rect(card.x, card.y + 4f, card.width, card.height), new Color(0f, 0f, 0f, 0.3f * alpha), 16f);
             RoundRect(card, new Color(1f, 1f, 1f, 0.94f * alpha), 16f);
+            // 版 1.62 から左の見出しは淡い地に黒の文字。チームカラーは左端の細い帯で示す。
             var bandRect = new Rect(card.x, card.y, band, card.height);
             GUI.DrawTexture(bandRect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f,
+                new Color(0.96f, 0.92f, 0.82f, alpha), Vector4.zero, new Vector4(16f, 0f, 0f, 16f));
+            GUI.DrawTexture(new Rect(card.x, card.y, 12f, card.height), Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f,
                 new Color(team.r, team.g, team.b, alpha), Vector4.zero, new Vector4(16f, 0f, 0f, 16f));
-            Label(new Rect(bandRect.x, bandRect.y + 10f, band, 40f), "交代", _ovClock, new Color(1f, 1f, 1f, alpha));
-            Label(new Rect(bandRect.x, bandRect.y + 50f, band, 34f), MinuteText(minute), _ovSmall, new Color(AccentYellow.r, AccentYellow.g, AccentYellow.b, alpha));
+            Label(new Rect(bandRect.x + 6f, bandRect.y + 10f, band - 6f, 40f), "交代", _ovClockCenter, new Color(TextBlack.r, TextBlack.g, TextBlack.b, alpha));
+            Label(new Rect(bandRect.x + 6f, bandRect.y + 50f, band - 6f, 34f), MinuteText(minute), _ovSmall, new Color(TextBlack.r, TextBlack.g, TextBlack.b, alpha));
 
             float rowX = card.x + band + 24f;
             DrawSubLine(new Rect(rowX, card.y + 10f, width - band - 40f, 36f), "▲ IN", InGreen, sub.In, alpha);
@@ -271,7 +281,7 @@ namespace SoccerClub.UI
                 Label(badge, player.PreferredPosition.ToString(), _ovBadge, new Color(1f, 1f, 1f, alpha));
             }
             Label(new Rect(badge.xMax + 12f, row.y, row.width - arrowWidth - 60f, row.height), player != null ? player.Name ?? "" : "", _ovCardName,
-                new Color(CardBrown.r, CardBrown.g, CardBrown.b, alpha));
+                new Color(TextBlack.r, TextBlack.g, TextBlack.b, alpha));
         }
 
         // =========================================================== ゴール演出
@@ -364,7 +374,7 @@ namespace SoccerClub.UI
                 GUI.DrawTexture(new Rect(card.x + 28f, card.y + 12f, 80f, 80f), emblem, ScaleMode.ScaleToFit, true);
             }
 
-            Label(new Rect(card.x + 128f, card.y, minuteWidth + 4f, card.height), minute, _ovScorer, new Color(team.r, team.g, team.b, alpha));
+            Label(new Rect(card.x + 128f, card.y, minuteWidth + 4f, card.height), minute, _ovScorer, new Color(TextBlack.r, TextBlack.g, TextBlack.b, alpha));
             Label(new Rect(card.x + 148f + minuteWidth, card.y, nameWidth + 4f, card.height), name, _ovScorer, new Color(0.11f, 0.11f, 0.14f, alpha));
             GUI.color = Color.white;
         }
@@ -375,16 +385,18 @@ namespace SoccerClub.UI
         /// パーティの招待画面と同じ選手カード（144×160、地 #FFFDF6・線 #E2CFA5・角丸 16・影）。
         /// 上 112 に立ち絵（0.7 倍）、左上にポジションの札、下 48 に名前。
         /// </summary>
-        void DrawPlayerCard(int index, LineupSlot slot, Club club)
+        /// yOffset は交代の入れ替えでカードを上下にずらす量。edge を渡すと、その色の太い縁にする（OUT は赤、IN は緑）。
+        void DrawPlayerCard(int index, LineupSlot slot, Club club, float yOffset, Color? edge = null)
         {
             EnsureOverlayStyles();
-            var card = new Rect(ElevenLeft + CardStep * index, ElevenTop, CardWidth, CardHeight);
+            var card = new Rect(ElevenLeft + CardStep * index, ElevenTop + yOffset, CardWidth, CardHeight);
             RoundRect(new Rect(card.x, card.y + 3f, card.width, card.height), new Color(0f, 0f, 0f, 0.3f), 16f);
             RoundRect(card, CardCream, 16f);
             var avatarArea = new Rect(card.x, card.y, card.width, CardAvatarHeight);
             GUI.DrawTexture(avatarArea, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f,
                 new Color(0.86f, 0.91f, 0.94f, 1f), Vector4.zero, new Vector4(16f, 16f, 0f, 0f));
-            RoundOutline(card, CardLine, 2f, 16f);
+            if (edge.HasValue) RoundOutline(card, edge.Value, 5f, 16f);
+            else RoundOutline(card, CardLine, 2f, 16f);
             if (slot == null || slot.Player == null) return;
 
             var frames = Frames(slot.Player, slot.Slot, club);
@@ -418,7 +430,7 @@ namespace SoccerClub.UI
             _ovCardName.fontSize = size;
             while (size > 12 && _ovCardName.CalcSize(new GUIContent(name)).x > nameRect.width)
                 _ovCardName.fontSize = --size;
-            Label(nameRect, name, _ovCardName, CardBrown);
+            Label(nameRect, name, _ovCardName, TextBlack);
             _ovCardName.fontSize = 20;
         }
 
@@ -458,6 +470,7 @@ namespace SoccerClub.UI
                 margin = new RectOffset(0, 0, 0, 0)
             };
             _ovClock = new GUIStyle(baseStyle) { fontSize = 34, alignment = TextAnchor.MiddleLeft };
+            _ovClockCenter = new GUIStyle(baseStyle) { fontSize = 34 };
             _ovSmall = new GUIStyle(baseStyle) { fontSize = 20 };
             _ovGoal = new GUIStyle(baseStyle) { fontSize = 22, alignment = TextAnchor.MiddleLeft };
             _ovCardName = new GUIStyle(baseStyle) { fontSize = 20, clipping = TextClipping.Clip };

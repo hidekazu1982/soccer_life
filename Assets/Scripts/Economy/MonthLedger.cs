@@ -12,6 +12,9 @@ namespace SoccerClub.Economy
         public BigInteger Gate;
         public BigInteger Broadcast;
         public BigInteger Prize;
+
+        /// <summary>その他の収入（版 1.65：メイン画面で拾ったお金）。</summary>
+        public BigInteger Other;
         public BigInteger Operating;
         public BigInteger Advertising;
         public BigInteger Development;
@@ -21,7 +24,7 @@ namespace SoccerClub.Economy
         public BigInteger Reinforcement;
         public BigInteger Coins;
 
-        public BigInteger Income => Sponsor + Goods + Gate + Broadcast + Prize;
+        public BigInteger Income => Sponsor + Goods + Gate + Broadcast + Prize + Other;
 
         public BigInteger Expense =>
             Operating + Advertising + Development + Facilities + FrontWages + SquadWages + Reinforcement;
@@ -37,6 +40,7 @@ namespace SoccerClub.Economy
             Gate = BigInteger.Zero;
             Broadcast = BigInteger.Zero;
             Prize = BigInteger.Zero;
+            Other = BigInteger.Zero;
             Operating = BigInteger.Zero;
             Advertising = BigInteger.Zero;
             Development = BigInteger.Zero;
@@ -58,6 +62,7 @@ namespace SoccerClub.Economy
                 Gate = Gate,
                 Broadcast = Broadcast,
                 Prize = Prize,
+                Other = Other,
                 Operating = Operating,
                 Advertising = Advertising,
                 Development = Development,
